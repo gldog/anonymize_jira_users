@@ -3,6 +3,14 @@
 # Learn more about .gitignore:
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
+
+anonymizing_details.json
+anonymizing_report.json
+anonymizing_report.txt
+my-config.json
+usernames.txt
+
+
 # Node artifact files
 node_modules/
 dist/
@@ -12,6 +20,7 @@ dist/
 
 # Compiled Python bytecode
 *.py[cod]
+venv/
 
 # Log files
 *.log
