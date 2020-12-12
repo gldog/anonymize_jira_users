@@ -15,11 +15,11 @@ This document is for all interested in details about the anonymization API and
 the implementation of the anonymizing-script.
 
 All information stated here is about Jira Server and Jira Data Center. Jira Cloud
-is not considered.
+is not considered yet.
 
 ## Anonymizing with the admin-UI
 
-These results are reverse engineered with Chrome developer tools in Jira 8.13.
+Some of these results are reverse engineered in Jira 8.13.
 
 ### Example 1
 
@@ -265,7 +265,7 @@ Response:
 	  "rerun": false
 	}
 
-o The browser calls the "Get progress" API
+o Immediately after that the browser calls the "Get progress" API
 `GET /rest/api/2/user/anonymization/progress?taskId=10100`. Jira returns
 `200 OK`. The `status` in the response is `IN_PROGRESS`.
 
@@ -289,8 +289,10 @@ Response:
 	  "rerun": false
 	}
 
-o The browser continues calling the progress-API until the `status` is `COMPLETED`,
-which is the case in the 2nd call as shown in the following. In addition, the
+o The browser waits 10s. 
+
+o The browser continues calling the progress-API with an 3s-interval until the
+`status` is `COMPLETED`, which is the case in the 2nd call as shown in the following. In addition, the
 `operations` shows what Jira has taken into account at anonymizing.
 
 Response:
@@ -327,6 +329,7 @@ Jira to make sure everything displays right.", and a 100% green progress bar.
 ![](images/ex-1-6.png)
 
 We're done with "user2"!
+
 
 **Admin-action:**
 
@@ -533,6 +536,48 @@ Response:
       "businessLogicValidationFailed": false
     }
 
+### About the timing
+
+Normal case:
+
+     |--------10s--------|--3s--|--3s--|--~...~--|--3s--|
+    
+     *----*--------------*------*------*--~...~--*------*
+    (1)  (2)           (3,4)   (4)    (4)       (4)   (5,6)
+
+1. The Admin starts anonymizing (REST `POST /rest/api/2/user/anonymization`).
+2. The browser immediately calls `GET /rest/api/2/user/anonymization/progress`.
+   In the response, `status` is `IN_PROGRESS`.
+3. The browser has waited a delay of 10s. Atlassian calls this the Initial Delay.
+   Then the browser calls `GET /rest/api/2/user/anonymization/progress`.
+   In the response, `status` is still `IN_PROGRESS`.
+   The UI updates the "x milliseconds elapsed" in the UI (as you can see in 
+   the screenshot between the progress bar and the Close-button).
+4. The UI starts requesting the progress `GET /rest/api/2/user/anonymization/progress`
+   with an 3s-interval. Atlassian calls this the Regular Delay.
+5. The anonymization is completed, `GET /rest/api/2/user/anonymization/progress`
+   returned `"status":"COMPLETED"`.
+6. The UI shows completeness.
+
+
+Special case A: Jira finished anonymizing in less than the Initial Delay of 10s.
+Seen in small Jira-instances.
+
+     |--------10s--------|
+    
+     *-------------------*
+    (1)              (2,3/4,5)
+
+Special case B: Jira finished anonymizing "immediately".
+Seen in my local dev-instance.
+In this case, the immediate call after scheduling an anonymization 
+to `GET /rest/api/2/user/anonymization/progress` returns `"status":"COMPLETED"`.
+
+     |--------10s--------|
+    
+     *------*
+    (1)  (3/4,5)
+
 
 ## Anonymizing with the REST-API
 
@@ -717,7 +762,7 @@ Response:
     }
 
 
-
+---
 
 # More Info
 
@@ -754,11 +799,26 @@ The reason to take the user-key is (I think) the fact the Anonymization API is c
 of anonymizing deleted users. Deleted users aren't present in DB-table `cwd_user`, but remains
 in DB-table `app_user`.
 
+---
+
 # Useful stuff
+
+## Jira feature requests and bugs
+
+- [JSDSERVER-6886 Allow bulk-nonymizing users](https://jira.atlassian.com/browse/JSDSERVER-6886)
+- [JSDSERVER-6881 During the anonymization steps, Jira should additional display the future anonymized user name](https://jira.atlassian.com/browse/JSDSERVER-6881)
+- [JRASERVER-71251 Improve User Anonymize Feature](https://jira.atlassian.com/browse/JRASERVER-71251)
 
 ## SQLs
 
-### Get a list of deleted users
+### Tables of interest
+
+- `cwd_user`
+- `app_user`
+
+
+
+### Get a list of user-keys of deleted users
 
 Deleted user have an entry in table `app_user`, but not in `cwd_user` anymore.
 
