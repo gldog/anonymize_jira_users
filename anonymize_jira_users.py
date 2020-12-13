@@ -659,7 +659,7 @@ def write_reports(report):
     with open(g_config["out_report_json_file"], 'w') as f:
         print("{}".format(json.dumps(report, indent=4)), file=f)
 
-    with open(g_config["out_report_text_file"], 'w') as f:
+    with open(g_config["out_report_text_file"], 'w', newline='') as f:
         fieldnames = ["user_name", "user_key", "user_display_name", "active", "is_deleted", "is_anonymized",
                       "filter_anonymize_approval", "filter_error_message", "has_validation_errors", "start_time",
                       "finish_time", "time_duration"]
