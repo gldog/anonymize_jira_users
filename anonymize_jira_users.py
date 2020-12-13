@@ -184,13 +184,6 @@ def check_parameters():
             print("{}".format(json.dumps(DEFAULT_CONFIG, indent=4)), file=f)
         sys.exit(0)
 
-    merge_dicts(g_config, vars(args))
-
-    date_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_")
-    g_config["out_details_file"] = date_time + g_config["report_basename"] + "_details.json"
-    g_config["out_report_json_file"] = date_time + g_config["report_basename"] + ".json"
-    g_config["out_report_text_file"] = date_time + g_config["report_basename"] + ".csv"
-
     if args.recreate_report:
         recreate_reports()
         sys.exit(0)
@@ -201,6 +194,7 @@ def check_parameters():
                 config_from_file = json.load(f)
                 merge_dicts(g_config, config_from_file)
 
+        merge_dicts(g_config, vars(args))
         missing_args = []
         if not g_config["base_url"]:
             missing_args.append("base-url")
@@ -211,6 +205,11 @@ def check_parameters():
         if missing_args:
             print("Missing arguments: {}".format(missing_args))
             sys.exit(1)
+
+    date_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_")
+    g_config["out_details_file"] = date_time + g_config["report_basename"] + "_details.json"
+    g_config["out_report_json_file"] = date_time + g_config["report_basename"] + ".json"
+    g_config["out_report_text_file"] = date_time + g_config["report_basename"] + ".csv"
 
     #
     #  Configure logging.
@@ -225,6 +224,8 @@ def check_parameters():
     numeric_level = getattr(logging, g_config["loglevel"], None)
     # The check for valid values have been done in parser.add_argument().
     log.setLevel(numeric_level)
+
+    log.debug("Effective config: {}".format(g_config))
 
     # Check infile for existence.
     try:
@@ -548,7 +549,7 @@ def is_any_anonymization_running():
         return True
 
 
-def create_report(users_details):
+def create_report(users_data):
     report = {
         "overview": None,
         "users": []
@@ -557,7 +558,7 @@ def create_report(users_details):
     number_of_skipped_users = 0
     number_of_deleted_users = 0
     number_of_anonymized_users = 0
-    for user_name, user_data in users_details.items():
+    for user_name, user_data in users_data.items():
         try:
             start_time = user_data["rest_user_delete_time"]
             finish_time = None
@@ -620,7 +621,7 @@ def create_report(users_details):
         report["users"].append(user_report)
 
     report["overview"] = {
-        "number_of_users_in_infile": len(users_details),
+        "number_of_users_in_infile": len(users_data),
         "number_of_skipped_users": number_of_skipped_users,
         "number_of_deleted_users": number_of_deleted_users,
         "number_of_anonymized_users": number_of_anonymized_users
@@ -628,9 +629,7 @@ def create_report(users_details):
     return report
 
 
-def write_reports(d):
-    report = create_report(d)
-
+def write_reports(report):
     with open(g_config["out_report_json_file"], 'w') as f:
         print("{}".format(json.dumps(report, indent=4)), file=f)
 
@@ -645,8 +644,9 @@ def write_reports(d):
 
 def recreate_reports():
     with open(g_config["out_details_file"]) as f:
-        d = json.load(f)["usernames_from_infile"]
-        write_reports(d)
+        users_data = json.load(f)["usernames_from_infile"]
+        report = create_report(users_data)
+        write_reports(report)
 
 
 def at_exit():
@@ -687,7 +687,9 @@ def main():
             if not g_config["dry_run"]:
                 run_user_anonymizations(g_config["new_owner_key"])
 
-        write_reports(g_details["usernames_from_infile"])
+        report = create_report(g_details["usernames_from_infile"])
+        log.info("Report overview: {}".format(json.dumps(report["overview"])))
+        write_reports(report)
 
 
 if __name__ == "__main__":
