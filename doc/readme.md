@@ -809,6 +809,42 @@ in DB-table `app_user`.
 - [JSDSERVER-6881 During the anonymization steps, Jira should additional display the future anonymized user name](https://jira.atlassian.com/browse/JSDSERVER-6881)
 - [JRASERVER-71251 Improve User Anonymize Feature](https://jira.atlassian.com/browse/JRASERVER-71251)
 
+## Unordered
+
+REST `DELETE http://localhost:2990/jira/rest/api/2/user?username=user`
+
+Status: 400 Bad Request
+
+    {
+        "errorMessages": [
+            "Cannot delete user 'user1' because 1 issues are currently assigned to this person."
+        ],
+        "errors": {}
+    }
+
+
+
+
+    {
+        "errorMessages": [
+            "Cannot delete user 'user1' because they have made 4 comments."
+        ],
+        "errors": {}
+    }
+
+
+User is synchronized from Active Directory:
+
+Status: 400 Bad Request
+
+    {
+        "errorMessages": [
+            "Cannot delete user, the user directory is read-only."
+        ],
+        "errors": {}
+    }
+
+
 ## SQLs
 
 ### Tables of interest
