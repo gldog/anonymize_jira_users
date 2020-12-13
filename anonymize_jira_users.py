@@ -49,7 +49,6 @@ DEFAULT_CONFIG = {
     "admin_pw": "",
     # "config_template": "my-config.json",
     "infile": "usernames.txt",
-    "report_basename": "anonymizing_report",
     "loglevel": "INFO",
     "is_dry_run": False,
     "try_delete_user": False,
@@ -62,6 +61,7 @@ DEFAULT_CONFIG = {
     "timeout": 0
 }
 
+DEFAULT_CONFIG_REPORT_BASENAME = "anonymizing_report"
 DEFAULT_CONFIG_TEMPLATE_FILENAME = "my-config.json"
 SSL_VERIFY = False
 
@@ -190,6 +190,14 @@ def check_parameters():
             print("{}".format(json.dumps(DEFAULT_CONFIG, indent=4)), file=f)
         sys.exit(0)
 
+    # date_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_")
+    # g_config["out_details_file"] = date_time + DEFAULT_CONFIG_REPORT_BASENAME + "_details.json"
+    # g_config["out_report_json_file"] = date_time + DEFAULT_CONFIG_REPORT_BASENAME + ".json"
+    # g_config["out_report_text_file"] = date_time + DEFAULT_CONFIG_REPORT_BASENAME + ".csv"
+    g_config["out_details_file"] = DEFAULT_CONFIG_REPORT_BASENAME + "_details.json"
+    g_config["out_report_json_file"] = DEFAULT_CONFIG_REPORT_BASENAME + ".json"
+    g_config["out_report_text_file"] = DEFAULT_CONFIG_REPORT_BASENAME + ".csv"
+
     if args.recreate_report:
         recreate_reports()
         sys.exit(0)
@@ -216,11 +224,6 @@ def check_parameters():
             print("Missing arguments: {}".format(missing_args))
             sys.exit(1)
 
-    date_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_")
-    g_config["out_details_file"] = date_time + g_config["report_basename"] + "_details.json"
-    g_config["out_report_json_file"] = date_time + g_config["report_basename"] + ".json"
-    g_config["out_report_text_file"] = date_time + g_config["report_basename"] + ".csv"
-
     #
     #  Configure logging.
     #
@@ -236,7 +239,7 @@ def check_parameters():
     log.setLevel(numeric_level)
 
     log.info("Effective config: {}".format(g_config))
-    
+
     # Check infile for existence.
     try:
         open(g_config["infile"])
@@ -559,6 +562,13 @@ def is_any_anonymization_running():
         return True
 
 
+def time_diff(d1, d2):
+    format_string = "%Y-%m-%dT%H:%M:%S.%f"
+    dd1 = datetime.strptime(d1.split("+")[0], format_string)
+    dd2 = datetime.strptime(d2.split("+")[0], format_string)
+    return dd2 - dd1
+
+
 def create_report(users_data):
     report = {
         "overview": None,
@@ -615,6 +625,11 @@ def create_report(users_data):
         except:
             has_validation_errors = False
 
+        if start_time and finish_time:
+            diff = time_diff(start_time, finish_time)
+        else:
+            diff = None
+
         user_report = {
             "user_name": user_name,
             "user_key": user_key,
@@ -626,7 +641,8 @@ def create_report(users_data):
             "filter_error_message": user_filter["error_message"],
             "has_validation_errors": has_validation_errors,
             "start_time": start_time,
-            "finish_time": finish_time
+            "finish_time": finish_time,
+            "time_duration": "{}".format(diff) if diff is not None else None
         }
         report["users"].append(user_report)
 
@@ -646,7 +662,7 @@ def write_reports(report):
     with open(g_config["out_report_text_file"], 'w') as f:
         fieldnames = ["user_name", "user_key", "user_display_name", "active", "is_deleted", "is_anonymized",
                       "filter_anonymize_approval", "filter_error_message", "has_validation_errors", "start_time",
-                      "finish_time"]
+                      "finish_time", "time_duration"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(report["users"])
