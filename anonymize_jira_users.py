@@ -235,8 +235,8 @@ def check_parameters():
     # The check for valid values have been done in parser.add_argument().
     log.setLevel(numeric_level)
 
-    log.warning("Effective config: {}".format(g_config))
-    sys.exit(1)
+    log.info("Effective config: {}".format(g_config))
+    
     # Check infile for existence.
     try:
         open(g_config["infile"])
