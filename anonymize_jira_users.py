@@ -202,6 +202,8 @@ def check_parameters():
             missing_args.append("admin-user")
         if not g_config["admin_pw"]:
             missing_args.append("admin-pw")
+        if not g_config["new_owner_key"]:
+            missing_args.append("new_owner_key")
         if missing_args:
             print("Missing arguments: {}".format(missing_args))
             sys.exit(1)
