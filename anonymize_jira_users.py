@@ -165,7 +165,13 @@ def check_parameters():
     # Add argument special to "anonymize".
     sp_anonymize.add_argument("-n", "--new-owner-key", metavar="NEW_OWNER_KEY", dest="new_owner_key",
                               help="Transfer all roles to the user with this user key.")
-    sp_anonymize.add_argument("-d", "--try-delete-user", action="store_true",
+    # Combination of "default" and "action":
+    # Imagine default=None is not given, and the user gives parameter -d. Then the arg-parser sets args.try_delete_user
+    # to true as expected. But if the user omit -d, the arg-parser sets args-try_delete_user to false implicitely.
+    # This would overwrite the setting from the config-file.
+    # Default=None sets args.try_delete_user to None if the user omits -d. By this, the script can distinguish
+    # between the given or the omitted -d.
+    sp_anonymize.add_argument("-d", "--try-delete-user", default=None, action="store_true",
                               help="Try deleting the user. If not possible, do anonymize.")
     sp_anonymize.add_argument("-D", "--dry-run", action="store_true",
                               help="Finally do no anonymize. Skip the POST /rest/api/2/user/anonymization.")
@@ -194,7 +200,9 @@ def check_parameters():
                 config_from_file = json.load(f)
                 merge_dicts(g_config, config_from_file)
 
+        log.debug("Effective config 1: {}".format(g_config))
         merge_dicts(g_config, vars(args))
+        log.debug("Effective config 2: {}".format(g_config))
         missing_args = []
         if not g_config["base_url"]:
             missing_args.append("base-url")
@@ -227,8 +235,8 @@ def check_parameters():
     # The check for valid values have been done in parser.add_argument().
     log.setLevel(numeric_level)
 
-    log.debug("Effective config: {}".format(g_config))
-
+    log.warning("Effective config: {}".format(g_config))
+    sys.exit(1)
     # Check infile for existence.
     try:
         open(g_config["infile"])
