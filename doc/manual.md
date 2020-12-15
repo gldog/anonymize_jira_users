@@ -134,7 +134,7 @@ the filter had found any criteria not to anonymize a user, it would have given a
         "users": [
             {
                 "user_name": "user1pre84",
-                "user_key": "userpre84",
+                "user_key": "user1pre84",
                 "user_display_name": "User-1 created before Jira 8.4",
                 "active": false,
                 "has_validation_errors": false,
@@ -163,7 +163,7 @@ the filter had found any criteria not to anonymize a user, it would have given a
         ]
     }
 
-Furthermore the `anonymization_report.csv` has been created and looks like in the following
+Furthermore, the `anonymization_report.csv` has been created and looks like in the following
 screenshot:
 
 ![](images/manual/validation_succeeded_1.png)
@@ -215,7 +215,7 @@ The report is:
         "users": [
             {
                 "user_name": "user1pre84",
-                "user_key": "userpre84",
+                "user_key": "user1pre84",
                 "user_display_name": "User-1 created before Jira 8.4",
                 "active": true,
                 "has_validation_errors": false,
@@ -268,7 +268,7 @@ user1pre84:
 
 The step "Query user-data from Jira" queries the user's data from 
 `GET /rest/api/2/user?username=user1pre84`. It returns HTTP status-code `200 OK`, and in the 
-repsonse there is the attribute `"active": true`. Because the filter follows the rule only to 
+repsonse there is the attribute `"active": true`. Because the filter follows the rule to only  
 pass inactive users, it sets the `"filter_is_anonymize_approval": false`.
 
 user5post84:
@@ -277,7 +277,7 @@ The step "Query user-data from Jira" queries the user's data from
 `GET /rest/api/2/user?username=user5post84`. It returns HTTP status-code `404 Not Found`,
 and in the response there is the error-message 
 `"errorMessages": ["The user named 'user5post84' does not exist"]`.
-Because the filter follows the rule only to 
+Because the filter follows the rule to only 
 pass existent users, it sets the `"filter_is_anonymize_approval": false`.
 
 user-from-ad:
@@ -360,10 +360,12 @@ The config is:
 Further we use the infile `usernames.txt` with two users:
 
     user1pre84
+    user2pre84
     user5post84
 
-Both users are existent and inactive. User `user1pre84` is no reporter in any issue, nor
-is assigned to any user-field. User `user5post84` is assignee of 1 issue. 
+All users are existent and inactive. User `user1pre84` is no reporter in any issue, nor
+is assigned to any user-field. User `user2pre84` is assignee of issue EP-19,
+and `user5post84` is assignees of EP-22. 
 
 We call:
 
@@ -371,34 +373,59 @@ We call:
 
 The output is:
 
-    2020-12-15 00:37:44,647:INFO:get_user_names_from_infile(): Reading user-names from infile usernames.txt
-    2020-12-15 00:37:44,647:INFO:get_user_names_from_infile():   The user-names are: ['user1pre84', 'user5post84']
-    2020-12-15 00:37:44,647:INFO:get_users_data_from_rest(): Reading user-data from GET /rest/api/2/user
-    2020-12-15 00:37:44,726:INFO:get_validation_data_from_rest(): Reading validation-data (GET /rest/api/2/user/anonymization)
-    2020-12-15 00:37:44,840:INFO:filter_users(): Filtering users by existence and against validation result
-    2020-12-15 00:37:44,840:INFO:filter_users(): Remaining users to be anonymized: ['user1pre84', 'user5post84']
-    2020-12-15 00:37:44,840:INFO:is_any_anonymization_running(): ?
-    2020-12-15 00:37:44,840:INFO:get_anonymization_progress(): Checking if any anonymization is running
-    2020-12-15 00:37:44,875:INFO:is_any_anonymization_running(): No
-    2020-12-15 00:37:44,875:INFO:run_user_anonymizations(): Going to delete or anonymize 2 users (POST /rest/api/2/user/anonymization)
-    2020-12-15 00:37:44,875:INFO:run_user_anonymizations(): User (name/key) user1pre84/userpre84...
-    2020-12-15 00:37:45,023:INFO:run_user_anonymizations(): User (name/key) user5post84/JIRAUSER10200...
-    2020-12-15 00:37:55,130:INFO:wait_until_anonymization_has_finished(): for user user5post84
-    2020-12-15 00:37:55,173:INFO:main(): Report overview: {"number_of_users_in_infile": 2, "number_of_skipped_users": 0, "number_of_deleted_users": 1, "number_of_anonymized_users": 1}
+    2020-12-15 01:34:35,994:INFO:get_user_names_from_infile(): Reading user-names from infile usernames.txt
+    2020-12-15 01:34:35,994:INFO:get_user_names_from_infile():   The user-names are: ['user1pre84', 'user2pre84', 'user5post84']
+    2020-12-15 01:34:35,994:INFO:get_users_data_from_rest(): Reading user-data from GET /rest/api/2/user
+    2020-12-15 01:34:36,147:INFO:get_validation_data_from_rest(): Reading validation-data (GET /rest/api/2/user/anonymization)
+    2020-12-15 01:34:36,284:INFO:filter_users(): Filtering users by existence and against validation result
+    2020-12-15 01:34:36,284:INFO:filter_users(): Remaining users to be anonymized: ['user1pre84', 'user2pre84', 'user5post84']
+    2020-12-15 01:34:36,284:INFO:is_any_anonymization_running(): ?
+    2020-12-15 01:34:36,284:INFO:get_anonymization_progress(): Checking if any anonymization is running
+    2020-12-15 01:34:36,318:INFO:is_any_anonymization_running(): No
+    2020-12-15 01:34:36,318:INFO:run_user_anonymizations(): Going to delete or anonymize 3 users (POST /rest/api/2/user/anonymization)
+    2020-12-15 01:34:36,318:INFO:run_user_anonymizations(): User (name/key) user1pre84/user1pre84...
+    2020-12-15 01:34:36,470:INFO:run_user_anonymizations(): User (name/key) user2pre84/user2pre84...
+    2020-12-15 01:34:46,583:INFO:wait_until_anonymization_has_finished(): for user user2pre84
+    2020-12-15 01:34:46,616:INFO:run_user_anonymizations(): User (name/key) user5post84/JIRAUSER10200...
+    2020-12-15 01:34:56,675:INFO:wait_until_anonymization_has_finished(): for user user5post84
+    2020-12-15 01:34:56,712:INFO:main(): Report overview: {"number_of_users_in_infile": 3, "number_of_skipped_users": 0, "number_of_deleted_users": 1, "number_of_anonymized_users": 2}
+
+From the atlassian-jira.log:
+
+    2020-12-15 01:34:36,550+0100 JiraTaskExecutionThread-1 INFO admin 94x7399x1 6ugxn4 0:0:0:0:0:0:0:1 /rest/api/2/user/anonymization [c.a.j.user.anonymize.DefaultAnonymizeUserService] User key is not anonymized (user2pre84), should anonymize to (JIRAUSER10101)
+    2020-12-15 01:34:36,550+0100 JiraTaskExecutionThread-1 INFO admin 94x7399x1 6ugxn4 0:0:0:0:0:0:0:1 /rest/api/2/user/anonymization [c.a.j.user.anonymize.DefaultAnonymizeUserService] Username is not anonymized (user2pre84), should rename to (jirauser10101)
+    ...
+    2020-12-15 01:34:46,673+0100 JiraTaskExecutionThread-2 INFO admin 94x7402x1 zqqjfe 0:0:0:0:0:0:0:1 /rest/api/2/user/anonymization [c.a.j.user.anonymize.DefaultAnonymizeUserService] User key is already anonymized (JIRAUSER10200), no need to change it
+    2020-12-15 01:34:46,673+0100 JiraTaskExecutionThread-2 INFO admin 94x7402x1 zqqjfe 0:0:0:0:0:0:0:1 /rest/api/2/user/anonymization [c.a.j.user.anonymize.DefaultAnonymizeUserService] Username is not anonymized (user5post84), should rename to (jirauser10200)
+
+Note about `user2pre84`:
+
+The user-name as well as the user-key were anonymized:
+
+    User key is not anonymized (user2pre84), should anonymize to (JIRAUSER10101)
+    Username is not anonymized (user2pre84), should rename to (jirauser10101)
+
+Note about `user5post84`:
+
+Only the user-name was anonymized:
+
+    User key is already anonymized (JIRAUSER10200), no need to change it
+    Username is not anonymized (user5post84), should rename to (jirauser10200)
+
 
 The `anonymization_report.json` is:
 
     {
         "overview": {
-            "number_of_users_in_infile": 2,
+            "number_of_users_in_infile": 3,
             "number_of_skipped_users": 0,
             "number_of_deleted_users": 1,
-            "number_of_anonymized_users": 1
+            "number_of_anonymized_users": 2
         },
         "users": [
             {
                 "user_name": "user1pre84",
-                "user_key": "userpre84",
+                "user_key": "user1pre84",
                 "user_display_name": "User-1 created before Jira 8.4",
                 "active": false,
                 "has_validation_errors": false,
@@ -406,9 +433,23 @@ The `anonymization_report.json` is:
                 "filter_error_message": "",
                 "is_deleted": true,
                 "is_anonymized": false,
-                "start_time": "2020-12-15T00:37:45.023",
+                "start_time": "2020-12-15T01:34:36.470",
                 "finish_time": null,
                 "time_duration": null
+            },
+            {
+                "user_name": "user2pre84",
+                "user_key": "user2pre84",
+                "user_display_name": "User-2 created before Jira 8.4",
+                "active": false,
+                "has_validation_errors": false,
+                "filter_is_anonymize_approval": true,
+                "filter_error_message": "",
+                "is_deleted": false,
+                "is_anonymized": true,
+                "start_time": "2020-12-15T01:34:36.549+0100",
+                "finish_time": "2020-12-15T01:34:37.338+0100",
+                "time_duration": "0:00:00.789000"
             },
             {
                 "user_name": "user5post84",
@@ -420,19 +461,20 @@ The `anonymization_report.json` is:
                 "filter_error_message": "",
                 "is_deleted": false,
                 "is_anonymized": true,
-                "start_time": "2020-12-15T00:37:45.099+0100",
-                "finish_time": "2020-12-15T00:37:45.618+0100",
-                "time_duration": "0:00:00.519000"
+                "start_time": "2020-12-15T01:34:46.673+0100",
+                "finish_time": "2020-12-15T01:34:46.776+0100",
+                "time_duration": "0:00:00.103000"
             }
         ]
     }
 
-Furthermore the `anonymization_report.csv` has been created and looks like in the following
+Furthermore, the `anonymization_report.csv` has been created and looks like in the following
 screenshot:
 
 ![](images/manual/anonymization_succeeded_1.png)
 
-As the result, the anonymizer has deleted `user1pre84` and anonymized `user5post84`.
+As the result, the anonymizer has deleted `user1pre84` and anonymized 
+`user2pre84` and `user5post84`.
 
 Let's discuss what the filter has been read from `anonymization_report_details.json` for 
 the users to assess the result of `filter_is_anonymize_approval` and what finally happened to 
@@ -443,22 +485,32 @@ user1pre84:
 The step "Query user-data from Jira" queries the user's data from 
 `GET /rest/api/2/user?username=user1pre84`. It returns HTTP status-code `200 OK`, and in the 
 repsonse there is the attribute `"active": false`.
-The validations returned to error.
-Because the filter follows the rule only to pass existent, inactive users with no 
+The validations returned no error.
+Because the filter follows the rule to only pass existent, inactive users with no 
 validation errors, it sets the `"filter_is_anonymize_approval": true`.
 
 In the config the `"is_try_delete_user": true` is set. This lets the anonymizer _try_ to
 delete the user alternatively to anonymize it. The thought behind deletion is:
-Jira does only allow deleting a user, if it is in any user-field or is a comment-author.
+Jira does only allow deleting a user, if it is not in any user-field nor a comment-author.
 Why shall we keep and anonymize a user which never had left any traces in Jira?
 If the anonymizer fails deleting, it proceeds with anonymization.
 
-user5post84:
+user2pre84, user5post84:
 
-Similar this user, but it is an assignee in 1 issue. The fact this user is an assignee 
-is no validation error as this will not prevent the anonymization. But deletion failed,
-so it was anonymized.
+Similar the previous user, but they are assignees in 1 issue each.
+The fact this user is an assignee is no validation error as this will not prevent the 
+anonymization. But deletion failed, so they were anonymized.
 
+`user2pre84` was assignee of issue EP-19, and `user5post84` was assignees of EP-22.
+We can reverse check what are the user-names/-keys/-display-names now after the
+anonymization:
+- EP-19 has assignee (former `user2pre84`): User-name `jirauser10101`, key `JIRAUSER10101`, 
+  and display-name `user-438f1`.
+- EP-22 has assignee (former `user5post84`): User-name `jirauser10200`, key `JIRAUSER10200`,
+  and display-name `user-0efc5`.  
+
+`user2pre84` had the user-key `user2pre84`, which was anonymized.
+`user5post84` had the user-key `JIRAUSER10200`, which was being kept as-is.
 
 ## Anonymize Users And Report The Anonymized User-Data
 
@@ -470,4 +522,26 @@ Needs the feature "do_report_anonymized_user_data".
 
 ## Feature "do_report_anonymized_user_data"
 
-TODO
+The anonymization described above changes a user-name to the format "username12345"
+and the display-name to the format "user-a2b4e". If a user was created in 
+Jira-version <8.4, the user-key mostly is equal to the user-name. In this case,
+the anonymization changes also the user-key to the format "JIRAUSER12345". 
+Users created in Jira >= 8.4 already have a user-key of this format. We can see, 
+the ID is the base to form the user-name and -key.
+
+During anonymization, the Jira REST-API do not provide any information about the 
+new user-name, user-key, display-name, nor the ID ("12345").
+
+If you have to record a mapping from the un-anonymized user to the anonymized user
+e. g. for legal department, this is not possible out of the box.
+
+This feature
+- reads the user-ID which is the base for the anonymized user-name and -key,
+   from `GET /rest/anonhelper/latest/applicationuser` before anonymization,
+- predicts the new user-name,
+- query the anonymized user by the predicted user-name after anonymization,
+- records the anonymized user-name, -key, and display-name in addition.
+
+This feature calls the REST `GET /rest/anonhelper/latest/applicationuser` 
+from the add-on TODO.
+
