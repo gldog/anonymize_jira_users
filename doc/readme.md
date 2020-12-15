@@ -648,7 +648,9 @@ https://docs.atlassian.com/software/jira/docs/api/REST/8.13.0/#api/2/user/anonym
 
 
 #### Validate user anonymization
-    GET /rest/api/2/user/anonymization
+
+`GET /rest/api/2/user/anonymization`
+
 >Validates user anonymization process.
 
 
@@ -657,11 +659,13 @@ https://docs.atlassian.com/software/jira/docs/api/REST/8.13.0/#api/2/user/anonym
 
 
 #### Schedule user anonymization
-    POST /rest/api/2/user/anonymization
+
+`POST /rest/api/2/user/anonymization`
 
 
 #### Get progress
-    GET /rest/api/2/user/anonymization/progress
+
+`GET /rest/api/2/user/anonymization/progress`
 
 TODO
 
