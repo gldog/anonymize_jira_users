@@ -1,19 +1,14 @@
-#!/usr/bin/python3
+#!/usr/local/bin/python3
 
 """
 Compatibility:  Python 3.7
 
-
-TODO Prevent users from be anonymized a second time
-TODO Final OK or error overview
+# TODO help-text for --features
 TODO Jira 8.14 supports user-access-token? Support it.
-TODO Parameter for usage without/with appuser-REST-API
-TODO In REST endpoint /rest/scriptrunner/latest/custom/appuser, implement access-permission the same way as Atlassian
-    does in anonymization API.
-TODO Implement progress bar
+TODO Config-file as text-file, not as JSON, to allow comments.
 TODO Known issues:
 TODO The returned error-messages in the JSON-responses are expected in the language-setting of the executing admin.
-        But they're sometime in a different language. Is this "different language" the one of the user to be
+        But they're sometimes in a different language. Is this "different language" the one of the user to be
         anonymized, or the Jira-system-default-language? Or other?
 
 """
@@ -31,7 +26,6 @@ from json.decoder import JSONDecodeError
 from pathlib import Path
 
 import requests
-import urllib3
 
 #
 #  Global constants: Defaults
@@ -47,23 +41,56 @@ DEFAULT_CONFIG = {
     "base_url": "",
     "admin_user": "",
     "admin_pw": "",
-    # "config_template": "my-config.json",
     "infile": "usernames.txt",
     "loglevel": "INFO",
+    "is_expand_validation_with_affected_entities": False,
     "is_dry_run": False,
-    "try_delete_user": False,
+    "is_try_delete_user": False,
     "new_owner_key": "",
     # Delay between a scheduled anonymization and starting querying the progress. Jira's setting is 10s.
     "initial_delay": 10,
     # Interval between progress-queries. Jira's value is 3s
     "regular_delay": 3,
     # Time in seconds the progress shall wait for finishing an anonymization. 0 means wait as long as it takes.
-    "timeout": 0
+    "timeout": 0,
+    "features": None
+
 }
 
 DEFAULT_CONFIG_REPORT_BASENAME = "anonymizing_report"
 DEFAULT_CONFIG_TEMPLATE_FILENAME = "my-config.json"
 SSL_VERIFY = False
+
+#
+# Features are some kind of extensions only functional with some configuration outside this script.
+#
+# Feature FEATURE_DO_REPORT_ANONYMIZED_USER_DATA:
+# Prerequisite:
+#   The REST-endpint
+ANONHELPER_APPLICATIONUSER_URL = "/rest/anonhelper/latest/applicationuser"
+#   provided by add-on jira-anonhelper.
+#   TODO link to bitbucket.org.
+#
+# Description:
+#   The anonymization changes a user-name to the format "username12345" and the display-name to the format "user-a2b4e".
+#   If a user was created in Jira-version <8.4, the user-key mostly is equal to the user-name. In this case,
+#   the anonymization changes also the user-key to the format "JIRAUSER12345". Users created in Jira >= 8.4 already
+#   have a user-key of this format. We can see, the ID is the base to form the user-name and -key.
+#
+#   During anonymization, the Jira REST-API do not provide any information about the new user-name, user-key,
+#   display-name, nor the ID ("12345").
+#
+#   If you have to record a mapping from the un-anonymized user to the anonymized user e. g. for legal department,
+#   this is not possible out of the box.
+#
+#   This feature
+#   - reads the user-ID which is the base for the anonymized user-name and -key,
+#       from GET /rest/anonhelper/latest/applicationuser before anonymization,
+#   - predicts the new user-names,
+#   - query the anonymized users by the predicted user-names after anonymization,
+#   - records the anonymized user-name, -key, and display-name in addition.
+FEATURE_DO_REPORT_ANONYMIZED_USER_DATA = "do_report_anonymized_user_data"
+FEATURES = [FEATURE_DO_REPORT_ANONYMIZED_USER_DATA]
 
 #
 #  Global vars.
@@ -79,7 +106,7 @@ g_config = DEFAULT_CONFIG
 #       - rest_validation
 #       - user_filter
 #           - error_message
-#           - anonymize_approval
+#           - is_anonymize_approval
 #       - rest_anonymization
 #       - rest_last_anonymization_progress
 g_users = {}
@@ -93,7 +120,9 @@ g_details = {
     "usernames_from_infile": g_users
 }
 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+def is_feature_do_report_anonymized_user_data():
+    return g_config["features"] and FEATURE_DO_REPORT_ANONYMIZED_USER_DATA in g_config["features"]
 
 
 def merge_dicts(d1, d2):
@@ -114,10 +143,6 @@ def merge_dicts(d1, d2):
 
 
 def check_parameters():
-    """
-    Handle the arguments.
-    :return: The args-object.
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(VERSION))
     parser.add_argument("-g", "--generate-config-template",
@@ -141,7 +166,8 @@ def check_parameters():
             verb = ""
 
         sub_parser.add_argument("-c", "--config-file",
-                                help="Config-file. You can generate one with option 'config -g'."
+                                help="Config-file to pre-set command-line-options."
+                                     " You can generate a config-file with option '-g'."
                                      " Parameters given on the command line will overwrite parameters"
                                      " given in the config-file.")
         sub_parser.add_argument("-b", "--base-url", help="Jira base-URL.")
@@ -152,26 +178,28 @@ def check_parameters():
                                      " No other delimiters are allowed, as space, comma, semicolon and some other"
                                      " special characters allowed in user-names."
                                      " Defaults to {}".format(verb, DEFAULT_CONFIG["infile"]))
-        # sub_parser.add_argument("-o", "--report-file",
-        #                        help="Report with brief information about the {} users. Defaults to {}.".format(
-        #                            verb, DEFAULT_CONFIG["out_report_json_file"]))
-        # sub_parser.add_argument("-d", "--out-details-file",
-        #                        help="Detailed information about the {} users. Defaults to {}.".format(
-        #                            verb, DEFAULT_CONFIG["out_details_file"]))
         sub_parser.add_argument("-l", "--loglevel",
                                 choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                                 help="Log-level. Defaults to {}".format(DEFAULT_CONFIG["loglevel"]))
+        sub_parser.add_argument("-e", "--expand-validation-with-affected-entities", default=False, action="store_true",
+                                dest="is_expand_validation_with_affected_entities",
+                                help="Record a mapping from the un-anonymized user to the anonymized user.")
+        sub_parser.add_argument("-f", "--features", nargs="+", metavar="FEATURE", default=None,
+                                help="Choices: {}".format(FEATURES))
 
-    # Add argument special to "anonymize".
+    #
+    # Add arguments special to "anonymize".
+    #
     sp_anonymize.add_argument("-n", "--new-owner-key", metavar="NEW_OWNER_KEY", dest="new_owner_key",
                               help="Transfer all roles to the user with this user key.")
     # Combination of "default" and "action":
-    # Imagine default=None is not given, and the user gives parameter -d. Then the arg-parser sets args.try_delete_user
-    # to true as expected. But if the user omit -d, the arg-parser sets args-try_delete_user to false implicitely.
-    # This would overwrite the setting from the config-file.
-    # Default=None sets args.try_delete_user to None if the user omits -d. By this, the script can distinguish
+    # Imagine default=None is not given, and the user gives parameter -d. Then the arg-parser sets
+    # args.is_try_delete_user to true as expected. But if the user omit -d, the arg-parser sets args.is_try_delete_user
+    # to false implicitely. This would overwrite the setting from the config-file.
+    # Default=None sets args.is_try_delete_user to None if the user omits -d. By this, the script can distinguish
     # between the given or the omitted -d.
     sp_anonymize.add_argument("-d", "--try-delete-user", default=None, action="store_true",
+                              dest="is_try_delete_user",
                               help="Try deleting the user. If not possible, do anonymize.")
     sp_anonymize.add_argument("-D", "--dry-run", action="store_true",
                               help="Finally do no anonymize. Skip the POST /rest/api/2/user/anonymization.")
@@ -190,6 +218,7 @@ def check_parameters():
             print("{}".format(json.dumps(DEFAULT_CONFIG, indent=4)), file=f)
         sys.exit(0)
 
+    # Preparation to prefix the out-files by date and time. But doing so, the "re-create" option doesn't work.
     # date_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_")
     # g_config["out_details_file"] = date_time + DEFAULT_CONFIG_REPORT_BASENAME + "_details.json"
     # g_config["out_report_json_file"] = date_time + DEFAULT_CONFIG_REPORT_BASENAME + ".json"
@@ -202,43 +231,65 @@ def check_parameters():
         recreate_reports()
         sys.exit(0)
 
+    # In a config file is given, merge it into the global config. Non-None-values overwrites the values present so far.
+    if args.config_file:
+        with open(args.config_file) as f:
+            config_from_file = json.load(f)
+            merge_dicts(g_config, config_from_file)
+
+    # Merge command line arguments in and over the global config. Non-None-values overwrites the values present so far.
+    merge_dicts(g_config, vars(args))
+
+    # The "features"-feature is not bound to a specific sub-parser, so it is validated here.
+    if g_config["features"] and not set(g_config["features"]).issubset(FEATURES):
+        parser.error("{}".format(
+            "Features contain at least one unsupported feature-name. Supported features are: {}".format(FEATURES)))
+
     if args.subparser_name == "validate" or args.subparser_name == "anonymize":
-        if args.config_file:
-            with open(args.config_file) as f:
-                config_from_file = json.load(f)
-                merge_dicts(g_config, config_from_file)
-
-        log.debug("Effective config 1: {}".format(g_config))
-        merge_dicts(g_config, vars(args))
-        log.debug("Effective config 2: {}".format(g_config))
-        missing_args = []
+        #
+        # Checks for both sub-parsers.
+        #
+        args_errors = []
         if not g_config["base_url"]:
-            missing_args.append("base-url")
+            args_errors.append("Missing base-url.")
         if not g_config["admin_user"]:
-            missing_args.append("admin-user")
+            args_errors.append("Missing admin-user.")
         if not g_config["admin_pw"]:
-            missing_args.append("admin-pw")
-        if not g_config["new_owner_key"]:
-            missing_args.append("new_owner_key")
-        if missing_args:
-            print("Missing arguments: {}".format(missing_args))
-            sys.exit(1)
+            args_errors.append("Missing admin-pw.")
 
-    #
-    #  Configure logging.
-    #
+        if args_errors:
+            if args.subparser_name == "validate":
+                sp_validate.error("{}".format(args_errors))
+            else:
+                sp_anonymize.error("{}".format(args_errors))
 
-    # Set basicConfig() to get levels less than WARNING running in our logger.
-    # See https://stackoverflow.com/questions/56799138/python-logger-not-printing-info
-    logging.basicConfig(level=logging.WARNING)
-    # Set a useful logging-format. Not the most elegant way, but it works.
-    log.handlers[0].setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(funcName)s(): %(message)s'))
-    # See also https://docs.python.org/3/howto/logging.html:
-    numeric_level = getattr(logging, g_config["loglevel"], None)
-    # The check for valid values have been done in parser.add_argument().
-    log.setLevel(numeric_level)
+        #
+        # Checks for sub-parser "anonymize"
+        #
+        if args.subparser_name == "anonymize":
+            args_errors = []
+            if not g_config["new_owner_key"]:
+                args_errors.append("Missing new_owner_key.")
 
-    log.info("Effective config: {}".format(g_config))
+            if g_config["features"] and "do_report_anonymized_user_data" in g_config["features"]:
+                # Check if needed REST endpoint can be reached:
+                rel_url = ANONHELPER_APPLICATIONUSER_URL
+                url = g_config["base_url"] + rel_url
+                url_params = {"username": g_config["admin_user"]}
+                r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, params=url_params,
+                                 verify=SSL_VERIFY)
+                if r.status_code == 404:
+                    args_errors.append("The URL {} {} needed by feature {} can't be reached (status {})".format(
+                        r.request.method, r.request.url, FEATURE_DO_REPORT_ANONYMIZED_USER_DATA, r.status_code))
+                elif r.status_code == 200 and not r.json()[g_config["admin_user"]]:
+                    args_errors.append("The request {} {} needed by feature {} doesn't work as expected".format(
+                        r.request.method, r.request.url, FEATURE_DO_REPORT_ANONYMIZED_USER_DATA, r.status_code))
+            if args_errors:
+                sp_anonymize.error("{}".format(args_errors))
+
+    set_logging()
+
+    log.debug("Effective config: {}".format(g_config))
 
     # Check infile for existence.
     try:
@@ -250,18 +301,36 @@ def check_parameters():
     return args
 
 
-def read_user_names_from_infile():
+def set_logging():
+    # Set basicConfig() to get levels less than WARNING running in our logger.
+    # See https://stackoverflow.com/questions/56799138/python-logger-not-printing-info
+    logging.basicConfig(level=logging.WARNING)
+    # Set a useful logging-format. Not the most elegant way, but it works.
+    log.handlers[0].setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(funcName)s(): %(message)s'))
+    # See also https://docs.python.org/3/howto/logging.html:
+    numeric_level = getattr(logging, g_config["loglevel"], None)
+    # The check for valid values have been done in parser.add_argument().
+    log.setLevel(numeric_level)
+
+    # Adjust logging-level of module "urllib3". If our logging is set to DEBUG, that also logs in that level.
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
+def get_user_names_from_infile():
     """
-    Read the Jira user-names from the infile and put them as keys to the global dict.
+    Read the Jira user-names from the infile and put them as keys to the global config.
 
     :return: Nothing.
     """
     log.info("Reading user-names from infile {}".format(g_config["infile"]))
-    inputfile = Path(g_config["infile"]).read_text().strip()
-    user_names = re.split("[\n\r]+", inputfile)
-    log.info("  The user-names are: {}".format(user_names))
-    for user_name in user_names:
-        g_users[user_name] = {}
+    inputfile = Path(g_config["infile"]).read_text()
+    lines = re.split("[\n\r]+", inputfile)
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith("#"):
+            user_name = line
+            g_users[user_name] = {}
+    log.info("  The user-names are: {}".format(list(g_users.keys())))
 
 
 def serialize_response(r):
@@ -276,7 +345,7 @@ def serialize_response(r):
             "requst_method": r.request.method, "requst_url": r.request.url}
 
 
-def read_users_data_from_rest():
+def get_users_data_from_rest():
     rel_url = "/rest/api/2/user"
     log.info("Reading user-data from GET {}".format(rel_url))
     url = g_config["base_url"] + rel_url
@@ -288,9 +357,9 @@ def read_users_data_from_rest():
         log.debug(g_users[user_name]["rest_user"])
 
 
-def get_validate_user_anonymizations_from_rest():
+def get_validation_data_from_rest():
     """
-    Validate all Jira-users whose user-keys could be requested in read_appuser_data(). Store the validation-response
+    Validate all Jira-users whose user-keys could be requested in read_applicationuser_data(). Store the validation-response
     to the dict.
 
     :return: Nothing.
@@ -305,8 +374,9 @@ def get_validate_user_anonymizations_from_rest():
             continue
 
         user_key = user_data["rest_user"]["json"]["key"]
-        # &expand=affectedEntities: This is like Atlassian does this in the UI
-        url_params = {"userKey": user_key, "expand": "affectedEntities"}
+        url_params = {"userKey": user_key}
+        if g_config["is_expand_validation_with_affected_entities"]:
+            url_params["expand"] = "affectedEntities"
         r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, params=url_params,
                          verify=SSL_VERIFY)
         g_users[user_name]["rest_validation"] = serialize_response(r)
@@ -336,7 +406,7 @@ def filter_users():
             # Check if the existing user is an active user:
             is_active_user = user_data["rest_user"]["json"]["active"]
             if is_active_user:
-                error_message = "Is an active user. Only inactive users will be anonymized."
+                error_message = "Is an active user."
 
         #
         #  Check against validation result got from GET rest/api/2/user/anonymization.
@@ -347,10 +417,9 @@ def filter_users():
                 if user_data["rest_validation"]["status_code"] != 200:
                     error_message = "HTTP status-code is not 200. "
                 # Despite of an status-code of 200 there could be errors (seen in use case "admin tries to
-                # anonymize themsellf).
+                # anonymize themself).
                 if len(user_data["rest_validation"]["json"]["errors"]) > 0:
-                    error_message += "There is at least one validation error message: {}".format(
-                        user_data["validation"]["errors"])
+                    error_message += "There is at least one validation error message."
             except KeyError:
                 pass
 
@@ -358,13 +427,13 @@ def filter_users():
         user_data["user_filter"]["error_message"] = ""
         if error_message:
             user_data["user_filter"]["error_message"] = error_message
-            user_data["user_filter"]["anonymize_approval"] = False
+            user_data["user_filter"]["is_anonymize_approval"] = False
             log.warning(user_name + ": " + error_message)
         else:
-            user_data["user_filter"]["anonymize_approval"] = True
+            user_data["user_filter"]["is_anonymize_approval"] = True
 
     vu = {user_name: user_data for (user_name, user_data) in g_users.items() if
-          user_data["user_filter"]["anonymize_approval"] is True}
+          user_data["user_filter"]["is_anonymize_approval"] is True}
     log.info("Remaining users to be anonymized: {}".format(list(vu.keys())))
 
 
@@ -409,7 +478,7 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
 
     :param user_name: Optional. Given if there have been scheduled one of our anonymizations.
     :param full_progress_url: Optional. Given if there have been scheduled one of our anonymizations.
-    :return: Empty string, if anonymization is running. Otherwise the
+    :return: The progress (percentage) from the returned JSON. -1 if HTTP-status is 404.
     """
     log.debug("user_name {}, full_progress_url {}".format(user_name, full_progress_url))
     if full_progress_url:
@@ -429,7 +498,7 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
     progress_percentage = None
     if r.status_code == 200:
         if r.json()["status"] == "IN_PROGRESS":
-            progress_percentage = r.json()["status"] == "currentProgress"
+            progress_percentage = r.json()["currentProgress"]
         else:
             # Don't know if the API returns "currentProgress" and 100 in all other cases than IN_PROGRESS, so I
             # force it to be 100.
@@ -446,28 +515,23 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
     return progress_percentage
 
 
-def read_appuser_data():
+def get_applicationuser_data_from_rest():
     """
     Read the ID, USER_KEY, LOWER_USER_NAME, and ACTIVE from Jira-DB for the user-names given as the dict-keys and
     supplement it to the dict.
 
-    This functions assumes there is the REST endpoint /rest/scriptrunner/latest/custom/appuser available!
+    This functions assumes there is the REST endpoint ANONHELPER_APPLICATIONUSER_URL available!
 
     :return:    Nothing.
     """
-    rel_url = "/rest/scriptrunner/latest/custom/appuser"
-    log.info("Reading appuser-data from GET {}".format(rel_url))
+    rel_url = ANONHELPER_APPLICATIONUSER_URL
+    log.info("Reading applicationuser-data from GET {}".format(rel_url))
     url = g_config["base_url"] + rel_url
     for user_name in g_users.keys():
-        g_users[user_name]["appuser"] = {
-            "request-type": "GET",
-            "url": url}
         url_params = {"username": user_name}
         r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, params=url_params,
                          verify=SSL_VERIFY)
-        g_users[user_name]["appuser"].update({
-            "status_code": r.status_code,
-            "response": r.json()})
+        g_users[user_name]["rest_applicationuser"] = serialize_response(r)
 
 
 def wait_until_anonymization_has_finished(user_name):
@@ -480,8 +544,13 @@ def wait_until_anonymization_has_finished(user_name):
     user_data = g_users[user_name]
     url = g_config["base_url"] + user_data["rest_anonymization"]["json"]["progressUrl"]
     seconds_waited = 0
+    # Print progress once a minute
+    next_progress_print_at = 60
     while g_config["timeout"] == 0 or seconds_waited < g_config["timeout"]:
         progress_percentage = get_anonymization_progress(user_name, url)
+        if seconds_waited >= next_progress_print_at:
+            log.info("Progress {}".format(progress_percentage))
+            next_progress_print_at += 60
         if progress_percentage == 100 or progress_percentage == -1:
             seconds_waited = 0
             break
@@ -490,13 +559,11 @@ def wait_until_anonymization_has_finished(user_name):
     return seconds_waited
 
 
-def run_user_anonymizations(new_owner_key):
+def run_user_anonymizations(valid_users, new_owner_key):
     rel_url_for_deletion = "/rest/api/2/user"
     rel_url_for_anonymizing = "/rest/api/2/user/anonymization"
-    valid_users = {user_name: user_data for (user_name, user_data) in g_users.items() if
-                   user_data["user_filter"]["anonymize_approval"] is True}
 
-    if g_config["try_delete_user"]:
+    if g_config["is_try_delete_user"]:
         phrase = "delete or "
     else:
         phrase = ""
@@ -513,7 +580,7 @@ def run_user_anonymizations(new_owner_key):
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
         if not g_config["is_dry_run"]:
             is_user_deleted = False
-            if g_config["try_delete_user"]:
+            if g_config["is_try_delete_user"]:
                 url_params = {"username": user_name}
                 r = requests.delete(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url_for_deletion,
                                     params=url_params, verify=SSL_VERIFY)
@@ -551,6 +618,19 @@ def run_user_anonymizations(new_owner_key):
                         r.raise_for_status()
 
 
+def get_anonymized_users_data_from_rest(valid_users):
+    rel_url = "/rest/api/2/user"
+    log.info("Reading user-data from GET {}".format(rel_url))
+    url = g_config["base_url"] + rel_url
+    for user_name, user_data in valid_users.items():
+        anonymized_user_name = "jirauser{}".format(user_data["rest_applicationuser"]["json"][user_name]["id"])
+        url_params = {"username": anonymized_user_name}
+        r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, params=url_params,
+                         verify=SSL_VERIFY)
+        g_users[user_name]["rest_anonymized_user"] = serialize_response(r)
+        log.debug(g_users[user_name]["rest_anonymized_user"])
+
+
 def is_any_anonymization_running():
     log.info("?")
     progress_percentage = get_anonymization_progress()
@@ -569,7 +649,7 @@ def time_diff(d1, d2):
     return dd2 - dd1
 
 
-def create_report(users_data):
+def create_raw_report(users_data):
     report = {
         "overview": None,
         "users": []
@@ -579,6 +659,28 @@ def create_report(users_data):
     number_of_deleted_users = 0
     number_of_anonymized_users = 0
     for user_name, user_data in users_data.items():
+
+        try:
+            user_key = user_data["rest_user"]["json"]["key"]
+            user_display_name = user_data["rest_user"]["json"]["displayName"]
+            active = user_data["rest_user"]["json"]["active"]
+        except KeyError:
+            user_key = None
+            user_display_name = None
+            active = None
+
+        try:
+            has_validation_errors = len(user_data["rest_validation"]["errors"]) > 0
+        except:
+            has_validation_errors = False
+
+        try:
+            user_filter = user_data["user_filter"]
+            if not user_filter["is_anonymize_approval"]:
+                number_of_skipped_users += 1
+        except KeyError:
+            user_filter = {}
+
         try:
             start_time = user_data["rest_user_delete_time"]
             finish_time = None
@@ -604,27 +706,6 @@ def create_report(users_data):
                 finish_time = None
                 is_anonymized = False
 
-        try:
-            user_key = user_data["rest_user"]["json"]["key"]
-            user_display_name = user_data["rest_user"]["json"]["displayName"]
-            active = user_data["rest_user"]["json"]["active"]
-        except KeyError:
-            user_key = None
-            user_display_name = None
-            active = None
-
-        try:
-            user_filter = user_data["user_filter"]
-            if not user_filter["anonymize_approval"]:
-                number_of_skipped_users += 1
-        except KeyError:
-            user_filter = {}
-
-        try:
-            has_validation_errors = len(user_data["rest_validation"]["errors"]) > 0
-        except:
-            has_validation_errors = False
-
         if start_time and finish_time:
             diff = time_diff(start_time, finish_time)
         else:
@@ -635,15 +716,31 @@ def create_report(users_data):
             "user_key": user_key,
             "user_display_name": user_display_name,
             "active": active,
+            "has_validation_errors": has_validation_errors,
+            "filter_is_anonymize_approval": user_filter["is_anonymize_approval"],
+            "filter_error_message": user_filter["error_message"],
             "is_deleted": is_deleted,
             "is_anonymized": is_anonymized,
-            "filter_anonymize_approval": user_filter["anonymize_approval"],
-            "filter_error_message": user_filter["error_message"],
-            "has_validation_errors": has_validation_errors,
             "start_time": start_time,
             "finish_time": finish_time,
             "time_duration": "{}".format(diff) if diff is not None else None
         }
+
+        if is_feature_do_report_anonymized_user_data():
+            try:
+                anonymized_user_name = user_data["rest_anonymized_user"]["json"]["name"]
+                anonymized_user_key = user_data["rest_anonymized_user"]["json"]["key"]
+                anonymized_user_display_name = user_data["rest_anonymized_user"]["json"]["displayName"]
+            except KeyError:
+                # TODO this is an error! Let the user know.
+                anonymized_user_name = "unknown"
+                anonymized_user_key = "unknown"
+                anonymized_user_display_name = "unknown"
+
+            user_report["anonymized_user_name"] = anonymized_user_name
+            user_report["anonymized_user_key"] = anonymized_user_key
+            user_report["anonymized_user_display_name"] = anonymized_user_display_name
+
         report["users"].append(user_report)
 
     report["overview"] = {
@@ -660,9 +757,14 @@ def write_reports(report):
         print("{}".format(json.dumps(report, indent=4)), file=f)
 
     with open(g_config["out_report_text_file"], 'w', newline='') as f:
-        fieldnames = ["user_name", "user_key", "user_display_name", "active", "is_deleted", "is_anonymized",
-                      "filter_anonymize_approval", "filter_error_message", "has_validation_errors", "start_time",
-                      "finish_time", "time_duration"]
+        fieldnames = ["user_name", "user_key", "user_display_name", "active",
+                      "has_validation_errors",
+                      "filter_is_anonymize_approval", "filter_error_message",
+                      "is_deleted", "is_anonymized",
+                      "start_time", "finish_time", "time_duration"]
+        if is_feature_do_report_anonymized_user_data():
+            fieldnames.append(["anonymized_user_name", "anonymized_user_key", "anonymized_user_display_name"])
+
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(report["users"])
@@ -671,11 +773,15 @@ def write_reports(report):
 def recreate_reports():
     with open(g_config["out_details_file"]) as f:
         users_data = json.load(f)["usernames_from_infile"]
-        report = create_report(users_data)
+        report = create_raw_report(users_data)
         write_reports(report)
 
 
 def at_exit():
+    """
+    Regardless of the exit-reason, always write the report-details-file.
+    """
+
     # print("{}".format(g_details))
 
     try:
@@ -684,8 +790,8 @@ def at_exit():
         is_g = False
 
     if not (is_g):
-        # with open(g_config["out_details_file"], 'w') as f:
         with open(g_config["out_details_file"], 'w') as f:
+            g_details["effective_config"]["admin_pw"] = "<sanitized>"
             print("{}".format(json.dumps(g_details, indent=4)), file=f)
 
 
@@ -695,11 +801,14 @@ def main():
     if args.subparser_name == "validate" or args.subparser_name == "anonymize":
         atexit.register(at_exit)
         log.debug("")
-        read_user_names_from_infile()
+        get_user_names_from_infile()
         log.debug("")
-        read_users_data_from_rest()
+        get_users_data_from_rest()
         log.debug("")
-        get_validate_user_anonymizations_from_rest()
+        get_validation_data_from_rest()
+        if is_feature_do_report_anonymized_user_data():
+            log.debug("")
+            get_applicationuser_data_from_rest()
         log.debug("")
         filter_users()
 
@@ -707,13 +816,19 @@ def main():
             log.debug("")
             if is_any_anonymization_running():
                 log.error("There is an anonymization running, or the status of anonymization couldn't be read."
-                          " In both cases this script must not continue because these cases are not implemented. Exiting.")
+                          " In both cases this script must not continue because these cases are not implemented."
+                          " Exiting.")
                 sys.exit(2)
             log.debug("")
+            valid_users = {user_name: user_data for (user_name, user_data) in g_users.items() if
+                           user_data["user_filter"]["is_anonymize_approval"] is True}
             if not g_config["dry_run"]:
-                run_user_anonymizations(g_config["new_owner_key"])
+                run_user_anonymizations(valid_users, g_config["new_owner_key"])
+            if is_feature_do_report_anonymized_user_data():
+                log.debug("")
+                get_anonymized_users_data_from_rest(valid_users)
 
-        report = create_report(g_details["usernames_from_infile"])
+        report = create_raw_report(g_details["usernames_from_infile"])
         log.info("Report overview: {}".format(json.dumps(report["overview"])))
         write_reports(report)
 
