@@ -4,7 +4,6 @@
 Compatibility:  Python 3.7
 
 # TODO help-text for --features
-TODO Jira 8.14 supports user-access-token? Support it.
 TODO Config-file as text-file, not as JSON, to allow comments.
 TODO Known issues:
 TODO The returned error-messages in the JSON-responses are expected in the language-setting of the executing admin.
@@ -39,8 +38,7 @@ VERSION = "1.0.0-SNAPSHOT"
 
 DEFAULT_CONFIG = {
     "base_url": "",
-    "admin_user": "",
-    "admin_pw": "",
+    "rest_auth": "",
     "infile": "usernames.txt",
     "loglevel": "INFO",
     "is_expand_validation_with_affected_entities": False,
@@ -54,7 +52,6 @@ DEFAULT_CONFIG = {
     # Time in seconds the progress shall wait for finishing an anonymization. 0 means wait as long as it takes.
     "timeout": 0,
     "features": None
-
 }
 
 DEFAULT_CONFIG_REPORT_BASENAME = "anonymizing_report"
@@ -120,8 +117,16 @@ g_details = {
     "usernames_from_infile": g_users
 }
 
+g_session = requests.Session()
 
-def is_feature_do_report_anonymized_user_data():
+
+def get_sanitized_global_details():
+    gd = g_details.copy()
+    gd["effective_config"]["rest_auth"] = "<sanitized>"
+    return gd
+
+
+def is_feature_do_report_anonymized_user_data_enabled():
     return g_config["features"] and FEATURE_DO_REPORT_ANONYMIZED_USER_DATA in g_config["features"]
 
 
@@ -142,7 +147,147 @@ def merge_dicts(d1, d2):
     d1.update(res)
 
 
-def check_parameters():
+def validate_auth_parameter(auth):
+    auth_parts = re.split(r"[\s:]+", auth)
+
+    if len(auth_parts) < 2:
+        return "Invalid format in authentication parameter.", None, None, None
+
+    auth_type = auth_parts[0].lower()
+    if not auth_type.lower() in ["basic", "bearer"]:
+        return "Invalid authentication type '{}'. Expect 'Basic' or 'Bearer'.".format(auth_type), None, None, None
+
+    if auth_type == "basic":
+        if len(auth_parts) != 3:
+            return "Invalid format for 'Basic' in authentication argument.", None, None, None
+
+    if auth_type == "bearer":
+        if len(auth_parts) != 2:
+            return "Invalid format for 'Bearer' in authentication argument.", None, None, None
+
+    return None, auth_type, auth_parts[1], auth_parts[2] if len(auth_parts) == 3 else None
+
+
+def setup_http_session(auth_type, user_or_bearer, passwd):
+    g_session.verify = SSL_VERIFY
+    g_session.headers = {
+        "Content-Type": "application/json"
+    }
+    if auth_type == "basic":
+        g_session.auth = (user_or_bearer, passwd)
+        url = g_config["base_url"] + "/rest/auth/1/session"
+        # Expect 200 OK here.
+        r = g_session.get(url=url)
+        if r.status_code != 200:
+            error_message = "Auth-check returned {}".format(r.status_code)
+            if r.status_code == 403:
+                error_message += ". This could mean there is a CAPCHA."
+            return error_message
+    else:
+        g_session.headers = {
+            "Authorization": "Bearer " + user_or_bearer,
+            "Content-Type": "application/json"
+        }
+    return ""
+
+
+def check_for_admin_permission():
+    """
+    Check if the user can log-in and is an administrator.
+
+    In Jira there are two levels of administration: The Administrator and the System Administrator. The weaker
+    Administrator is sufficient for anonymization. The check against administrator-permissions, call the
+    GET /rest/api/2/mypermissions API. This returns among others the "ADMINISTR" and the "SYSTEM_ADMIN" entries.
+    Check for permissions["ADMINISTER"]["havePermission"]==True. System-admins have both set to true.
+
+    {
+        ...,
+        "permissions": {
+            "ADMINISTER": {
+                "id": "0",
+                "key": "ADMINISTER",
+                "name": "Jira Administrators",
+                "type": "GLOBAL",
+                "description": "Ability to perform most administration functions (excluding Import & Export, SMTP Configuration, etc.).",
+                "havePermission": true
+            },
+            "SYSTEM_ADMIN": {
+                "id": "44",
+                "key": "SYSTEM_ADMIN",
+                "name": "Jira System Administrators",
+                "type": "GLOBAL",
+                "description": "Ability to perform all administration functions. There must be at least one group with this permission.",
+                "havePermission": false
+            },
+        }
+    }
+    :return: If the auth-user can log-in and is an administrator.
+    """
+    rel_url = "/rest/api/2/mypermissions"
+    url = g_config["base_url"] + rel_url
+    r = g_session.get(url=url)
+    error_message = ""
+    if r.status_code == 200:
+        if not r.json()["permissions"]["ADMINISTER"]["havePermission"]:
+            error_message = "Permisson-check: User is not an administrator. Only roles Administrator and System-Admin" \
+                            " are allowed to anonymize users."
+    elif r.status_code == 401:
+        # The r.text() is a complete HTML-Page an too long to read in a console. Shorten it to a one-liner.
+        error_message = "Permisson-check returned 401 Unauthorized."
+    elif r.status_code == 403:
+        # The r.text() is a complete HTML-Page an too long to read in a console. Shorten it to a one-liner.
+        error_message = "Permisson-check returned 403 Forbidden."
+    else:
+        # The documented error-codes are as follows. But they are not expected here because no query is made for
+        # an issue or a project, nor for behalf of any user.
+        #   - 400 Returned if the project or issue id is invalid.
+        #   - 401 Returned if request is on behalf of anonymous user.
+        #   - 404 Returned if the project or issue id or key is not found.
+        error_message = "Permisson-check GET /rest/api/2/mypermissions returned {} with message {}.".format(
+            r.status_code,
+            r.text)
+    return error_message
+
+
+def check_if_feature_do_report_anonymized_user_data_is_functional(user):
+    """
+    Check if REST-endpoint for this feature can be reached.
+    :return: None if functional. Otherwise an error-message.
+    """
+    rel_url = ANONHELPER_APPLICATIONUSER_URL
+    url = g_config["base_url"] + rel_url
+    url_params = {"username": user}
+    r = g_session.get(url=url, params=url_params)
+    error_message = None
+    # In case the URL can't be reached the auth-methodes' results differ:
+    #   - With Basic, the status-code is 404. Easy to detect.
+    #   - With Bearer, Jira redirects to the Login-page and the status-code is 200! In the first place 200 sounds like
+    #       the original request succeeded. But in fact it hasn't.
+    #       There are several ways to detect a redirect.
+    #           - The length of r.history() is greater than 0. The (in this case single) entry has status-code 302.
+    #           - In r.text() is not the JSON-structure we expect (not a JSON at all).
+    #           - In r.url() something like "login.jsp" is present.
+    #       I'm not confident in this, but I think taking the history into account is the most proper solution.
+    if r.status_code == 404:
+        error_message = True
+    elif r.status_code == 200:
+        if len(r.history) > 0:
+            # Ran into the redirect (or at least any unexpected behaviour).
+            error_message = True
+        try:
+            # Check if this is the JSON we expect here.
+            r.json()[g_config["new_owner_key"]]
+        except (KeyError, JSONDecodeError):
+            error_message = True
+
+    if error_message:
+        error_message = "The URL {} {} needed by feature {} can't be reached.".format(
+            r.request.method, ANONHELPER_APPLICATIONUSER_URL, FEATURE_DO_REPORT_ANONYMIZED_USER_DATA)
+
+    return error_message
+
+
+def parse_parameters():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(VERSION))
     parser.add_argument("-g", "--generate-config-template",
@@ -171,8 +316,11 @@ def check_parameters():
                                      " Parameters given on the command line will overwrite parameters"
                                      " given in the config-file.")
         sub_parser.add_argument("-b", "--base-url", help="Jira base-URL.")
-        sub_parser.add_argument("-u", "--admin-user", help="Admin user-name who will perform the anonymization.")
-        sub_parser.add_argument("-p", "--admin-pw", help="Admin password.")
+        sub_parser.add_argument("-u", "--user-auth", metavar="ADMIN_USER_AUTH", dest="rest_auth",
+                                help="Admin user-authentication who will perform the anonymization."
+                                     " Two auth-types are supported: Basic and Bearer."
+                                     " The format for Basic is: 'Basic user:pass'."
+                                     " The format for Bearer is: 'Bearer <token>'.")
         sub_parser.add_argument("-i", "--infile",
                                 help="File with user-names to be {}. One user-name per line."
                                      " No other delimiters are allowed, as space, comma, semicolon and some other"
@@ -184,8 +332,6 @@ def check_parameters():
         sub_parser.add_argument("-e", "--expand-validation-with-affected-entities", default=False, action="store_true",
                                 dest="is_expand_validation_with_affected_entities",
                                 help="Record a mapping from the un-anonymized user to the anonymized user.")
-        sub_parser.add_argument("-f", "--features", nargs="+", metavar="FEATURE", default=None,
-                                help="Choices: {}".format(FEATURES))
 
     #
     # Add arguments special to "anonymize".
@@ -201,8 +347,14 @@ def check_parameters():
     sp_anonymize.add_argument("-d", "--try-delete-user", default=None, action="store_true",
                               dest="is_try_delete_user",
                               help="Try deleting the user. If not possible, do anonymize.")
+    # This argument belongs to the "anonymize" and therefore is parsed here in context of sp_anonymize.
+    # But in future versions of the anonymizer this could become a more global argument.
+    sp_anonymize.add_argument("-f", "--features", nargs="+", metavar="FEATURE", default=None,
+                              help="Choices: {}".format(FEATURES))
     sp_anonymize.add_argument("-D", "--dry-run", action="store_true",
                               help="Finally do no anonymize. Skip the POST /rest/api/2/user/anonymization.")
+
+    sub_parsers = {"validate": sp_validate, "anonymize": sp_anonymize}
 
     parser.parse_args()
     args = parser.parse_args()
@@ -251,45 +403,40 @@ def check_parameters():
         #
         args_errors = []
         if not g_config["base_url"]:
-            args_errors.append("Missing base-url.")
-        if not g_config["admin_user"]:
-            args_errors.append("Missing admin-user.")
-        if not g_config["admin_pw"]:
-            args_errors.append("Missing admin-pw.")
+            sub_parsers[args.subparser_name].error("Missing base-url.")
 
-        if args_errors:
-            if args.subparser_name == "validate":
-                sp_validate.error("{}".format(args_errors))
-            else:
-                sp_anonymize.error("{}".format(args_errors))
+        if not g_config["rest_auth"]:
+            sub_parsers[args.subparser_name].error("Missing authentication.")
+
+        auth_error, auth_type, user_or_bearer, passwd = validate_auth_parameter(g_config["rest_auth"])
+        if auth_error:
+            sub_parsers[args.subparser_name].error(auth_error)
+
+        error_message = setup_http_session(auth_type, user_or_bearer, passwd)
+        if error_message:
+            sub_parsers[args.subparser_name].error(error_message)
+        error_message = check_for_admin_permission()
+        if error_message:
+            sub_parsers[args.subparser_name].error(error_message)
 
         #
         # Checks for sub-parser "anonymize"
         #
         if args.subparser_name == "anonymize":
-            args_errors = []
             if not g_config["new_owner_key"]:
-                args_errors.append("Missing new_owner_key.")
+                sp_anonymize.error("Missing new_owner_key.")
 
             if g_config["features"] and "do_report_anonymized_user_data" in g_config["features"]:
-                # Check if needed REST endpoint can be reached:
-                rel_url = ANONHELPER_APPLICATIONUSER_URL
-                url = g_config["base_url"] + rel_url
-                url_params = {"username": g_config["admin_user"]}
-                r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, params=url_params,
-                                 verify=SSL_VERIFY)
-                if r.status_code == 404:
-                    args_errors.append("The URL {} {} needed by feature {} can't be reached (status {})".format(
-                        r.request.method, r.request.url, FEATURE_DO_REPORT_ANONYMIZED_USER_DATA, r.status_code))
-                elif r.status_code == 200 and not r.json()[g_config["admin_user"]]:
-                    args_errors.append("The request {} {} needed by feature {} doesn't work as expected".format(
-                        r.request.method, r.request.url, FEATURE_DO_REPORT_ANONYMIZED_USER_DATA, r.status_code))
-            if args_errors:
-                sp_anonymize.error("{}".format(args_errors))
+                # Take new_owner_key for this check, as this is the only user we are pretty sure it do exist.
+                # We can't use the admin-user because they could use a Bearer-token (without any user-name).
+                error_message = check_if_feature_do_report_anonymized_user_data_is_functional(g_config["new_owner_key"])
+                if error_message:
+                    sp_anonymize.error(error_message)
 
     set_logging()
 
-    log.debug("Effective config: {}".format(g_config))
+    gd = get_sanitized_global_details()
+    log.debug("Effective config: {}".format(gd["effective_config"]))
 
     # Check infile for existence.
     try:
@@ -351,8 +498,7 @@ def get_users_data_from_rest():
     url = g_config["base_url"] + rel_url
     for user_name in g_users.keys():
         url_params = {"username": user_name}
-        r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, params=url_params,
-                         verify=SSL_VERIFY)
+        r = g_session.get(url=url, params=url_params)
         g_users[user_name]["rest_user"] = serialize_response(r)
         log.debug(g_users[user_name]["rest_user"])
 
@@ -377,8 +523,8 @@ def get_validation_data_from_rest():
         url_params = {"userKey": user_key}
         if g_config["is_expand_validation_with_affected_entities"]:
             url_params["expand"] = "affectedEntities"
-        r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, params=url_params,
-                         verify=SSL_VERIFY)
+        # https://docs.atlassian.com/software/jira/docs/api/REST/8.13.0/#api/2/user-getUser
+        r = g_session.get(url=url, params=url_params)
         g_users[user_name]["rest_validation"] = serialize_response(r)
         log.debug(g_users[user_name]["rest_validation"])
 
@@ -489,7 +635,7 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
         rel_url = "/rest/api/2/user/anonymization/progress"
         url = g_config["base_url"] + rel_url
         log.info("Checking if any anonymization is running")
-    r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, verify=SSL_VERIFY)
+    r = g_session.get(url=url)
     # If this call is for a specific user/anonymization-task, store the response in the user's data.
     if user_name:
         g_users[user_name]["rest_last_anonymization_progress"] = serialize_response(r)
@@ -529,8 +675,7 @@ def get_applicationuser_data_from_rest():
     url = g_config["base_url"] + rel_url
     for user_name in g_users.keys():
         url_params = {"username": user_name}
-        r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, params=url_params,
-                         verify=SSL_VERIFY)
+        r = g_session.get(url=url, params=url_params)
         g_users[user_name]["rest_applicationuser"] = serialize_response(r)
 
 
@@ -582,8 +727,7 @@ def run_user_anonymizations(valid_users, new_owner_key):
             is_user_deleted = False
             if g_config["is_try_delete_user"]:
                 url_params = {"username": user_name}
-                r = requests.delete(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url_for_deletion,
-                                    params=url_params, verify=SSL_VERIFY)
+                r = g_session.delete(url=url_for_deletion, params=url_params)
                 user_data["rest_user_delete"] = serialize_response(r)
                 log.debug(user_data["rest_user_delete"])
                 if r.status_code == 204:
@@ -591,8 +735,7 @@ def run_user_anonymizations(valid_users, new_owner_key):
                     user_data["rest_user_delete_time"] = datetime.now().isoformat(timespec="milliseconds")
 
             if not is_user_deleted:
-                r = requests.post(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url_for_anonymizing,
-                                  json=body, verify=SSL_VERIFY)
+                r = g_session.post(url=url_for_anonymizing, json=body)
                 user_data["rest_anonymization"] = serialize_response(r)
                 log.debug(user_data["rest_anonymization"])
 
@@ -625,8 +768,7 @@ def get_anonymized_users_data_from_rest(valid_users):
     for user_name, user_data in valid_users.items():
         anonymized_user_name = "jirauser{}".format(user_data["rest_applicationuser"]["json"][user_name]["id"])
         url_params = {"username": anonymized_user_name}
-        r = requests.get(auth=(g_config["admin_user"], g_config["admin_pw"]), url=url, params=url_params,
-                         verify=SSL_VERIFY)
+        r = g_session.get(url=url, params=url_params)
         g_users[user_name]["rest_anonymized_user"] = serialize_response(r)
         log.debug(g_users[user_name]["rest_anonymized_user"])
 
@@ -726,16 +868,21 @@ def create_raw_report(users_data):
             "time_duration": "{}".format(diff) if diff is not None else None
         }
 
-        if is_feature_do_report_anonymized_user_data():
-            try:
-                anonymized_user_name = user_data["rest_anonymized_user"]["json"]["name"]
-                anonymized_user_key = user_data["rest_anonymized_user"]["json"]["key"]
-                anonymized_user_display_name = user_data["rest_anonymized_user"]["json"]["displayName"]
-            except KeyError:
-                # TODO this is an error! Let the user know.
-                anonymized_user_name = "unknown"
-                anonymized_user_key = "unknown"
-                anonymized_user_display_name = "unknown"
+        if is_feature_do_report_anonymized_user_data_enabled():
+            if is_anonymized:
+                try:
+                    anonymized_user_name = user_data["rest_anonymized_user"]["json"]["name"]
+                    anonymized_user_key = user_data["rest_anonymized_user"]["json"]["key"]
+                    anonymized_user_display_name = user_data["rest_anonymized_user"]["json"]["displayName"]
+                except KeyError:
+                    # TODO this is an error! Let the user know.
+                    anonymized_user_name = "unknown"
+                    anonymized_user_key = "unknown"
+                    anonymized_user_display_name = "unknown"
+            else:
+                anonymized_user_name = ""
+                anonymized_user_key = ""
+                anonymized_user_display_name = ""
 
             user_report["anonymized_user_name"] = anonymized_user_name
             user_report["anonymized_user_key"] = anonymized_user_key
@@ -762,8 +909,8 @@ def write_reports(report):
                       "filter_is_anonymize_approval", "filter_error_message",
                       "is_deleted", "is_anonymized",
                       "start_time", "finish_time", "time_duration"]
-        if is_feature_do_report_anonymized_user_data():
-            fieldnames.append(["anonymized_user_name", "anonymized_user_key", "anonymized_user_display_name"])
+        if is_feature_do_report_anonymized_user_data_enabled():
+            fieldnames.extend(["anonymized_user_name", "anonymized_user_key", "anonymized_user_display_name"])
 
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -784,6 +931,7 @@ def at_exit():
 
     # print("{}".format(g_details))
 
+    # TODO A little bit more description here, please.
     try:
         is_g = g_config["g"]
     except KeyError:
@@ -791,12 +939,11 @@ def at_exit():
 
     if not (is_g):
         with open(g_config["out_details_file"], 'w') as f:
-            g_details["effective_config"]["admin_pw"] = "<sanitized>"
-            print("{}".format(json.dumps(g_details, indent=4)), file=f)
+            print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
 
 
 def main():
-    args = check_parameters()
+    args = parse_parameters()
 
     if args.subparser_name == "validate" or args.subparser_name == "anonymize":
         atexit.register(at_exit)
@@ -806,7 +953,7 @@ def main():
         get_users_data_from_rest()
         log.debug("")
         get_validation_data_from_rest()
-        if is_feature_do_report_anonymized_user_data():
+        if is_feature_do_report_anonymized_user_data_enabled():
             log.debug("")
             get_applicationuser_data_from_rest()
         log.debug("")
@@ -824,7 +971,7 @@ def main():
                            user_data["user_filter"]["is_anonymize_approval"] is True}
             if not g_config["dry_run"]:
                 run_user_anonymizations(valid_users, g_config["new_owner_key"])
-            if is_feature_do_report_anonymized_user_data():
+            if is_feature_do_report_anonymized_user_data_enabled():
                 log.debug("")
                 get_anonymized_users_data_from_rest(valid_users)
 
