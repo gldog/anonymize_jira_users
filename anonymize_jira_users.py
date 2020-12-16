@@ -14,6 +14,7 @@ TODO The returned error-messages in the JSON-responses are expected in the langu
 
 import argparse
 import atexit
+import configparser
 import csv
 import json
 import logging
@@ -38,7 +39,7 @@ VERSION = "1.0.0-SNAPSHOT"
 
 DEFAULT_CONFIG = {
     "base_url": "",
-    "rest_auth": "",
+    "jira_auth": "",
     "infile": "usernames.txt",
     "loglevel": "INFO",
     "is_expand_validation_with_affected_entities": False,
@@ -51,11 +52,13 @@ DEFAULT_CONFIG = {
     "regular_delay": 3,
     # Time in seconds the progress shall wait for finishing an anonymization. 0 means wait as long as it takes.
     "timeout": 0,
-    "features": None
+    # None instead of empty list would also work regarding the program logic. But None is forbidden in ConfigParser,
+    # which is used to write a default-config-file. So we have to use the empty list.
+    "features": []
 }
 
 DEFAULT_CONFIG_REPORT_BASENAME = "anonymizing_report"
-DEFAULT_CONFIG_TEMPLATE_FILENAME = "my-config.json"
+DEFAULT_CONFIG_TEMPLATE_FILENAME = "my-blank-default-config.cfg"
 SSL_VERIFY = False
 
 #
@@ -122,7 +125,7 @@ g_session = requests.Session()
 
 def get_sanitized_global_details():
     gd = g_details.copy()
-    gd["effective_config"]["rest_auth"] = "<sanitized>"
+    gd["effective_config"]["jira_auth"] = "<sanitized>"
     return gd
 
 
@@ -287,15 +290,86 @@ def check_if_feature_do_report_anonymized_user_data_is_functional(user):
     return error_message
 
 
+def write_default_cfg_file(config_template_filename):
+    with open(config_template_filename, "w") as configfile:
+        configfile.write("\n")
+        configfile.write("#\n")
+        configfile.write("# jira_auth: Can be Basic or Bearer. Examples:\n")
+        configfile.write("#   'Basic jo:3004\n")
+        configfile.write("#   'Bearer NDg3MzA5MTc5Mzg5Ov7z+S92TjTYCYYEY7xzlHA+l5jV\n")
+        configfile.write("\n")
+        parser = configparser.ConfigParser(defaults=DEFAULT_CONFIG)
+        parser.write(configfile)
+
+
+def read_configfile_and_merge_into_global_config(args):
+    """
+    Read the config-file and merge it into the gobal defaults-dict.
+
+    The values within a ConfigParser are always strings. After a merge with a Python dict, the expected types could
+    be gone. E.g. if a boolean is expected, but the ConfigParser delivers the string "false", this string is
+    True.
+    This function additionally converts all read parameters to Python-types.
+    :param args: The arguments got from the command-line.
+    :return: Nothing.
+    """
+    parser = configparser.ConfigParser()
+    parser.read(args.config_file)
+    defaults = parser.defaults()
+
+    # parser.defaults() is documented as dict, but is something weird without an .items()-function.
+    # A copy of the defaults solve this problem.
+    defaultz = dict(defaults)
+    real_dict = {}
+    for k, v in defaultz.items():
+        if v in ["yes", "true", "on"]:
+            real_dict[k] = True
+        elif v in ["no", "false", "off"]:
+            real_dict[k] = False
+        elif k == "features":
+            # The ConfigParser doesn't parse lists. We have to convert the delimited feature-string to a list by
+            # ourself.
+            if v:
+                real_dict[k] = re.split(r"[\s,;]+", v)
+            else:
+                real_dict[k] = []
+        else:
+            try:
+                real_dict[k] = int(v)
+            except ValueError:
+                real_dict[k] = v
+
+    merge_dicts(g_config, real_dict)
+
+
+def set_logging():
+    # Set basicConfig() to get levels less than WARNING running in our logger.
+    # See https://stackoverflow.com/questions/56799138/python-logger-not-printing-info
+    logging.basicConfig(level=logging.WARNING)
+    # Set a useful logging-format. Not the most elegant way, but it works.
+    log.handlers[0].setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(funcName)s(): %(message)s'))
+    # See also https://docs.python.org/3/howto/logging.html:
+    numeric_level = getattr(logging, g_config["loglevel"], None)
+    # The check for valid values have been done in parser.add_argument().
+    log.setLevel(numeric_level)
+
+    # Adjust logging-level of module "urllib3". If our logging is set to DEBUG, that also logs in that level.
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
 def parse_parameters():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", action="version", version="%(prog)s {}".format(VERSION))
-    parser.add_argument("-g", "--generate-config-template",
-                        const=DEFAULT_CONFIG_TEMPLATE_FILENAME, nargs='?', metavar="CONFIG_TEMPLATE_NAME",
+    parser.add_argument("-g", "--generate-config-template", metavar="CONFIG_TEMPLATE_FILENAME",
+                        const=DEFAULT_CONFIG_TEMPLATE_FILENAME, nargs='?',
+                        dest="config_template_filename",
                         help="Generate a JSON configuration-template. Defaults to {}.".format(
                             DEFAULT_CONFIG_TEMPLATE_FILENAME))
     parser.add_argument("-r", "--recreate-report", action="store_true",
                         help="Re-create the report from the details file. Only for development.")
+    parser.add_argument("-l", "--loglevel",
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                        help="Log-level. Defaults to {}".format(DEFAULT_CONFIG["loglevel"]))
 
     sp = parser.add_subparsers(dest="subparser_name")
     sp_validate = sp.add_parser("validate")
@@ -316,7 +390,7 @@ def parse_parameters():
                                      " Parameters given on the command line will overwrite parameters"
                                      " given in the config-file.")
         sub_parser.add_argument("-b", "--base-url", help="Jira base-URL.")
-        sub_parser.add_argument("-u", "--user-auth", metavar="ADMIN_USER_AUTH", dest="rest_auth",
+        sub_parser.add_argument("-u", "--user-auth", metavar="ADMIN_USER_AUTH", dest="jira_auth",
                                 help="Admin user-authentication who will perform the anonymization."
                                      " Two auth-types are supported: Basic and Bearer."
                                      " The format for Basic is: 'Basic user:pass'."
@@ -326,9 +400,6 @@ def parse_parameters():
                                      " No other delimiters are allowed, as space, comma, semicolon and some other"
                                      " special characters allowed in user-names."
                                      " Defaults to {}".format(verb, DEFAULT_CONFIG["infile"]))
-        sub_parser.add_argument("-l", "--loglevel",
-                                choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                                help="Log-level. Defaults to {}".format(DEFAULT_CONFIG["loglevel"]))
         sub_parser.add_argument("-e", "--expand-validation-with-affected-entities", default=False, action="store_true",
                                 dest="is_expand_validation_with_affected_entities",
                                 help="Record a mapping from the un-anonymized user to the anonymized user.")
@@ -365,9 +436,8 @@ def parse_parameters():
         parser.print_help()
         sys.exit(0)
 
-    if args.generate_config_template:
-        with open(args.generate_config_template, 'w') as f:
-            print("{}".format(json.dumps(DEFAULT_CONFIG, indent=4)), file=f)
+    if args.config_template_filename:
+        write_default_cfg_file(args.config_template_filename)
         sys.exit(0)
 
     # Preparation to prefix the out-files by date and time. But doing so, the "re-create" option doesn't work.
@@ -385,9 +455,7 @@ def parse_parameters():
 
     # In a config file is given, merge it into the global config. Non-None-values overwrites the values present so far.
     if args.config_file:
-        with open(args.config_file) as f:
-            config_from_file = json.load(f)
-            merge_dicts(g_config, config_from_file)
+        read_configfile_and_merge_into_global_config(args)
 
     # Merge command line arguments in and over the global config. Non-None-values overwrites the values present so far.
     merge_dicts(g_config, vars(args))
@@ -405,10 +473,10 @@ def parse_parameters():
         if not g_config["base_url"]:
             sub_parsers[args.subparser_name].error("Missing base-url.")
 
-        if not g_config["rest_auth"]:
+        if not g_config["jira_auth"]:
             sub_parsers[args.subparser_name].error("Missing authentication.")
 
-        auth_error, auth_type, user_or_bearer, passwd = validate_auth_parameter(g_config["rest_auth"])
+        auth_error, auth_type, user_or_bearer, passwd = validate_auth_parameter(g_config["jira_auth"])
         if auth_error:
             sub_parsers[args.subparser_name].error(auth_error)
 
@@ -446,21 +514,6 @@ def parse_parameters():
         sys.exit(1)
 
     return args
-
-
-def set_logging():
-    # Set basicConfig() to get levels less than WARNING running in our logger.
-    # See https://stackoverflow.com/questions/56799138/python-logger-not-printing-info
-    logging.basicConfig(level=logging.WARNING)
-    # Set a useful logging-format. Not the most elegant way, but it works.
-    log.handlers[0].setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(funcName)s(): %(message)s'))
-    # See also https://docs.python.org/3/howto/logging.html:
-    numeric_level = getattr(logging, g_config["loglevel"], None)
-    # The check for valid values have been done in parser.add_argument().
-    log.setLevel(numeric_level)
-
-    # Adjust logging-level of module "urllib3". If our logging is set to DEBUG, that also logs in that level.
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def get_user_names_from_infile():
