@@ -26,6 +26,7 @@ import time
 from datetime import datetime
 from json.decoder import JSONDecodeError
 from pathlib import Path
+from urllib import parse
 
 import requests
 
@@ -54,6 +55,7 @@ DEFAULT_CONFIG = {
     'regular_delay': 3,
     # Time in seconds the progress shall wait for finishing an anonymization. 0 means wait as long as it takes.
     'timeout': 0,
+    'is_background_reindex_triggered': False,
     # None instead of empty list would also work regarding the program logic. But None is forbidden in ConfigParser,
     # which is used to write a default-config-file. So we have to use the empty list.
     'features': ''
@@ -438,6 +440,8 @@ def parse_parameters():
                               help="Choices: {}".format(FEATURES))
     sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
                               help="Finally do no anonymize. Skip the POST /rest/api/2/user/anonymization.")
+    sp_anonymize.add_argument('-x', '--background-reindex', action='store_true', dest='is_background_reindex_triggered',
+                              help="If at least one user was anonymized, start a background re-index")
 
     sub_parsers = {'validate': sp_validate, 'anonymize': sp_anonymize}
 
@@ -872,7 +876,7 @@ def get_formatted_timediff(timediff):
     return formatted_diff
 
 
-def create_raw_report(users_data):
+def create_raw_report(overall_report):
     """
     Create a raw-data-report as a basis for some post-processing to render some more pretty reports.
 
@@ -886,6 +890,7 @@ def create_raw_report(users_data):
     number_of_skipped_users = 0
     number_of_deleted_users = 0
     number_of_anonymized_users = 0
+    users_data = overall_report['usernames_from_infile']
     for user_name, user_data in users_data.items():
 
         try:
@@ -947,8 +952,8 @@ def create_raw_report(users_data):
             'validation_has_errors': validation_has_errors,
             'filter_is_anonymize_approval': user_filter['is_anonymize_approval'],
             'filter_error_message': user_filter['error_message'],
-            #'is_deleted': is_deleted,
-            #'is_anonymized': is_anonymized,
+            # 'is_deleted': is_deleted,
+            # 'is_anonymized': is_anonymized,
             'time_start': time_start,
             'time_finish': time_finish,
             'time_duration': '{}'.format(get_formatted_timediff(diff)) if diff is not None else None
@@ -987,12 +992,18 @@ def create_raw_report(users_data):
         'number_of_users_in_infile': len(users_data),
         'number_of_skipped_users': number_of_skipped_users,
         'number_of_deleted_users': number_of_deleted_users,
-        'number_of_anonymized_users': number_of_anonymized_users
+        'number_of_anonymized_users': number_of_anonymized_users,
+        'is_background_reindex_triggered': overall_report['effective_config']['is_background_reindex_triggered']
     }
     return report
 
 
 def write_reports(report):
+    """
+    Write the data got from the raw-report to files as a) a JSON and b) as CSV.
+    :param report:
+    :return:
+    """
     with open(g_config['report_json_filename'], 'w') as f:
         print("{}".format(json.dumps(report, indent=4)), file=f)
 
@@ -1000,7 +1011,7 @@ def write_reports(report):
         fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
                       'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
-                      #'is_deleted', 'is_anonymized',
+                      # 'is_deleted', 'is_anonymized',
                       'action',
                       'time_start', 'time_finish', 'time_duration']
         if is_feature_do_report_anonymized_user_data_enabled():
@@ -1013,17 +1024,19 @@ def write_reports(report):
 
 def recreate_reports():
     with open(g_config['report_detailed_filename']) as f:
-        users_data = json.load(f)['usernames_from_infile']
-        report = create_raw_report(users_data)
+        overall_report = json.load(f)
+        # The overall-report was written from the g_details.
+        report = create_raw_report(overall_report)
         write_reports(report)
 
 
 def write_result_to_stdout(overview):
     print("Anonymizer Result:")
-    print("  Users in infile:  {}".format(overview['number_of_users_in_infile']))
-    print("  Skipped users:    {}".format(overview['number_of_skipped_users']))
-    print("  Deleted users:    {}".format(overview['number_of_deleted_users']))
-    print("  Anonymized users: {}".format(overview['number_of_anonymized_users']))
+    print("  Users in infile:   {}".format(overview['number_of_users_in_infile']))
+    print("  Skipped users:     {}".format(overview['number_of_skipped_users']))
+    print("  Deleted users:     {}".format(overview['number_of_deleted_users']))
+    print("  Anonymized users:  {}".format(overview['number_of_anonymized_users']))
+    print("  Background re-index triggered:  {}".format(overview['is_background_reindex_triggered']))
     print("")
 
 
@@ -1034,6 +1047,36 @@ def at_exit():
 
     with open(g_config['report_detailed_filename'], 'w') as f:
         print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
+
+
+def reindex():
+    """
+    Trigger a background reindex.
+
+    Note,
+    from https://confluence.atlassian.com/jirakb/reindex-jira-server-using-rest-api-via-curl-command-663617587.html:
+
+    "For JIRA DC a better approach than background indexing is to take one node out of the cluster and run
+    FOREGROUND reindexing.
+    See  JRASERVER-66969 - Discourage Background Indexing for Datacenter instances in Indexing Page CLOSED"
+    """
+
+    # Also from
+    # https://confluence.atlassian.com/jirakb/reindex-jira-server-using-rest-api-via-curl-command-663617587.html:
+    #   - FOREGROUND - runs a lock/full reindexing
+    #   - BACKGROUND - runs a background reindexing. If JIRA fails to finish the background reindexing, respond
+    #       with 409 Conflict (error message).
+    #   - BACKGROUND_PREFERRED  - If possible do a background reindexing. If it's not possible (due to an inconsistent
+    #       index), do a foreground reindexing.
+    url_params = {
+        'type': 'BACKGROUND',
+        'indexComments': True,
+        'indexChangeHistory': True,
+        'indexWorklogs': True
+    }
+    rel_url = '/rest/api/2/reindex?' + parse.urlencode(url_params)
+    url = g_config['base_url'] + rel_url
+    r = g_session.post(url=url)
 
 
 def main():
@@ -1069,10 +1112,12 @@ def main():
             if is_feature_do_report_anonymized_user_data_enabled():
                 log.debug("")
                 get_anonymized_users_data_from_rest(valid_users)
+            if args.is_background_reindex_triggered:
+                reindex()
 
-        report = create_raw_report(g_details['usernames_from_infile'])
-        write_reports(report)
-        write_result_to_stdout(report['overview'])
+        raw_report = create_raw_report(g_details)
+        write_reports(raw_report)
+        write_result_to_stdout(raw_report['overview'])
 
 
 if __name__ == '__main__':
