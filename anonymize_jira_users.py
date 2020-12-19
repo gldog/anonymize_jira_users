@@ -6,7 +6,6 @@ Compatibility:  Python 3.7
 TODO help-text for --features
 TODO Report tool-execution errors (and 0 if none). But it is not that difficult to decide what is a tool error
     and what is not.
-TODO Start background reindex after at least one user have been anonymized
 TODO Known issues:
 TODO The returned error-messages in the JSON-responses are expected in the language-setting of the executing admin.
         But they're sometimes in a different language. Is this "different language" the one of the user to be
@@ -55,7 +54,7 @@ DEFAULT_CONFIG = {
     'regular_delay': 3,
     # Time in seconds the progress shall wait for finishing an anonymization. 0 means wait as long as it takes.
     'timeout': 0,
-    'is_background_reindex_triggered': False,
+    'is_do_background_reindex': False,
     # None instead of empty list would also work regarding the program logic. But None is forbidden in ConfigParser,
     # which is used to write a default-config-file. So we have to use the empty list.
     'features': ''
@@ -72,8 +71,7 @@ SSL_VERIFY = False
 # Prerequisite:
 #   The REST-endpint
 ANONHELPER_APPLICATIONUSER_URL = '/rest/anonhelper/latest/applicationuser'
-#   provided by add-on jira-anonhelper.
-#   TODO link to bitbucket.org.
+#   provided by add-on jira-anonymizinghelper, see https://bitbucket.org/jheger/jira-anonymizinghelper/src/master/
 #
 # Description:
 #   The anonymization changes a user-name to the format "username12345" and the display-name to the format "user-a2b4e".
@@ -97,39 +95,53 @@ FEATURE_DO_REPORT_ANONYMIZED_USER_DATA = 'do_report_anonymized_user_data'
 FEATURES = [FEATURE_DO_REPORT_ANONYMIZED_USER_DATA]
 
 #
-#  Global vars.
+# Global vars.
 #
 
 log = logging.getLogger()
+
 g_config = DEFAULT_CONFIG
+
+# The keys are:
+#   - rest_get_mypermissions
+#   - rest_get_applicationuser__check_if_api_do_respond
+#   - rest_get_anonymization_progress__before_anonymization
+#   - rest_post_reindex
+g_execution = {}
 
 # The user data.
 #   - key: user-name
 #   - value:
-#       - rest_user
-#       - rest_validation
+#       - rest_get_user__before_anonymization
+#       - rest_get_anonymization__query_validation
 #       - user_filter
 #           - error_message
 #           - is_anonymize_approval
-#       - rest_anonymization
-#       - rest_last_anonymization_progress
-g_users = {}
+#       - rest_delete_user
+#       - rest_post_anonymization
+#       - rest_get_anonymization_progress
+#       - rest_get_user__query_anonymized_user
+g_users = {
+    # 'doc': 'This is for collecting user-related data during execution.'
+}
 
-# The collected data.
+# The collected data. This is something like an internal trace-log.
+# The reports will be generated from this.
 # The keys are:
 #   - effective_config
-#   - usernames_from_infile
+#   - execution: Information about script-execution not specific to users.
+#   - users_from_infile: Details about users.
 g_details = {
     'effective_config': g_config,
-    'usernames_from_infile': g_users
+    'execution': g_execution,
+    'users_from_infile': g_users
 }
 
 g_session = requests.Session()
 
 
 def get_sanitized_global_details():
-    """
-    The details contain the jira_auth-information. This must not be part of any log or report.
+    """The details contain the jira_auth-information. This must not be part of any log or report.
 
     :return: The sanitized details.
     """
@@ -143,8 +155,7 @@ def is_feature_do_report_anonymized_user_data_enabled():
 
 
 def merge_dicts(d1, d2):
-    """
-    Merge d2 into d1. Take only non-None-properties into account.
+    """Merge d2 into d1. Take only non-None-properties into account.
     :param d1: The dict d2 is merged to.
     :param d2: The dict to be merged to d1
     :return: None
@@ -204,11 +215,10 @@ def setup_http_session(auth_type, user_or_bearer, passwd):
 
 
 def check_for_admin_permission():
-    """
-    Check if the user can log-in and is an administrator.
+    """Check if the user can log-in and is an administrator.
 
     In Jira there are two levels of administration: The Administrator and the System Administrator. The weaker
-    Administrator is sufficient for anonymization. The check against administrator-permissions, call the
+    Administrator is sufficient for anonymization. To check against administrator-permissions, call the
     GET /rest/api/2/mypermissions API. This returns among others the "ADMINISTR" and the "SYSTEM_ADMIN" entries.
     Check for permissions["ADMINISTER"]["havePermission"]==True. System-admins have both set to true.
 
@@ -238,11 +248,19 @@ def check_for_admin_permission():
     rel_url = '/rest/api/2/mypermissions'
     url = g_config['base_url'] + rel_url
     r = g_session.get(url=url)
+    g_execution['rest_get_mypermissions'] = {}
+    g_execution['rest_get_mypermissions'] = serialize_response(r, False)
     error_message = ""
     if r.status_code == 200:
+        # Supplement a reduced JSON, as the whole JSON is very large but most of it is not of interest.
+        g_execution['rest_get_mypermissions']['json'] = {}
+        g_execution['rest_get_mypermissions']['json']['permissions'] = {}
+        g_execution['rest_get_mypermissions']['json']['permissions']['ADMINISTER'] = \
+            r.json()['permissions']['ADMINISTER']
+        # Now check if the executing user has the appropriate permission.
         if not r.json()['permissions']['ADMINISTER']['havePermission']:
-            error_message = "Permisson-check: User is not an administrator. Only roles Administrator and System-Admin" \
-                            " are allowed to anonymize users."
+            error_message = "Permisson-check: User is not an administrator." \
+                            " Only roles Administrator and System-Admins are allowed to anonymize users."
     elif r.status_code == 401:
         # The r.text() is a complete HTML-Page an too long to read in a console. Shorten it to a one-liner.
         error_message = "Permisson-check returned 401 Unauthorized."
@@ -262,14 +280,14 @@ def check_for_admin_permission():
 
 
 def check_if_feature_do_report_anonymized_user_data_is_functional(user):
-    """
-    Check if REST-endpoint for this feature can be reached.
+    """Check if REST-endpoint for this feature can be reached.
     :return: None if functional. Otherwise an error-message.
     """
     rel_url = ANONHELPER_APPLICATIONUSER_URL
     url = g_config['base_url'] + rel_url
     url_params = {'username': user}
     r = g_session.get(url=url, params=url_params)
+    g_execution['rest_get_applicationuser__check_if_api_do_respond'] = serialize_response(r)
     error_message = None
     # In case the URL can't be reached the auth-methodes' results differ:
     #   - With Basic, the status-code is 404. Easy to detect.
@@ -308,16 +326,14 @@ def write_default_cfg_file(config_template_filename):
         configfile.write("#   'Bearer NDg3MzA5MTc5Mzg5Ov7z+S92TjTYCYYEY7xzlHA+l5jV\n")
         configfile.write("#\n")
         configfile.write("# features: Valid values are:\n")
-        # TODO Format:
-        configfile.write("#   {}\n".format(FEATURES).replace('\'', ''))
+        configfile.write("#   {}\n".format(FEATURES).replace('\'', '').replace('[', '').replace(']', ''))
         configfile.write("\n")
         parser = configparser.ConfigParser(defaults=DEFAULT_CONFIG)
         parser.write(configfile)
 
 
 def read_configfile_and_merge_into_global_config(args):
-    """
-    Read the config-file and merge it into the gobal defaults-dict.
+    """Read the config-file and merge it into the gobal defaults-dict.
 
     The values within a ConfigParser are always strings. After a merge with a Python dict, the expected types could
     be gone. E.g. if a boolean is expected, but the ConfigParser delivers the string "false", this string is
@@ -440,8 +456,8 @@ def parse_parameters():
                               help="Choices: {}".format(FEATURES))
     sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
                               help="Finally do no anonymize. Skip the POST /rest/api/2/user/anonymization.")
-    sp_anonymize.add_argument('-x', '--background-reindex', action='store_true', dest='is_background_reindex_triggered',
-                              help="If at least one user was anonymized, start a background re-index")
+    sp_anonymize.add_argument('-x', '--background-reindex', action='store_true', dest='is_do_background_reindex',
+                              help="If at least one user was anonymized, trigger a background re-index")
 
     sub_parsers = {'validate': sp_validate, 'anonymize': sp_anonymize}
 
@@ -530,8 +546,7 @@ def parse_parameters():
 
 
 def get_user_names_from_infile():
-    """
-    Read the Jira user-names from the infile and put them as keys to the global config.
+    """Read the Jira user-names from the infile and put them as keys to the global config.
 
     :return: Nothing.
     """
@@ -546,16 +561,30 @@ def get_user_names_from_infile():
     log.info("  The user-names are: {}".format(list(g_users.keys())))
 
 
-def serialize_response(r):
+def serialize_response(r, is_include_json_response=True):
+    """Serialize a requests-response to a JSON.
+
+    With is_include_json_response the caller can suppress serialization in case of large and not interesting responses.
+
+    :param r: The response of a requests.get(), requests.post(), ...
+    :param is_include_json_response: True (default), if the response.json() shall be included in the serialied result.
+    :return:
+    """
     # The body is a b'String in Python 3 and is not readable by json.dumps(). It has to be decoded before.
     # The 'utf-8' is only a suggestion here.
     decoded_body = r.request.body.decode('utf-8') if r.request.body else None
     try:
-        json = r.json()
+        r_json = r.json()
     except JSONDecodeError:
-        json = None
-    return {'status_code': r.status_code, 'json': json, 'requst_body': decoded_body,
-            'requst_method': r.request.method, 'requst_url': r.request.url}
+        r_json = None
+
+    j = {'status_code': r.status_code, 'requst_body': decoded_body, 'requst_method': r.request.method,
+         'requst_url': r.request.url}
+
+    if is_include_json_response:
+        j['json'] = r_json
+
+    return j
 
 
 def get_users_data_from_rest():
@@ -565,13 +594,12 @@ def get_users_data_from_rest():
     for user_name in g_users.keys():
         url_params = {'username': user_name}
         r = g_session.get(url=url, params=url_params)
-        g_users[user_name]['rest_user'] = serialize_response(r)
-        log.debug(g_users[user_name]['rest_user'])
+        g_users[user_name]['rest_get_user__before_anonymization'] = serialize_response(r)
+        log.debug(g_users[user_name]['rest_get_user__before_anonymization'])
 
 
 def get_validation_data_from_rest():
-    """
-    Validate all Jira-users whose user-keys could be requested in read_applicationuser_data(). Store the validation-response
+    """Validate all Jira-users whose user-keys could be requested in read_applicationuser_data(). Store the validation-response
     to the dict.
 
     :return: Nothing.
@@ -580,19 +608,19 @@ def get_validation_data_from_rest():
     log.info("Reading validation-data (GET {})".format(rel_url))
     url = g_config['base_url'] + rel_url
     for user_name, user_data in g_users.items():
-        if user_data['rest_user']['status_code'] != 200:
+        if user_data['rest_get_user__before_anonymization']['status_code'] != 200:
             # The user does not exist. A message about this missing user is logged later on
             # in filter_users()
             continue
 
-        user_key = user_data['rest_user']['json']['key']
+        user_key = user_data['rest_get_user__before_anonymization']['json']['key']
         url_params = {'userKey': user_key}
         if g_config['is_expand_validation_with_affected_entities']:
             url_params['expand'] = 'affectedEntities'
         # https://docs.atlassian.com/software/jira/docs/api/REST/8.13.0/#api/2/user-getUser
         r = g_session.get(url=url, params=url_params)
-        g_users[user_name]['rest_validation'] = serialize_response(r)
-        log.debug(g_users[user_name]['rest_validation'])
+        g_users[user_name]['rest_get_anonymization__query_validation'] = serialize_response(r)
+        log.debug(g_users[user_name]['rest_get_anonymization__query_validation'])
 
         # These status-codes are documented:
         #  - 200 Returned when validation succeeded.
@@ -612,11 +640,11 @@ def filter_users():
         #
         #  Check against data got form GET /rest/api/2/user if the user exists and is inactive
         #
-        if user_data['rest_user']['status_code'] != 200:
-            error_message = '{}'.format(user_data['rest_user']['json']['errorMessages'][0])
+        if user_data['rest_get_user__before_anonymization']['status_code'] != 200:
+            error_message = '{}'.format(user_data['rest_get_user__before_anonymization']['json']['errorMessages'][0])
         else:
             # Check if the existing user is an active user:
-            is_active_user = user_data['rest_user']['json']['active']
+            is_active_user = user_data['rest_get_user__before_anonymization']['json']['active']
             if is_active_user:
                 error_message = "Is an active user."
 
@@ -624,13 +652,13 @@ def filter_users():
         #  Check against validation result got from GET rest/api/2/user/anonymization.
         #
         if not error_message:
-            # try/except: user_data["rest_validation"] could be absent in case of an invalid user-name.
+            # try/except: user_data['rest_get_anonymization__query_validation'] could be absent in case of an invalid user-name.
             try:
-                if user_data['rest_validation']['status_code'] != 200:
+                if user_data['rest_get_anonymization__query_validation']['status_code'] != 200:
                     error_message = "HTTP status-code is not 200. "
                 # Despite of an status-code of 200 there could be errors (seen in use case "admin tries to
                 # anonymize themself).
-                if len(user_data['rest_validation']['json']['errors']) > 0:
+                if len(user_data['rest_get_anonymization__query_validation']['json']['errors']) > 0:
                     error_message += "There is at least one validation error message."
             except KeyError:
                 pass
@@ -650,20 +678,20 @@ def filter_users():
 
 
 def get_anonymization_progress(user_name=None, full_progress_url=None):
-    """
-    Call the Get Progress API to check if there is an anonymization running.
+    """Call the Get Progress API to check if there is an anonymization running.
 
     There are two reasons to do this:
         1. Before the first anonymization to check if there is any anonymization running. In this case both parameters
-            user_name and progressUrl are emtpy.
-        2. During our anonymization to check when it is finished. Per user_name the latest responses ist stored.
+            user_name and full_progress_url must be None / absent.
+        2. During our anonymization to check when it is finished. The latest response is stored for each user_name.
 
-    When is an anonymization running, and when it has been finished?
+    When is an anonymization running, and when it is finished?
 
     Let's start with the HTTP status codes. 404 means "Returned if there is no user anonymization task found.". It is
-    obvious there is no anonymization running. I can return something like "No anon. running".
+    obvious there is no anonymization running. We can return something like "No anon. running".
+
     There is another status code documented: 403 "Returned if the logged-in user cannot anonymize users.". This is a
-    problem I assume I have been handled before my anonymization has been scheduled and is not checked here with
+    problem the script has handled before the anonymization has been scheduled and is not checked here with
     regards to the running-status (in fact at the end of this function there is a r.raise_for_status() as a lifeline
     in case I haven't implemented a bullet-proof permission check earlier).
 
@@ -680,7 +708,7 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
 
     As a conclusion I can say:
 
-    HTTP status | "status" attribute| Anonymization not running (anymore) / is finished |   Running
+    HTTP status | "status" attribute| Anonymization not running (anymore) / is finished |   Anonymization is running
         404     |   don't care      |   Yes                                                     No
         200     |   IN_PROGRESS     |   No                                                      Yes
         200     |   other           |   Yes                                                     No
@@ -688,15 +716,20 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
     The "errors" and "warnings" are not evaluated in this implementation step. Maybe later. I assume the validation
     does the job to show errors, and the filter will filter user out in case of errors.
 
-    :param user_name: Optional. Given if there have been scheduled one of our anonymizations.
-    :param full_progress_url: Optional. Given if there have been scheduled one of our anonymizations.
-    :return: The progress (percentage) from the returned JSON. -1 if HTTP-status is 404.
+    :param user_name: Optional. Given if there have been scheduled one of our anonymizations. In this case, the
+        full_progress_url is also mandatory.
+    :param full_progress_url: Optional. Given if there have been scheduled one of our anonymizations. In this case,
+        the user_name is also mandatory.
+    :return: The progress (percentage) from the returned JSON. -1 if HTTP-status is 404 ("Returned if there is no user
+        anonymization task found.").
     """
     log.debug("user_name {}, full_progress_url {}".format(user_name, full_progress_url))
+    assert not (bool(user_name) ^ bool(full_progress_url))
+
     if full_progress_url:
         url = full_progress_url
         # Only DEBUG, because this could be called a lot.
-        log.debug("Checking from GET {} if specific anonymization is running".format(url))
+        log.debug("Checking if specific anonymization for user '{}' is running".format(user_name))
     else:
         rel_url = '/rest/api/2/user/anonymization/progress'
         url = g_config['base_url'] + rel_url
@@ -704,8 +737,10 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
     r = g_session.get(url=url)
     # If this call is for a specific user/anonymization-task, store the response in the user's data.
     if user_name:
-        g_users[user_name]['rest_last_anonymization_progress'] = serialize_response(r)
-        log.debug(g_users[user_name]['rest_last_anonymization_progress'])
+        g_users[user_name]['rest_get_anonymization_progress'] = serialize_response(r)
+        log.debug(g_users[user_name]['rest_get_anonymization_progress'])
+    else:
+        g_execution['rest_get_anonymization_progress__before_anonymization'] = serialize_response(r)
 
     progress_percentage = None
     if r.status_code == 200:
@@ -728,8 +763,7 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
 
 
 def get_applicationuser_data_from_rest():
-    """
-    Read the ID, USER_KEY, LOWER_USER_NAME, and ACTIVE from Jira-DB for the user-names given as the dict-keys and
+    """Read the ID, USER_KEY, LOWER_USER_NAME, and ACTIVE from Jira-DB for the user-names given as the dict-keys and
     supplement it to the dict.
 
     This functions assumes there is the REST endpoint ANONHELPER_APPLICATIONUSER_URL available!
@@ -742,18 +776,17 @@ def get_applicationuser_data_from_rest():
     for user_name in g_users.keys():
         url_params = {'username': user_name}
         r = g_session.get(url=url, params=url_params)
-        g_users[user_name]['rest_applicationuser'] = serialize_response(r)
+        g_users[user_name]['rest_get_applicationuser'] = serialize_response(r)
 
 
-def wait_until_anonymization_has_finished(user_name):
-    """
-
-    :param user_name: The user to be waited for.
+def wait_until_anonymization_is_finished_or_timeout(user_name):
+    """Wait until the anonymization for the given user has been finished.
+    :param user_name: The user-anonymization to wait for.
     :return: 0 if anonymization finished within the timeout. Otherwise the seconds waited until the timeout.
     """
     log.info("for user {}".format(user_name))
     user_data = g_users[user_name]
-    url = g_config['base_url'] + user_data['rest_anonymization']['json']['progressUrl']
+    url = g_config['base_url'] + user_data['rest_post_anonymization']['json']['progressUrl']
     seconds_waited = 0
     # Print progress once a minute
     next_progress_print_at = 60
@@ -779,14 +812,14 @@ def run_user_anonymizations(valid_users, new_owner_key):
     else:
         phrase = ""
 
-    log.info("Going to {}anonymize {} users (POST {})".format(phrase, len(valid_users), rel_url_for_anonymizing))
+    log.info("Going to {}anonymize {} users".format(phrase, len(valid_users), rel_url_for_anonymizing))
     if g_config['is_dry_run']:
         log.warning("DRY-RUN IS ENABLED. No user will be anonymized.")
 
     url_for_deletion = g_config['base_url'] + rel_url_for_deletion
     url_for_anonymizing = g_config['base_url'] + rel_url_for_anonymizing
     for user_name, user_data in valid_users.items():
-        user_key = user_data['rest_user']['json']['key']
+        user_key = user_data['rest_get_user__before_anonymization']['json']['key']
         log.info("User (name/key) {}/{}...".format(user_name, user_key))
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
         if not g_config['is_dry_run']:
@@ -794,21 +827,21 @@ def run_user_anonymizations(valid_users, new_owner_key):
             if g_config['is_try_delete_user']:
                 url_params = {'username': user_name}
                 r = g_session.delete(url=url_for_deletion, params=url_params)
-                user_data['rest_user_delete'] = serialize_response(r)
-                log.debug(user_data['rest_user_delete'])
+                user_data['rest_delete_user'] = serialize_response(r)
+                log.debug(user_data['rest_delete_user'])
                 if r.status_code == 204:
                     is_user_deleted = True
-                    user_data['rest_user_delete_time'] = datetime.now().isoformat(timespec='milliseconds')
+                    user_data['rest_user_delete_time'] = now_to_date_string()
 
             if not is_user_deleted:
                 r = g_session.post(url=url_for_anonymizing, json=body)
-                user_data['rest_anonymization'] = serialize_response(r)
-                log.debug(user_data['rest_anonymization'])
+                user_data['rest_post_anonymization'] = serialize_response(r)
+                log.debug(user_data['rest_post_anonymization'])
 
                 if r.status_code == 202:
                     log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
                     time.sleep(g_config['initial_delay'])
-                    waited = wait_until_anonymization_has_finished(user_name)
+                    waited = wait_until_anonymization_is_finished_or_timeout(user_name)
                     if waited > 0:
                         log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
                                   " Abort script.".format(user_name, g_config['timeout']))
@@ -829,14 +862,14 @@ def run_user_anonymizations(valid_users, new_owner_key):
 
 def get_anonymized_users_data_from_rest(valid_users):
     rel_url = '/rest/api/2/user'
-    log.info("Reading user-data from GET {}".format(rel_url))
+    log.info("Reading user-data".format(rel_url))
     url = g_config['base_url'] + rel_url
     for user_name, user_data in valid_users.items():
-        anonymized_user_name = 'jirauser{}'.format(user_data['rest_applicationuser']['json'][user_name]['id'])
+        anonymized_user_name = 'jirauser{}'.format(user_data['rest_get_applicationuser']['json'][user_name]['id'])
         url_params = {'username': anonymized_user_name}
         r = g_session.get(url=url, params=url_params)
-        g_users[user_name]['rest_anonymized_user'] = serialize_response(r)
-        log.debug(g_users[user_name]['rest_anonymized_user'])
+        g_users[user_name]['rest_get_user__query_anonymized_user'] = serialize_response(r)
+        log.debug(g_users[user_name]['rest_get_user__query_anonymized_user'])
 
 
 def is_any_anonymization_running():
@@ -857,16 +890,18 @@ def time_diff(d1, d2):
     return dd2 - dd1
 
 
-def get_formatted_timediff(timediff):
-    """
-    Convert the given time_diff to format "MM:SS". If the time-diff is < 1s, overwrite it to 1s.
+def get_formatted_timediff_mmss(time_diff):
+    """Convert the given time_diff to format "MM:SS". If the time-diff is < 1s, overwrite it to 1s.
+
+    The MM can be > 60 min.
+
     :param time_diff: The time-diff
     :return: Time-diff in MM:SS, but min. 1s.
     """
 
     # Convert to integer because nobody will be interested in the milliseconds-precision. If the diff is 0,
     # overwrite it to 1 (second).
-    s = int(timediff.total_seconds())
+    s = int(time_diff.total_seconds())
     if s == 0:
         s = 1
     minutes = s // 60
@@ -876,12 +911,31 @@ def get_formatted_timediff(timediff):
     return formatted_diff
 
 
-def create_raw_report(overall_report):
-    """
-    Create a raw-data-report as a basis for some post-processing to render some more pretty reports.
+def get_formatted_timediff_hhmmss(time_diff):
+    """Convert the given time_diff to format "HH:MM:SS". If the time-diff is < 1s, overwrite it to 1s.
 
-    But this raw report can be viewed also of cause.
+    The HH can be > 24 h.
+
+    :param time_diff: The time-diff
+    :return: Time-diff in MM:SS, but min. 1s.
     """
+
+    # Convert to integer because nobody will be interested in the milliseconds-precision. If the diff is 0,
+    # overwrite it to 1 (second).
+    s = int(time_diff.total_seconds())
+    if s == 0:
+        s = 1
+
+    hours, remainder = divmod(s, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    formatted_diff = '{:02d}:{:02d}:{:02d}'.format(hours, minutes, seconds)
+
+    return formatted_diff
+
+
+def create_raw_report(overall_report):
+    """Create a raw-data-report as a basis for some post-processing to render some more pretty reports."""
+
     report = {
         'overview': None,
         'users': []
@@ -890,20 +944,20 @@ def create_raw_report(overall_report):
     number_of_skipped_users = 0
     number_of_deleted_users = 0
     number_of_anonymized_users = 0
-    users_data = overall_report['usernames_from_infile']
+    users_data = overall_report['users_from_infile']
     for user_name, user_data in users_data.items():
 
         try:
-            user_key = user_data['rest_user']['json']['key']
-            user_display_name = user_data['rest_user']['json']['displayName']
-            active = user_data['rest_user']['json']['active']
+            user_key = user_data['rest_get_user__before_anonymization']['json']['key']
+            user_display_name = user_data['rest_get_user__before_anonymization']['json']['displayName']
+            active = user_data['rest_get_user__before_anonymization']['json']['active']
         except KeyError:
             user_key = None
             user_display_name = None
             active = None
 
         try:
-            validation_has_errors = len(user_data['rest_validation']['errors']) > 0
+            validation_has_errors = len(user_data['rest_get_anonymization__query_validation']['errors']) > 0
         except:
             validation_has_errors = False
 
@@ -917,7 +971,7 @@ def create_raw_report(overall_report):
         try:
             time_start = user_data['rest_user_delete_time']
             time_finish = None
-            is_deleted = user_data['rest_user_delete']['status_code'] == 204
+            is_deleted = user_data['rest_delete_user']['status_code'] == 204
             if is_deleted:
                 number_of_deleted_users += 1
         except KeyError:
@@ -928,19 +982,21 @@ def create_raw_report(overall_report):
         is_anonymized = False
         if not is_deleted:
             try:
-                time_start = user_data['rest_last_anonymization_progress']['json']['startTime']
-                time_finish = user_data['rest_last_anonymization_progress']['json']['finishTime']
-                is_anonymized = user_data['rest_last_anonymization_progress']['status_code'] == 200 and \
-                                user_data['rest_last_anonymization_progress']['json']['status'] == 'COMPLETED'
-                if is_anonymized:
-                    number_of_anonymized_users += 1
+                time_start = user_data['rest_get_anonymization_progress']['json']['startTime']
+                time_finish = user_data['rest_get_anonymization_progress']['json']['finishTime']
+                is_anonymized = user_data['rest_get_anonymization_progress']['status_code'] == 200 and \
+                                user_data['rest_get_anonymization_progress']['json']['status'] == 'COMPLETED'
             except KeyError:
                 time_start = None
                 time_finish = None
                 is_anonymized = False
 
-        if time_start and time_finish:
+        if is_anonymized:
+            number_of_anonymized_users += 1
             diff = time_diff(time_start, time_finish)
+            # After the diff is calculated, cut off the milliseconds and DST. They are useless for the user.
+            time_start = time_start.split(".")[0]
+            time_finish = time_finish.split(".")[0]
         else:
             diff = None
 
@@ -952,24 +1008,23 @@ def create_raw_report(overall_report):
             'validation_has_errors': validation_has_errors,
             'filter_is_anonymize_approval': user_filter['is_anonymize_approval'],
             'filter_error_message': user_filter['error_message'],
-            # 'is_deleted': is_deleted,
-            # 'is_anonymized': is_anonymized,
             'time_start': time_start,
             'time_finish': time_finish,
-            'time_duration': '{}'.format(get_formatted_timediff(diff)) if diff is not None else None
+            'time_duration': '{}'.format(get_formatted_timediff_mmss(diff)) if diff is not None else None
         }
 
         if is_feature_do_report_anonymized_user_data_enabled():
             if is_anonymized:
                 try:
-                    anonymized_user_name = user_data['rest_anonymized_user']['json']['name']
-                    anonymized_user_key = user_data['rest_anonymized_user']['json']['key']
-                    anonymized_user_display_name = user_data['rest_anonymized_user']['json']['displayName']
+                    anonymized_user_name = user_data['rest_get_user__query_anonymized_user']['json']['name']
+                    anonymized_user_key = user_data['rest_get_user__query_anonymized_user']['json']['key']
+                    anonymized_user_display_name = user_data['rest_get_user__query_anonymized_user']['json'][
+                        'displayName']
                 except KeyError:
-                    # TODO this is an error! Let the user know.
-                    anonymized_user_name = "unknown"
-                    anonymized_user_key = "unknown"
-                    anonymized_user_display_name = "unknown"
+                    # This is an error! Let the user know.
+                    assert False, "The user '{}' was anonymized and the feature/API {} is functional," \
+                                  "but the anonymized user-name could not retrieved".format(
+                        user_name, ANONHELPER_APPLICATIONUSER_URL)
             else:
                 anonymized_user_name = ""
                 anonymized_user_key = ""
@@ -993,14 +1048,15 @@ def create_raw_report(overall_report):
         'number_of_skipped_users': number_of_skipped_users,
         'number_of_deleted_users': number_of_deleted_users,
         'number_of_anonymized_users': number_of_anonymized_users,
-        'is_background_reindex_triggered': overall_report['effective_config']['is_background_reindex_triggered']
+        # There is one more attribute: is_background_reindex_triggered. This will be set later just before triggering
+        # a re-index. But for printing the report, this attribute has to be present. Set it to False as the default.
+        'is_background_reindex_triggered': False
     }
     return report
 
 
 def write_reports(report):
-    """
-    Write the data got from the raw-report to files as a) a JSON and b) as CSV.
+    """Write the data got from the raw-report to files as a) a JSON and b) as CSV.
     :param report:
     :return:
     """
@@ -1011,7 +1067,6 @@ def write_reports(report):
         fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
                       'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
-                      # 'is_deleted', 'is_anonymized',
                       'action',
                       'time_start', 'time_finish', 'time_duration']
         if is_feature_do_report_anonymized_user_data_enabled():
@@ -1041,17 +1096,14 @@ def write_result_to_stdout(overview):
 
 
 def at_exit():
-    """
-    Regardless of the exit-reason, always write the report-details-file.
-    """
+    """Regardless of the exit-reason, always write the report-details-file."""
 
     with open(g_config['report_detailed_filename'], 'w') as f:
         print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
 
 
 def reindex():
-    """
-    Trigger a background reindex.
+    """Trigger a background reindex.
 
     Note,
     from https://confluence.atlassian.com/jirakb/reindex-jira-server-using-rest-api-via-curl-command-663617587.html:
@@ -1077,9 +1129,19 @@ def reindex():
     rel_url = '/rest/api/2/reindex?' + parse.urlencode(url_params)
     url = g_config['base_url'] + rel_url
     r = g_session.post(url=url)
+    g_execution['rest_post_reindex'] = serialize_response(r)
+
+
+def to_date_string(date_time: datetime):
+    return date_time.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+def now_to_date_string():
+    return to_date_string(datetime.now())
 
 
 def main():
+    g_details['execution']['script_started'] = now_to_date_string()
     args = parse_parameters()
 
     if args.subparser_name == 'validate' or args.subparser_name == 'anonymize':
@@ -1112,10 +1174,23 @@ def main():
             if is_feature_do_report_anonymized_user_data_enabled():
                 log.debug("")
                 get_anonymized_users_data_from_rest(valid_users)
-            if args.is_background_reindex_triggered:
-                reindex()
 
+        # Re-indexing is specific to the "if args.subparser_name == 'anonymize'". But the re-index shall only be
+        # triggered if there is at least one anonymized user. Only the report provides information about the number of
+        # anonymized users, so we have to create the report fist.
         raw_report = create_raw_report(g_details)
+        if raw_report['overview']['number_of_anonymized_users'] > 0 and args.is_do_background_reindex:
+            # Let the user know if a re-index has beem triggered.
+            # The attribute 'is_background_reindex_triggered' is not the parameter 'is_do_background_reindex' got
+            # from the command-line.
+            raw_report['overview']['is_background_reindex_triggered'] = True
+            reindex()
+
+        g_details['execution']['script_finished'] = now_to_date_string()
+        g_details['execution']['script_execution_time'] = get_formatted_timediff_hhmmss(
+            time_diff(
+                g_details['execution']['script_started'] + '.000',
+                g_details['execution']['script_finished'] + '.000'))
         write_reports(raw_report)
         write_result_to_stdout(raw_report['overview'])
 
