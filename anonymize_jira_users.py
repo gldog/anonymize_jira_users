@@ -3,8 +3,10 @@
 """
 Compatibility:  Python 3.7
 
-# TODO help-text for --features
-TODO Config-file as text-file, not as JSON, to allow comments.
+TODO help-text for --features
+TODO Report tool-execution errors (and 0 if none). But it is not that difficult to decide what is a tool error
+    and what is not.
+TODO Start background reindex after at least one user have been anonymized
 TODO Known issues:
 TODO The returned error-messages in the JSON-responses are expected in the language-setting of the executing admin.
         But they're sometimes in a different language. Is this "different language" the one of the user to be
@@ -452,14 +454,9 @@ def parse_parameters():
         write_default_cfg_file(args.config_template_filename)
         sys.exit(0)
 
-    # Preparation to prefix the out-files by date and time. But doing so, the "re-create" option doesn't work.
-    # date_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_")
-    # g_config["out_details_file"] = date_time + DEFAULT_CONFIG_REPORT_BASENAME + "_details.json"
-    # g_config["out_report_json_file"] = date_time + DEFAULT_CONFIG_REPORT_BASENAME + ".json"
-    # g_config["out_report_text_file"] = date_time + DEFAULT_CONFIG_REPORT_BASENAME + ".csv"
-    g_config['out_details_file'] = DEFAULT_CONFIG_REPORT_BASENAME + '_details.json'
-    g_config['out_report_json_file'] = DEFAULT_CONFIG_REPORT_BASENAME + '.json'
-    g_config['out_report_text_file'] = DEFAULT_CONFIG_REPORT_BASENAME + '.csv'
+    g_config['report_detailed_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '_detailed.json'
+    g_config['report_json_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '.json'
+    g_config['report_text_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '.csv'
 
     if args.recreate_report:
         recreate_reports()
@@ -820,7 +817,7 @@ def run_user_anonymizations(valid_users, new_owner_key):
                     if r.status_code == 400 or r.status_code == 403 or r.status_code == 409:
                         log.error(
                             "A problem occurred scheduling anonymization user {}. See report {} for details.".format(
-                                user_name, g_config['out_details_file']))
+                                user_name, g_config['report_detailed_filename']))
                     else:
                         # For all other, not documented HTTP-problems:
                         r.raise_for_status()
@@ -856,7 +853,31 @@ def time_diff(d1, d2):
     return dd2 - dd1
 
 
+def get_formatted_timediff(timediff):
+    """
+    Convert the given time_diff to format "MM:SS". If the time-diff is < 1s, overwrite it to 1s.
+    :param time_diff: The time-diff
+    :return: Time-diff in MM:SS, but min. 1s.
+    """
+
+    # Convert to integer because nobody will be interested in the milliseconds-precision. If the diff is 0,
+    # overwrite it to 1 (second).
+    s = int(timediff.total_seconds())
+    if s == 0:
+        s = 1
+    minutes = s // 60
+    seconds = s % 60
+    formatted_diff = "{:02d}:{:02d}".format(minutes, seconds)
+
+    return formatted_diff
+
+
 def create_raw_report(users_data):
+    """
+    Create a raw-data-report as a basis for some post-processing to render some more pretty reports.
+
+    But this raw report can be viewed also of cause.
+    """
     report = {
         'overview': None,
         'users': []
@@ -877,9 +898,9 @@ def create_raw_report(users_data):
             active = None
 
         try:
-            has_validation_errors = len(user_data['rest_validation']['errors']) > 0
+            validation_has_errors = len(user_data['rest_validation']['errors']) > 0
         except:
-            has_validation_errors = False
+            validation_has_errors = False
 
         try:
             user_filter = user_data['user_filter']
@@ -889,32 +910,32 @@ def create_raw_report(users_data):
             user_filter = {}
 
         try:
-            start_time = user_data['rest_user_delete_time']
-            finish_time = None
+            time_start = user_data['rest_user_delete_time']
+            time_finish = None
             is_deleted = user_data['rest_user_delete']['status_code'] == 204
             if is_deleted:
                 number_of_deleted_users += 1
         except KeyError:
-            start_time = None
-            finish_time = None
+            time_start = None
+            time_finish = None
             is_deleted = False
 
         is_anonymized = False
         if not is_deleted:
             try:
-                start_time = user_data['rest_last_anonymization_progress']['json']['startTime']
-                finish_time = user_data['rest_last_anonymization_progress']['json']['finishTime']
+                time_start = user_data['rest_last_anonymization_progress']['json']['startTime']
+                time_finish = user_data['rest_last_anonymization_progress']['json']['finishTime']
                 is_anonymized = user_data['rest_last_anonymization_progress']['status_code'] == 200 and \
                                 user_data['rest_last_anonymization_progress']['json']['status'] == 'COMPLETED'
                 if is_anonymized:
                     number_of_anonymized_users += 1
             except KeyError:
-                start_time = None
-                finish_time = None
+                time_start = None
+                time_finish = None
                 is_anonymized = False
 
-        if start_time and finish_time:
-            diff = time_diff(start_time, finish_time)
+        if time_start and time_finish:
+            diff = time_diff(time_start, time_finish)
         else:
             diff = None
 
@@ -923,14 +944,14 @@ def create_raw_report(users_data):
             'user_key': user_key,
             'user_display_name': user_display_name,
             'active': active,
-            'has_validation_errors': has_validation_errors,
+            'validation_has_errors': validation_has_errors,
             'filter_is_anonymize_approval': user_filter['is_anonymize_approval'],
             'filter_error_message': user_filter['error_message'],
-            'is_deleted': is_deleted,
-            'is_anonymized': is_anonymized,
-            'start_time': start_time,
-            'finish_time': finish_time,
-            'time_duration': '{}'.format(diff) if diff is not None else None
+            #'is_deleted': is_deleted,
+            #'is_anonymized': is_anonymized,
+            'time_start': time_start,
+            'time_finish': time_finish,
+            'time_duration': '{}'.format(get_formatted_timediff(diff)) if diff is not None else None
         }
 
         if is_feature_do_report_anonymized_user_data_enabled():
@@ -953,6 +974,13 @@ def create_raw_report(users_data):
             user_report['anonymized_user_key'] = anonymized_user_key
             user_report['anonymized_user_display_name'] = anonymized_user_display_name
 
+            if is_deleted:
+                user_report['action'] = "deleted"
+            elif is_anonymized:
+                user_report['action'] = "anonymized"
+            else:
+                user_report['action'] = "skipped"
+
         report["users"].append(user_report)
 
     report['overview'] = {
@@ -965,15 +993,16 @@ def create_raw_report(users_data):
 
 
 def write_reports(report):
-    with open(g_config['out_report_json_file'], 'w') as f:
+    with open(g_config['report_json_filename'], 'w') as f:
         print("{}".format(json.dumps(report, indent=4)), file=f)
 
-    with open(g_config['out_report_text_file'], 'w', newline='') as f:
+    with open(g_config['report_text_filename'], 'w', newline='') as f:
         fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
-                      'has_validation_errors',
+                      'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
-                      'is_deleted', 'is_anonymized',
-                      'start_time', 'finish_time', 'time_duration']
+                      #'is_deleted', 'is_anonymized',
+                      'action',
+                      'time_start', 'time_finish', 'time_duration']
         if is_feature_do_report_anonymized_user_data_enabled():
             fieldnames.extend(['anonymized_user_name', 'anonymized_user_key', 'anonymized_user_display_name'])
 
@@ -983,10 +1012,19 @@ def write_reports(report):
 
 
 def recreate_reports():
-    with open(g_config['out_details_file']) as f:
+    with open(g_config['report_detailed_filename']) as f:
         users_data = json.load(f)['usernames_from_infile']
         report = create_raw_report(users_data)
         write_reports(report)
+
+
+def write_result_to_stdout(overview):
+    print("Anonymizer Result:")
+    print("  Users in infile:  {}".format(overview['number_of_users_in_infile']))
+    print("  Skipped users:    {}".format(overview['number_of_skipped_users']))
+    print("  Deleted users:    {}".format(overview['number_of_deleted_users']))
+    print("  Anonymized users: {}".format(overview['number_of_anonymized_users']))
+    print("")
 
 
 def at_exit():
@@ -994,23 +1032,15 @@ def at_exit():
     Regardless of the exit-reason, always write the report-details-file.
     """
 
-    # print("{}".format(g_details))
-
-    # TODO A little bit more description here, please.
-    try:
-        is_g = g_config["g"]
-    except KeyError:
-        is_g = False
-
-    if not (is_g):
-        with open(g_config['out_details_file'], 'w') as f:
-            print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
+    with open(g_config['report_detailed_filename'], 'w') as f:
+        print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
 
 
 def main():
     args = parse_parameters()
 
     if args.subparser_name == 'validate' or args.subparser_name == 'anonymize':
+        # at_exit onyl if there are results worth to output.
         atexit.register(at_exit)
         log.debug("")
         get_user_names_from_infile()
@@ -1028,7 +1058,7 @@ def main():
             log.debug("")
             if is_any_anonymization_running():
                 log.error("There is an anonymization running, or the status of anonymization couldn't be read."
-                          " In both cases this script must not continue because these cases are not implemented."
+                          " In both cases this script must not continue because these cases are not handled."
                           " Exiting.")
                 sys.exit(2)
             log.debug("")
@@ -1041,8 +1071,8 @@ def main():
                 get_anonymized_users_data_from_rest(valid_users)
 
         report = create_raw_report(g_details['usernames_from_infile'])
-        log.info("Report overview: {}".format(json.dumps(report["overview"])))
         write_reports(report)
+        write_result_to_stdout(report['overview'])
 
 
 if __name__ == '__main__':
