@@ -4,6 +4,8 @@
 Compatibility:  Python 3.7
 
 TODO help-text for --features
+TODO Features: Add some docs. And for ANONHELPER_APPLICATIONUSER_URL, add a doc with a curl-example to check
+    API existence.
 TODO Report tool-execution errors (and 0 if none). But it is not that difficult to decide what is a tool error
     and what is not.
 TODO Known issues:
@@ -19,6 +21,7 @@ import configparser
 import csv
 import json
 import logging
+import os
 import re
 import sys
 import time
@@ -28,6 +31,7 @@ from pathlib import Path
 from urllib import parse
 
 import requests
+import urllib3
 
 #
 #  Global constants: Defaults
@@ -36,6 +40,7 @@ import requests
 #  configuration with command line option -g.
 #  All configurations which must not configurable by the user are variables.
 #
+
 
 VERSION = '1.0.0-SNAPSHOT'
 
@@ -74,23 +79,28 @@ ANONHELPER_APPLICATIONUSER_URL = '/rest/anonhelper/latest/applicationuser'
 #   provided by add-on jira-anonymizinghelper, see https://bitbucket.org/jheger/jira-anonymizinghelper/src/master/
 #
 # Description:
-#   The anonymization changes a user-name to the format "username12345" and the display-name to the format "user-a2b4e".
-#   If a user was created in Jira-version <8.4, the user-key mostly is equal to the user-name. In this case,
-#   the anonymization changes also the user-key to the format "JIRAUSER12345". Users created in Jira >= 8.4 already
-#   have a user-key of this format. We can see, the ID is the base to form the user-name and -key.
 #
-#   During anonymization, the Jira REST-API do not provide any information about the new user-name, user-key,
-#   display-name, nor the ID ("12345").
+# The anonymization changes a user-name to the format "username12345" and the display-name to the format "user-a2b4e".
+# If a user was created in Jira-version <8.4, the user-key mostly is equal to the user-name. In this case,
+# the anonymization changes also the user-key to the format "JIRAUSER12345". Users created in Jira >= 8.4 already
+# have a user-key of this format. We can see, the ID is the base to form the user-name and -key.
 #
-#   If you have to record a mapping from the un-anonymized user to the anonymized user e. g. for legal department,
-#   this is not possible out of the box.
+# During anonymization, the Jira REST-API do not provide any information about the new user-name, user-key,
+# display-name, nor the ID ("12345").
 #
-#   This feature
+# If you have to record a mapping from the un-anonymized user to the anonymized user e. g. for legal department,
+# this is not possible out of the box.
+#
+# This feature
 #   - reads the user-ID which is the base for the anonymized user-name and -key,
 #       from GET /rest/anonhelper/latest/applicationuser before anonymization,
 #   - predicts the new user-names,
 #   - query the anonymized users by the predicted user-names after anonymization,
 #   - records the anonymized user-name, -key, and display-name in addition.
+#
+# Check if this REST-endpoint can be reached:
+#   curl --insecure -u <user>:<pass> <base-url>/rest/anonhelper/latest/applicationuser?username=<a-username>
+#
 FEATURE_DO_REPORT_ANONYMIZED_USER_DATA = 'do_report_anonymized_user_data'
 FEATURES = [FEATURE_DO_REPORT_ANONYMIZED_USER_DATA]
 
@@ -138,6 +148,8 @@ g_details = {
 }
 
 g_session = requests.Session()
+# Suppress annoying warning.
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def get_sanitized_global_details():
@@ -319,15 +331,24 @@ def check_if_feature_do_report_anonymized_user_data_is_functional(user):
 
 def write_default_cfg_file(config_template_filename):
     with open(config_template_filename, 'w') as configfile:
-        configfile.write("\n")
-        configfile.write("#\n")
-        configfile.write("# jira_auth: Can be Basic or Bearer. Examples:\n")
-        configfile.write("#   'Basic jo:3004\n")
-        configfile.write("#   'Bearer NDg3MzA5MTc5Mzg5Ov7z+S92TjTYCYYEY7xzlHA+l5jV\n")
-        configfile.write("#\n")
-        configfile.write("# features: Valid values are:\n")
-        configfile.write("#   {}\n".format(FEATURES).replace('\'', '').replace('[', '').replace(']', ''))
-        configfile.write("\n")
+        help_text = "####\n" \
+                    "#\n" \
+                    "#   Configuration for script {}\n" \
+                    "#\n" \
+                    "# jira_auth: Can be Basic or Bearer. Omit quotes. Examples:\n" \
+                    "#   jira_auth = Basic jo:3004\n" \
+                    "#   jira_auth = Bearer NDg3MzA5MTc5Mzg5Ov7z+S92TjTYCYYEY7xzlHA+l5jV\n" \
+                    "#\n" \
+                    "# These values are true in any notation: 1, yes, true, on.\n" \
+                    "# These values are false in any notation: 0, no, false, off\n" \
+                    "#\n" \
+                    "# features: Valid values are:\n" \
+                    "#   {}\n" \
+                    "#\n" \
+                    "####\n" \
+                    "\n".format(os.path.basename(__file__), FEATURES).replace('\'', '').replace('[', '').replace(']',
+                                                                                                                 '')
+        configfile.write(help_text)
         parser = configparser.ConfigParser(defaults=DEFAULT_CONFIG)
         parser.write(configfile)
 
@@ -351,11 +372,11 @@ def read_configfile_and_merge_into_global_config(args):
     defaultz = dict(defaults)
     real_dict = {}
     for k, v in defaultz.items():
-        if v in ['yes', 'true', 'on']:
+        if v.lower() in ['yes', 'true', 'on']:
             real_dict[k] = True
-        elif v in ['no', 'false', 'off']:
+        elif v.lower() in ['no', 'false', 'off']:
             real_dict[k] = False
-        elif k == 'features':
+        elif k.lower() == 'features':
             # The ConfigParser doesn't parse lists. We have to convert the delimited feature-string to a list by
             # ourself.
             if v:
@@ -501,6 +522,9 @@ def parse_parameters():
         args_errors = []
         if not g_config['base_url']:
             sub_parsers[args.subparser_name].error("Missing base-url.")
+        else:
+            # Remove trailing slash if present.
+            g_config['base_url'] = g_config['base_url'].rstrip('/')
 
         if not g_config['jira_auth']:
             sub_parsers[args.subparser_name].error("Missing authentication.")
@@ -545,16 +569,17 @@ def parse_parameters():
     return args
 
 
-def get_user_names_from_infile():
-    """Read the Jira user-names from the infile and put them as keys to the global config.
+def read_user_names_from_infile():
+    """Read the Jira user-names from the infile. Skip lines starting with hash '#'.
 
-    :return: Nothing.
+    :return: None.
     """
     log.info("Reading user-names from infile {}".format(g_config["infile"]))
-    inputfile = Path(g_config["infile"]).read_text()
-    lines = re.split('[\n\r]+', inputfile)
+    infile = Path(g_config["infile"]).read_text()
+    lines = re.split('[\n\r]+', infile)
     for line in lines:
         line = line.strip()
+        # Skip comment lines.
         if line and not line.startswith('#'):
             user_name = line
             g_users[user_name] = {}
@@ -1148,7 +1173,7 @@ def main():
         # at_exit onyl if there are results worth to output.
         atexit.register(at_exit)
         log.debug("")
-        get_user_names_from_infile()
+        read_user_names_from_infile()
         log.debug("")
         get_users_data_from_rest()
         log.debug("")
@@ -1171,9 +1196,9 @@ def main():
                            user_data['user_filter']['is_anonymize_approval'] is True}
             if not g_config['dry_run']:
                 run_user_anonymizations(valid_users, g_config["new_owner_key"])
-            if is_feature_do_report_anonymized_user_data_enabled():
-                log.debug("")
-                get_anonymized_users_data_from_rest(valid_users)
+                if is_feature_do_report_anonymized_user_data_enabled():
+                    log.debug("")
+                    get_anonymized_users_data_from_rest(valid_users)
 
         # Re-indexing is specific to the "if args.subparser_name == 'anonymize'". But the re-index shall only be
         # triggered if there is at least one anonymized user. Only the report provides information about the number of
