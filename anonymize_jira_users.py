@@ -6,7 +6,7 @@ Compatibility:  Python 3.7
 TODO help-text for --features
 TODO Features: Add some docs. And for ANONHELPER_APPLICATIONUSER_URL, add a doc with a curl-example to check
     API existence.
-TODO Report tool-execution errors (and 0 if none). But it is not that difficult to decide what is a tool error
+TODO Report tool-execution errors (and 0 if none). But it is not that easy to decide what is a tool error
     and what is not.
 TODO Known issues:
 TODO The returned error-messages in the JSON-responses are expected in the language-setting of the executing admin.
@@ -45,7 +45,7 @@ import urllib3
 VERSION = '1.0.0-SNAPSHOT'
 
 DEFAULT_CONFIG = {
-    'base_url': '',
+    'jira_base_url': '',
     'jira_auth': '',
     'infile': 'usernames.txt',
     'loglevel': 'INFO',
@@ -210,7 +210,7 @@ def setup_http_session(auth_type, user_or_bearer, passwd):
     }
     if auth_type == 'basic':
         g_session.auth = (user_or_bearer, passwd)
-        url = g_config['base_url'] + '/rest/auth/1/session'
+        url = g_config['jira_base_url'] + '/rest/auth/1/session'
         # Expect 200 OK here.
         r = g_session.get(url=url)
         if r.status_code != 200:
@@ -258,7 +258,7 @@ def check_for_admin_permission():
     :return: If the auth-user can log-in and is an administrator.
     """
     rel_url = '/rest/api/2/mypermissions'
-    url = g_config['base_url'] + rel_url
+    url = g_config['jira_base_url'] + rel_url
     r = g_session.get(url=url)
     g_execution['rest_get_mypermissions'] = {}
     g_execution['rest_get_mypermissions'] = serialize_response(r, False)
@@ -296,7 +296,7 @@ def check_if_feature_do_report_anonymized_user_data_is_functional(user):
     :return: None if functional. Otherwise an error-message.
     """
     rel_url = ANONHELPER_APPLICATIONUSER_URL
-    url = g_config['base_url'] + rel_url
+    url = g_config['jira_base_url'] + rel_url
     url_params = {'username': user}
     r = g_session.get(url=url, params=url_params)
     g_execution['rest_get_applicationuser__check_if_api_do_respond'] = serialize_response(r)
@@ -442,7 +442,7 @@ def parse_parameters():
                                      " You can generate a config-file with option '-g'."
                                      " Parameters given on the command line will overwrite parameters"
                                      " given in the config-file.")
-        sub_parser.add_argument('-b', '--base-url', help="Jira base-URL.")
+        sub_parser.add_argument('-b', '--jira-base-url', help="Jira base-URL.")
         sub_parser.add_argument('-u', '--user-auth', metavar='ADMIN_USER_AUTH', dest='jira_auth',
                                 help="Admin user-authentication who will perform the anonymization."
                                      " Two auth-types are supported: Basic and Bearer."
@@ -520,11 +520,11 @@ def parse_parameters():
         # Checks for both sub-parsers.
         #
         args_errors = []
-        if not g_config['base_url']:
+        if not g_config['jira_base_url']:
             sub_parsers[args.subparser_name].error("Missing base-url.")
         else:
             # Remove trailing slash if present.
-            g_config['base_url'] = g_config['base_url'].rstrip('/')
+            g_config['jira_base_url'] = g_config['jira_base_url'].rstrip('/')
 
         if not g_config['jira_auth']:
             sub_parsers[args.subparser_name].error("Missing authentication.")
@@ -574,7 +574,7 @@ def read_user_names_from_infile():
 
     :return: None.
     """
-    log.info("Reading user-names from infile {}".format(g_config["infile"]))
+    log.info("{}".format(g_config["infile"]))
     infile = Path(g_config["infile"]).read_text()
     lines = re.split('[\n\r]+', infile)
     for line in lines:
@@ -612,10 +612,10 @@ def serialize_response(r, is_include_json_response=True):
     return j
 
 
-def get_users_data_from_rest():
+def get_user_data_from_rest():
     rel_url = '/rest/api/2/user'
-    log.info("Reading user-data from GET {}".format(rel_url))
-    url = g_config['base_url'] + rel_url
+    log.info("GET {}".format(rel_url))
+    url = g_config['jira_base_url'] + rel_url
     for user_name in g_users.keys():
         url_params = {'username': user_name}
         r = g_session.get(url=url, params=url_params)
@@ -630,8 +630,8 @@ def get_validation_data_from_rest():
     :return: Nothing.
     """
     rel_url = '/rest/api/2/user/anonymization'
-    log.info("Reading validation-data (GET {})".format(rel_url))
-    url = g_config['base_url'] + rel_url
+    log.info("GET {}".format(rel_url))
+    url = g_config['jira_base_url'] + rel_url
     for user_name, user_data in g_users.items():
         if user_data['rest_get_user__before_anonymization']['status_code'] != 200:
             # The user does not exist. A message about this missing user is logged later on
@@ -657,7 +657,7 @@ def get_validation_data_from_rest():
 
 
 def filter_users():
-    log.info("Filtering users by existence and against validation result")
+    log.info("by existence and validation-data")
 
     for user_name, user_data in g_users.items():
         error_message = ""
@@ -680,7 +680,7 @@ def filter_users():
             # try/except: user_data['rest_get_anonymization__query_validation'] could be absent in case of an invalid user-name.
             try:
                 if user_data['rest_get_anonymization__query_validation']['status_code'] != 200:
-                    error_message = "HTTP status-code is not 200. "
+                    error_message = "HTTP status-code of the REST validation API is not 200. "
                 # Despite of an status-code of 200 there could be errors (seen in use case "admin tries to
                 # anonymize themself).
                 if len(user_data['rest_get_anonymization__query_validation']['json']['errors']) > 0:
@@ -693,7 +693,7 @@ def filter_users():
         if error_message:
             user_data['user_filter']['error_message'] = error_message
             user_data['user_filter']['is_anonymize_approval'] = False
-            log.warning(user_name + ": " + error_message)
+            log.warning("User {}: {}".format(user_name, error_message))
         else:
             user_data['user_filter']['is_anonymize_approval'] = True
 
@@ -757,7 +757,7 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
         log.debug("Checking if specific anonymization for user '{}' is running".format(user_name))
     else:
         rel_url = '/rest/api/2/user/anonymization/progress'
-        url = g_config['base_url'] + rel_url
+        url = g_config['jira_base_url'] + rel_url
         log.info("Checking if any anonymization is running")
     r = g_session.get(url=url)
     # If this call is for a specific user/anonymization-task, store the response in the user's data.
@@ -796,26 +796,26 @@ def get_applicationuser_data_from_rest():
     :return:    Nothing.
     """
     rel_url = ANONHELPER_APPLICATIONUSER_URL
-    log.info("Reading applicationuser-data from GET {}".format(rel_url))
-    url = g_config['base_url'] + rel_url
+    log.info("GET {}".format(rel_url))
+    url = g_config['jira_base_url'] + rel_url
     for user_name in g_users.keys():
         url_params = {'username': user_name}
         r = g_session.get(url=url, params=url_params)
         g_users[user_name]['rest_get_applicationuser'] = serialize_response(r)
 
 
-def wait_until_anonymization_is_finished_or_timeout(user_name):
+def wait_until_anonymization_is_finished_or_timedout(user_name):
     """Wait until the anonymization for the given user has been finished.
     :param user_name: The user-anonymization to wait for.
     :return: 0 if anonymization finished within the timeout. Otherwise the seconds waited until the timeout.
     """
     log.info("for user {}".format(user_name))
     user_data = g_users[user_name]
-    url = g_config['base_url'] + user_data['rest_post_anonymization']['json']['progressUrl']
+    url = g_config['jira_base_url'] + user_data['rest_post_anonymization']['json']['progressUrl']
     seconds_waited = 0
     # Print progress once a minute
     next_progress_print_at = 60
-    while g_config['timeout'] == 0 or seconds_waited < g_config['timeout']:
+    while g_config['timeout'] <= 0 or seconds_waited < g_config['timeout']:
         progress_percentage = get_anonymization_progress(user_name, url)
         if seconds_waited >= next_progress_print_at:
             log.info("Progress {}".format(progress_percentage))
@@ -828,7 +828,7 @@ def wait_until_anonymization_is_finished_or_timeout(user_name):
     return seconds_waited
 
 
-def run_user_anonymizations(valid_users, new_owner_key):
+def run_user_anonymization(valid_users, new_owner_key):
     rel_url_for_deletion = '/rest/api/2/user'
     rel_url_for_anonymizing = '/rest/api/2/user/anonymization'
 
@@ -841,11 +841,11 @@ def run_user_anonymizations(valid_users, new_owner_key):
     if g_config['is_dry_run']:
         log.warning("DRY-RUN IS ENABLED. No user will be anonymized.")
 
-    url_for_deletion = g_config['base_url'] + rel_url_for_deletion
-    url_for_anonymizing = g_config['base_url'] + rel_url_for_anonymizing
+    url_for_deletion = g_config['jira_base_url'] + rel_url_for_deletion
+    url_for_anonymizing = g_config['jira_base_url'] + rel_url_for_anonymizing
     for user_name, user_data in valid_users.items():
         user_key = user_data['rest_get_user__before_anonymization']['json']['key']
-        log.info("User (name/key) {}/{}...".format(user_name, user_key))
+        log.info("for user (name/key) {}/{}".format(user_name, user_key))
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
         if not g_config['is_dry_run']:
             is_user_deleted = False
@@ -866,7 +866,7 @@ def run_user_anonymizations(valid_users, new_owner_key):
                 if r.status_code == 202:
                     log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
                     time.sleep(g_config['initial_delay'])
-                    waited = wait_until_anonymization_is_finished_or_timeout(user_name)
+                    waited = wait_until_anonymization_is_finished_or_timedout(user_name)
                     if waited > 0:
                         log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
                                   " Abort script.".format(user_name, g_config['timeout']))
@@ -885,11 +885,11 @@ def run_user_anonymizations(valid_users, new_owner_key):
                         r.raise_for_status()
 
 
-def get_anonymized_users_data_from_rest(valid_users):
+def get_anonymized_user_data_from_rest(anonymized_users):
     rel_url = '/rest/api/2/user'
-    log.info("Reading user-data".format(rel_url))
-    url = g_config['base_url'] + rel_url
-    for user_name, user_data in valid_users.items():
+    log.info("for all anonymized users".format(rel_url))
+    url = g_config['jira_base_url'] + rel_url
+    for user_name, user_data in anonymized_users.items():
         anonymized_user_name = 'jirauser{}'.format(user_data['rest_get_applicationuser']['json'][user_name]['id'])
         url_params = {'username': anonymized_user_name}
         r = g_session.get(url=url, params=url_params)
@@ -1152,7 +1152,7 @@ def reindex():
         'indexWorklogs': True
     }
     rel_url = '/rest/api/2/reindex?' + parse.urlencode(url_params)
-    url = g_config['base_url'] + rel_url
+    url = g_config['jira_base_url'] + rel_url
     r = g_session.post(url=url)
     g_execution['rest_post_reindex'] = serialize_response(r)
 
@@ -1175,7 +1175,7 @@ def main():
         log.debug("")
         read_user_names_from_infile()
         log.debug("")
-        get_users_data_from_rest()
+        get_user_data_from_rest()
         log.debug("")
         get_validation_data_from_rest()
         if is_feature_do_report_anonymized_user_data_enabled():
@@ -1192,13 +1192,13 @@ def main():
                           " Exiting.")
                 sys.exit(2)
             log.debug("")
-            valid_users = {user_name: user_data for (user_name, user_data) in g_users.items() if
-                           user_data['user_filter']['is_anonymize_approval'] is True}
+            anonymized_users = {user_name: user_data for (user_name, user_data) in g_users.items() if
+                                user_data['user_filter']['is_anonymize_approval'] is True}
             if not g_config['dry_run']:
-                run_user_anonymizations(valid_users, g_config["new_owner_key"])
+                run_user_anonymization(anonymized_users, g_config["new_owner_key"])
                 if is_feature_do_report_anonymized_user_data_enabled():
                     log.debug("")
-                    get_anonymized_users_data_from_rest(valid_users)
+                    get_anonymized_user_data_from_rest(anonymized_users)
 
         # Re-indexing is specific to the "if args.subparser_name == 'anonymize'". But the re-index shall only be
         # triggered if there is at least one anonymized user. Only the report provides information about the number of
