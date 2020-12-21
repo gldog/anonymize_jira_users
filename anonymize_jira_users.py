@@ -16,10 +16,10 @@ TODO The returned error-messages in the JSON-responses are expected in the langu
 """
 
 import argparse
-import atexit
 import configparser
 import csv
 import json
+import locale
 import logging
 import os
 import re
@@ -27,7 +27,6 @@ import sys
 import time
 from datetime import datetime
 from json.decoder import JSONDecodeError
-from pathlib import Path
 from urllib import parse
 
 import requests
@@ -59,6 +58,8 @@ DEFAULT_CONFIG = {
     # Time in seconds the anonymization shall wait. 0 (or any negative value) means: Wait as long as it takes.
     'timeout': 0,
     'is_do_background_reindex': False,
+    # None: The default Python suggests.
+    'file_encoding': None,
     # None instead of an empty string would also work regarding the program logic.
     # But None is forbidden in ConfigParser, which is used to write a default-config-file.
     # So we have to use the empty string.
@@ -330,7 +331,7 @@ def check_if_feature_do_report_anonymized_user_data_is_functional(user):
 
 
 def write_default_cfg_file(config_template_filename):
-    with open(config_template_filename, 'w') as configfile:
+    with open(config_template_filename, 'w', encoding=g_config['file_encoding']) as f:
         help_text = "####\n" \
                     "#\n" \
                     "#   Configuration for script {}\n" \
@@ -348,9 +349,15 @@ def write_default_cfg_file(config_template_filename):
                     "####\n" \
                     "\n".format(os.path.basename(__file__), FEATURES).replace('\'', '').replace('[', '').replace(']',
                                                                                                                  '')
-        configfile.write(help_text)
-        parser = configparser.ConfigParser(defaults=DEFAULT_CONFIG)
-        parser.write(configfile)
+        f.write(help_text)
+
+        # The ConfigParser doesn't like the 'None'. But the default file_encoding is None.
+        # For writing the config-template-file, replace the None by an empty string.
+        dc = DEFAULT_CONFIG.copy()
+        if not dc['file_encoding']:
+            dc['file_encoding'] = ''
+        parser = configparser.ConfigParser(defaults=dc)
+        parser.write(f)
 
 
 def read_configfile_and_merge_into_global_config(args):
@@ -423,6 +430,7 @@ def parse_parameters():
     parser.add_argument('-l', '--loglevel',
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         help="Log-level. Defaults to {}".format(DEFAULT_CONFIG['loglevel']))
+    parser.add_argument('--file-encoding', metavar='ENCODING', help="Force encoding of in/out-files to this type.")
 
     sp = parser.add_subparsers(dest='subparser_name')
     sp_validate = sp.add_parser('validate')
@@ -554,13 +562,8 @@ def parse_parameters():
 
     gd = get_sanitized_global_details()
     log.debug("Effective config: {}".format(gd['effective_config']))
-
-    # Check infile for existence.
-    try:
-        open(g_config['infile'])
-    except IOError:
-        log.error("Infile {} does not exist or is not accessible".format(g_config['infile']))
-        sys.exit(1)
+    log.debug(("getpreferredencoding {}, getfilesystemencoding {}".format(locale.getpreferredencoding(),
+                                                                          sys.getfilesystemencoding())))
 
     return args
 
@@ -571,14 +574,15 @@ def read_user_names_from_infile():
     :return: None.
     """
     log.info("{}".format(g_config["infile"]))
-    infile = Path(g_config["infile"]).read_text()
-    lines = re.split('[\n\r]+', infile)
-    for line in lines:
-        line = line.strip()
-        # Skip comment lines.
-        if line and not line.startswith('#'):
-            user_name = line
-            g_users[user_name] = {}
+    with open(g_config["infile"], 'r', encoding=g_config['file_encoding']) as f:
+        infile = f.read()
+        lines = re.split('[\n\r]+', infile)
+        for line in lines:
+            line = line.strip()
+            # Skip comment lines.
+            if line and not line.startswith('#'):
+                user_name = line
+                g_users[user_name] = {}
     log.info("  The user-names are: {}".format(list(g_users.keys())))
 
 
@@ -1076,10 +1080,10 @@ def write_reports(report):
     :param report:
     :return:
     """
-    with open(g_config['report_json_filename'], 'w') as f:
+    with open(g_config['report_json_filename'], 'w', encoding=g_config['file_encoding']) as f:
         print("{}".format(json.dumps(report, indent=4)), file=f)
 
-    with open(g_config['report_text_filename'], 'w', newline='') as f:
+    with open(g_config['report_text_filename'], 'w', newline='', encoding=g_config['file_encoding']) as f:
         fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
                       'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
@@ -1094,7 +1098,7 @@ def write_reports(report):
 
 
 def recreate_reports():
-    with open(g_config['report_detailed_filename']) as f:
+    with open(g_config['report_detailed_filename'], 'r', encoding=g_config['file_encoding']) as f:
         overall_report = json.load(f)
         # The overall-report was written from the g_details.
         report = create_raw_report(overall_report)
@@ -1109,13 +1113,6 @@ def write_result_to_stdout(overview):
     print("  Anonymized users:  {}".format(overview['number_of_anonymized_users']))
     print("  Background re-index triggered:  {}".format(overview['is_background_reindex_triggered']))
     print("")
-
-
-def at_exit():
-    """Regardless of the exit-reason, always write the report-details-file."""
-
-    with open(g_config['report_detailed_filename'], 'w') as f:
-        print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
 
 
 def reindex():
@@ -1161,8 +1158,6 @@ def main():
     args = parse_parameters()
 
     if args.subparser_name == 'validate' or args.subparser_name == 'anonymize':
-        # at_exit onyl if there are results worth to output.
-        atexit.register(at_exit)
         log.debug("")
         read_user_names_from_infile()
         log.debug("")
@@ -1209,6 +1204,9 @@ def main():
                 g_details['execution']['script_finished'] + '.000'))
         write_reports(raw_report)
         write_result_to_stdout(raw_report['overview'])
+
+        with open(g_config['report_detailed_filename'], 'w', encoding=g_config['file_encoding']) as f:
+            print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
 
 
 if __name__ == '__main__':
