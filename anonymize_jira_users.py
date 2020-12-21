@@ -34,13 +34,12 @@ import requests
 import urllib3
 
 #
-#  Global constants: Defaults
+# Global constants: Defaults
 #
-#  Defaults comprise of a dictionary and some variables. The dictionary is also taken to generate an example-
-#  configuration with command line option -g.
-#  All configurations which must not configurable by the user are variables.
+# Defaults comprise of a dictionary and some variables. The dictionary is also taken to generate an example-
+# configuration with command line option -g.
+# All configurations which must not configurable by the user are global constants.
 #
-
 
 VERSION = '1.0.0-SNAPSHOT'
 
@@ -55,13 +54,14 @@ DEFAULT_CONFIG = {
     'new_owner_key': '',
     # Delay between a scheduled anonymization and starting querying the progress. Jira's setting is 10s.
     'initial_delay': 10,
-    # Interval between progress-queries. Jira's value is 3s
+    # Interval between progress-queries. Jira's setting is 3s
     'regular_delay': 3,
-    # Time in seconds the progress shall wait for finishing an anonymization. 0 means wait as long as it takes.
+    # Time in seconds the anonymization shall wait. 0 (or any negative value) means: Wait as long as it takes.
     'timeout': 0,
     'is_do_background_reindex': False,
-    # None instead of empty list would also work regarding the program logic. But None is forbidden in ConfigParser,
-    # which is used to write a default-config-file. So we have to use the empty list.
+    # None instead of an empty string would also work regarding the program logic.
+    # But None is forbidden in ConfigParser, which is used to write a default-config-file.
+    # So we have to use the empty string.
     'features': ''
 }
 
@@ -439,44 +439,40 @@ def parse_parameters():
 
         sub_parser.add_argument('-c', '--config-file',
                                 help="Config-file to pre-set command-line-options."
-                                     " You can generate a config-file with option '-g'."
+                                     " You can generate a config-file-template with option '-g'."
                                      " Parameters given on the command line will overwrite parameters"
                                      " given in the config-file.")
         sub_parser.add_argument('-b', '--jira-base-url', help="Jira base-URL.")
-        sub_parser.add_argument('-u', '--user-auth', metavar='ADMIN_USER_AUTH', dest='jira_auth',
-                                help="Admin user-authentication who will perform the anonymization."
+        sub_parser.add_argument('-u', '--jira-auth', metavar='ADMIN_USER_AUTH',
+                                help="Admin user-authentication."
                                      " Two auth-types are supported: Basic and Bearer."
                                      " The format for Basic is: 'Basic user:pass'."
                                      " The format for Bearer is: 'Bearer <token>'.")
         sub_parser.add_argument('-i', '--infile',
                                 help="File with user-names to be {}. One user-name per line."
-                                     " No other delimiters are allowed, as space, comma, semicolon and some other"
-                                     " special characters allowed in user-names."
                                      " Defaults to {}".format(verb, DEFAULT_CONFIG["infile"]))
-        sub_parser.add_argument('-e', '--expand-validation-with-affected-entities', default=False, action='store_true',
+        sub_parser.add_argument('--expand-validation-with-affected-entities', default=False, action='store_true',
                                 dest='is_expand_validation_with_affected_entities',
-                                help="Record a mapping from the un-anonymized user to the anonymized user.")
+                                help="Include 'affectedEntities' in the validation result.")
 
     #
     # Add arguments special to "anonymize".
     #
-    sp_anonymize.add_argument('-n', '--new-owner-key', metavar='NEW_OWNER_KEY', dest='new_owner_key',
-                              help="Transfer all roles to the user with this user key.")
+    sp_anonymize.add_argument('-n', '--new-owner-key', help="Transfer roles to the user with this user key.")
     # Combination of "default" and "action":
     # Imagine default=None is not given, and the user gives parameter -d. Then the arg-parser sets
     # args.is_try_delete_user to true as expected. But if the user omit -d, the arg-parser sets args.is_try_delete_user
-    # to false implicitely. This would overwrite the setting from the config-file.
+    # to false implicitly. This would overwrite the setting from the config-file.
     # Default=None sets args.is_try_delete_user to None if the user omits -d. By this, the script can distinguish
     # between the given or the omitted -d.
-    sp_anonymize.add_argument('-d', '--try-delete-user', default=None, action='store_true',
-                              dest='is_try_delete_user',
+    sp_anonymize.add_argument('-d', '--try-delete-user', default=None, action='store_true', dest='is_try_delete_user',
                               help="Try deleting the user. If not possible, do anonymize.")
     # This argument belongs to the "anonymize" and therefore is parsed here in context of sp_anonymize.
     # But in future versions of the anonymizer this could become a more global argument.
-    sp_anonymize.add_argument('-f', '--features', nargs='+', metavar='FEATURE', default=None,
-                              help="Choices: {}".format(FEATURES))
+    sp_anonymize.add_argument('-f', '--features', nargs='+', metavar='FEATURES', default=None,
+                              help="Choices: {}".format(FEATURES).replace('[', '').replace(']', '').replace('\'', ''))
     sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
-                              help="Finally do no anonymize. Skip the POST /rest/api/2/user/anonymization.")
+                              help="Finally do not anonymize. To get familiar with the script and to test it.")
     sp_anonymize.add_argument('-x', '--background-reindex', action='store_true', dest='is_do_background_reindex',
                               help="If at least one user was anonymized, trigger a background re-index")
 
@@ -624,11 +620,6 @@ def get_user_data_from_rest():
 
 
 def get_validation_data_from_rest():
-    """Validate all Jira-users whose user-keys could be requested in read_applicationuser_data(). Store the validation-response
-    to the dict.
-
-    :return: Nothing.
-    """
     rel_url = '/rest/api/2/user/anonymization'
     log.info("GET {}".format(rel_url))
     url = g_config['jira_base_url'] + rel_url
