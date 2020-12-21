@@ -100,7 +100,7 @@ ANONHELPER_APPLICATIONUSER_URL = '/rest/anonhelper/latest/applicationuser'
 #   - records the anonymized user-name, -key, and display-name in addition.
 #
 # Check if this REST-endpoint can be reached:
-#   curl --insecure -u <user>:<pass> <base-url>/rest/anonhelper/latest/applicationuser?username=<a-username>
+#   curl --insecure -u <user>:<pass> <jira-base-url>/rest/anonhelper/latest/applicationuser?username=<a-username>
 #
 FEATURE_DO_REPORT_ANONYMIZED_USER_DATA = 'do_report_anonymized_user_data'
 FEATURES = [FEATURE_DO_REPORT_ANONYMIZED_USER_DATA]
@@ -418,32 +418,40 @@ def set_logging():
 
 
 def parse_parameters():
+    #
+    # Part 1: Define and parse the arguments.
+    #
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--version', action='version', version='%(prog)s {}'.format(VERSION))
-    parser.add_argument('-g', '--generate-config-template', metavar='CONFIG_TEMPLATE_FILENAME',
+    parser.add_argument('-g', '--generate-config-template', metavar='CONFIG_TEMPLATE_FILE',
                         const=DEFAULT_CONFIG_TEMPLATE_FILENAME, nargs='?',
                         dest='config_template_filename',
                         help="Generate a configuration-template. Defaults to {}.".format(
                             DEFAULT_CONFIG_TEMPLATE_FILENAME))
-    parser.add_argument('-r', '--recreate-report', action='store_true',
-                        help="Re-create the report from the details file. Only for development.")
+    parser.add_argument('--recreate-report', action='store_true',
+                        help="Re-create the reports from the details file. Only for development.")
     parser.add_argument('-l', '--loglevel',
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         help="Log-level. Defaults to {}".format(DEFAULT_CONFIG['loglevel']))
     parser.add_argument('--file-encoding', metavar='ENCODING', help="Force encoding of in/out-files to this type.")
 
     sp = parser.add_subparsers(dest='subparser_name')
-    sp_validate = sp.add_parser('validate')
-    sp_anonymize = sp.add_parser('anonymize')
+    sub_parsers = {
+        'validate': {
+            'parser': sp.add_parser('validate'),
+            'verb': 'validated'
+        },
+        'anonymize': {
+            'parser': sp.add_parser('anonymize'),
+            'verb': 'anonymized'
+        }
+    }
 
-    # Add arguments for "validate" as well as "anonymize".
-    for index, sub_parser in enumerate([sp_validate, sp_anonymize]):
-        if index == 0:
-            verb = 'validated'
-        elif index == 1:
-            verb = 'anonymized'
-        else:
-            verb = ""
+    # The following arguments are common to 'validate' and 'anonymize'.
+    for name, sub_parser_data in sub_parsers.items():
+        sub_parser = sub_parser_data['parser']
+        verb = sub_parser_data['verb']
 
         sub_parser.add_argument('-c', '--config-file',
                                 help="Config-file to pre-set command-line-options."
@@ -454,7 +462,7 @@ def parse_parameters():
         sub_parser.add_argument('-u', '--jira-auth', metavar='ADMIN_USER_AUTH',
                                 help="Admin user-authentication."
                                      " Two auth-types are supported: Basic and Bearer."
-                                     " The format for Basic is: 'Basic user:pass'."
+                                     " The format for Basic is: 'Basic <user>:<pass>'."
                                      " The format for Bearer is: 'Bearer <token>'.")
         sub_parser.add_argument('-i', '--infile',
                                 help="File with user-names to be {}. One user-name per line."
@@ -466,28 +474,38 @@ def parse_parameters():
     #
     # Add arguments special to "anonymize".
     #
-    sp_anonymize.add_argument('-n', '--new-owner-key', help="Transfer roles to the user with this user key.")
+
+    sub_parsers['anonymize']['parser'].add_argument('-n', '--new-owner-key',
+                                                    help="Transfer roles to the user with this user key.")
     # Combination of "default" and "action":
     # Imagine default=None is not given, and the user gives parameter -d. Then the arg-parser sets
     # args.is_try_delete_user to true as expected. But if the user omit -d, the arg-parser sets args.is_try_delete_user
     # to false implicitly. This would overwrite the setting from the config-file.
     # Default=None sets args.is_try_delete_user to None if the user omits -d. By this, the script can distinguish
     # between the given or the omitted -d.
-    sp_anonymize.add_argument('-d', '--try-delete-user', default=None, action='store_true', dest='is_try_delete_user',
-                              help="Try deleting the user. If not possible, do anonymize.")
+    sub_parsers['anonymize']['parser'].add_argument('-d', '--try-delete-user', default=None, action='store_true',
+                                                    dest='is_try_delete_user',
+                                                    help="Try deleting the user. If not possible, do anonymize.")
     # This argument belongs to the "anonymize" and therefore is parsed here in context of sp_anonymize.
     # But in future versions of the anonymizer this could become a more global argument.
-    sp_anonymize.add_argument('-f', '--features', nargs='+', metavar='FEATURES', default=None,
-                              help="Choices: {}".format(FEATURES).replace('[', '').replace(']', '').replace('\'', ''))
-    sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
-                              help="Finally do not anonymize. To get familiar with the script and to test it.")
-    sp_anonymize.add_argument('-x', '--background-reindex', action='store_true', dest='is_do_background_reindex',
-                              help="If at least one user was anonymized, trigger a background re-index")
-
-    sub_parsers = {'validate': sp_validate, 'anonymize': sp_anonymize}
+    sub_parsers['anonymize']['parser'].add_argument('-f', '--features', nargs='+', metavar='FEATURES', default=None,
+                                                    help="choices: {}"
+                                                    .format(FEATURES).replace('[', '').replace(']', '').replace(
+                                                        '\'', ''))
+    sub_parsers['anonymize']['parser'].add_argument('-D', '--dry-run', action='store_true',
+                                                    help="Finally do not anonymize."
+                                                         " To get familiar with the script and to test it.")
+    sub_parsers['anonymize']['parser'].add_argument('-x', '--background-reindex', action='store_true',
+                                                    dest='is_do_background_reindex',
+                                                    help="If at least one user was anonymized,"
+                                                         " trigger a background re-index")
 
     parser.parse_args()
     args = parser.parse_args()
+
+    #
+    # Part 2: Check arguments, print help or error-message if needed, and exit in case of errors.
+    #
 
     # Print help if no argument is given.
     # sys.argv at least contains the script-name, so it has at least the length of 1.
@@ -507,8 +525,9 @@ def parse_parameters():
         recreate_reports()
         sys.exit(0)
 
-    # In a config file is given, merge it into the global config. Non-None-values overwrites the values present so far.
-    if args.config_file:
+    # In a config-file is given, merge it into the global config. Non-None-values overwrites the values present so far.
+    # Note, a config-file can only be present for the sub-parsers.
+    if (args.subparser_name == "validate" or args.subparser_name == "anonymize") and args.config_file:
         read_configfile_and_merge_into_global_config(args)
 
     # Merge command line arguments in and over the global config. Non-None-values overwrites the values present so far.
@@ -523,40 +542,47 @@ def parse_parameters():
         #
         # Checks for both sub-parsers.
         #
-        args_errors = []
+
+        # Check infile for existence.
+        try:
+            open(g_config['infile'])
+        except IOError:
+            sub_parsers[args.subparser_name]['parser'].error(
+                "Infile {} does not exist or is not accessible".format(g_config['infile']))
+
         if not g_config['jira_base_url']:
-            sub_parsers[args.subparser_name].error("Missing base-url.")
+            sub_parsers[args.subparser_name]['parser'].error("Missing jira-base-url.")
         else:
             # Remove trailing slash if present.
             g_config['jira_base_url'] = g_config['jira_base_url'].rstrip('/')
 
         if not g_config['jira_auth']:
-            sub_parsers[args.subparser_name].error("Missing authentication.")
+            sub_parsers[args.subparser_name]['parser'].error("Missing authentication.")
 
         auth_error, auth_type, user_or_bearer, passwd = validate_auth_parameter(g_config["jira_auth"])
         if auth_error:
-            sub_parsers[args.subparser_name].error(auth_error)
+            sub_parsers[args.subparser_name]['parser'].error(auth_error)
 
         error_message = setup_http_session(auth_type, user_or_bearer, passwd)
         if error_message:
-            sub_parsers[args.subparser_name].error(error_message)
+            sub_parsers[args.subparser_name]['parser'].error(error_message)
         error_message = check_for_admin_permission()
         if error_message:
-            sub_parsers[args.subparser_name].error(error_message)
+            sub_parsers[args.subparser_name]['parser'].error(error_message)
 
         #
         # Checks for sub-parser "anonymize"
         #
         if args.subparser_name == 'anonymize':
             if not g_config['new_owner_key']:
-                sp_anonymize.error("Missing new_owner_key.")
+                sub_parsers['anonymize']['parser'].error("Missing new_owner_key.")
 
             if g_config['features'] and 'do_report_anonymized_user_data' in g_config['features']:
                 # Take new_owner_key for this check, as this is the only user we are pretty sure it do exist.
                 # We can't use the admin-user because they could use a Bearer-token (without any user-name).
                 error_message = check_if_feature_do_report_anonymized_user_data_is_functional(g_config['new_owner_key'])
                 if error_message:
-                    sp_anonymize.error(error_message)
+                    sub_parsers['anonymize']['parser'].error(error_message)
 
     set_logging()
 
