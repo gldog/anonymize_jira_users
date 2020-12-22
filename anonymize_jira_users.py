@@ -59,7 +59,7 @@ DEFAULT_CONFIG = {
     'timeout': 0,
     'is_do_background_reindex': False,
     # None: The default Python suggests.
-    'file_encoding': None,
+    'encoding': None,
     # None instead of an empty string would also work regarding the program logic.
     # But None is forbidden in ConfigParser, which is used to write a default-config-file.
     # So we have to use the empty string.
@@ -433,8 +433,8 @@ def parse_parameters():
                         help="Re-create the reports from the details file. Only for development.")
     parser.add_argument('-l', '--loglevel',
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-                        help="Log-level. Defaults to {}".format(DEFAULT_CONFIG['loglevel']))
-    parser.add_argument('--file-encoding', metavar='ENCODING', help="Force encoding of in/out-files to this type.")
+                        help="Log-level. Defaults to {}.".format(DEFAULT_CONFIG['loglevel']))
+    parser.add_argument('--encoding', metavar='ENCODING', help="Force encoding of in/out-files to this type.")
 
     sp = parser.add_subparsers(dest='subparser_name')
     sub_parsers = {
@@ -600,7 +600,7 @@ def read_user_names_from_infile():
     :return: None.
     """
     log.info("{}".format(g_config["infile"]))
-    with open(g_config["infile"], 'r', encoding=g_config['file_encoding']) as f:
+    with open(g_config["infile"], 'r', encoding=g_config['encoding']) as f:
         infile = f.read()
         lines = re.split('[\n\r]+', infile)
         for line in lines:
@@ -1106,10 +1106,10 @@ def write_reports(report):
     :param report:
     :return:
     """
-    with open(g_config['report_json_filename'], 'w', encoding=g_config['file_encoding']) as f:
+    with open(g_config['report_json_filename'], 'w', encoding=g_config['encoding']) as f:
         print("{}".format(json.dumps(report, indent=4)), file=f)
 
-    with open(g_config['report_text_filename'], 'w', newline='', encoding=g_config['file_encoding']) as f:
+    with open(g_config['report_text_filename'], 'w', newline='', encoding=g_config['encoding']) as f:
         fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
                       'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
@@ -1124,7 +1124,7 @@ def write_reports(report):
 
 
 def recreate_reports():
-    with open(g_config['report_detailed_filename'], 'r', encoding=g_config['file_encoding']) as f:
+    with open(g_config['report_detailed_filename'], 'r', encoding=g_config['encoding']) as f:
         overall_report = json.load(f)
         # The overall-report was written from the g_details.
         report = create_raw_report(overall_report)
@@ -1231,7 +1231,7 @@ def main():
         write_reports(raw_report)
         write_result_to_stdout(raw_report['overview'])
 
-        with open(g_config['report_detailed_filename'], 'w', encoding=g_config['file_encoding']) as f:
+        with open(g_config['report_detailed_filename'], 'w', encoding=g_config['encoding']) as f:
             print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
 
 
