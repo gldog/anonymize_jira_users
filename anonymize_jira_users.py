@@ -69,6 +69,13 @@ DEFAULT_CONFIG = {
 DEFAULT_CONFIG_REPORT_BASENAME = 'anonymizing_report'
 DEFAULT_CONFIG_TEMPLATE_FILENAME = 'my-blank-default-config.cfg'
 SSL_VERIFY = False
+# These values for false and true are taken from the docs of Python
+# configParser.getboolean().
+# But in configParser, there are also values 0 for false and 1 for true described.
+# But the Anonymizer allows integers as values, which shall not be interpreted as
+# booleans. Therefore 0 and 1 are ignored as booleans here.
+BOOLEAN_FALSE_VALUES = ['no', 'false', 'off']
+BOOLEAN_TRUE_VALUES = ['yes', 'true', 'on']
 
 #
 # Features are some kind of extensions only functional with some configuration outside this script.
@@ -379,9 +386,9 @@ def read_configfile_and_merge_into_global_config(args):
     defaultz = dict(defaults)
     real_dict = {}
     for k, v in defaultz.items():
-        if v.lower() in ['yes', 'true', 'on']:
+        if v.lower() in BOOLEAN_TRUE_VALUES:
             real_dict[k] = True
-        elif v.lower() in ['no', 'false', 'off']:
+        elif v.lower() in BOOLEAN_FALSE_VALUES:
             real_dict[k] = False
         elif k.lower() == 'features':
             # The ConfigParser doesn't parse lists. We have to convert the delimited feature-string to a list by
