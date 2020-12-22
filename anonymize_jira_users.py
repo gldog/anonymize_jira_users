@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import sys
+import textwrap
 import time
 from datetime import datetime
 from json.decoder import JSONDecodeError
@@ -111,6 +112,7 @@ ANONHELPER_APPLICATIONUSER_URL = '/rest/anonhelper/latest/applicationuser'
 #
 FEATURE_DO_REPORT_ANONYMIZED_USER_DATA = 'do_report_anonymized_user_data'
 FEATURES = [FEATURE_DO_REPORT_ANONYMIZED_USER_DATA]
+PRETTY_PRINT_FEATURES = "{}".format(FEATURES).replace('[', '').replace(']', '').replace('\'', '')
 
 #
 # Global vars.
@@ -336,33 +338,71 @@ def check_if_feature_do_report_anonymized_user_data_is_functional(user):
 
 
 def write_default_cfg_file(config_template_filename):
-    with open(config_template_filename, 'w', encoding=g_config['file_encoding']) as f:
-        help_text = "####\n" \
-                    "#\n" \
-                    "#   Configuration for script {}\n" \
-                    "#\n" \
-                    "# jira_auth: Can be Basic or Bearer. Omit quotes. Examples:\n" \
-                    "#   jira_auth = Basic jo:3004\n" \
-                    "#   jira_auth = Bearer NDg3MzA5MTc5Mzg5Ov7z+S92TjTYCYYEY7xzlHA+l5jV\n" \
-                    "#\n" \
-                    "# These values are true in any notation: 1, yes, true, on.\n" \
-                    "# These values are false in any notation: 0, no, false, off\n" \
-                    "#\n" \
-                    "# features: Valid values are:\n" \
-                    "#   {}\n" \
-                    "#\n" \
-                    "####\n" \
-                    "\n".format(os.path.basename(__file__), FEATURES).replace('\'', '').replace('[', '').replace(']',
-                                                                                                                 '')
-        f.write(help_text)
-
-        # The ConfigParser doesn't like the 'None'. But the default file_encoding is None.
-        # For writing the config-template-file, replace the None by an empty string.
-        dc = DEFAULT_CONFIG.copy()
-        if not dc['file_encoding']:
-            dc['file_encoding'] = ''
-        parser = configparser.ConfigParser(defaults=dc)
-        parser.write(f)
+    with open(config_template_filename, 'w', encoding=g_config['encoding']) as f:
+        help_text = """        ####
+        #
+        # Configuration for {scriptname}
+        #
+        # General:
+        #
+        #   - This configuration was generated with command line option -g. The parameters
+        #       listed in this file are all the ones you can set and are more than you can
+        #       set by command line options. If parameters have a value, these are the
+        #       Anonymizer's defaults.
+        #   - Parameters without values are ignored, but must have a '='.
+        #   - These values are true in any notation: {boolean_true}.
+        #   - These values are false in any notation: {boolean_false}.
+        #
+        ####
+        
+        [DEFAULT]
+        
+        #   Jira base-URL.
+        #jira_base_url = 
+        #   Admin user-authentication. Two auth-types are supported: Basic and Bearer.
+        #       - The format for Basic is:   Basic <user>:<pass>
+        #       - The format for Bearer is:  Bearer <token>
+        #jira_auth = 
+        #   File with user-names to be validated or anonymized. Defaults to infile.txt.
+        #   One user-name per line. Comments are allowed. They must be prefixed by '#' and
+        #   they must appear on their own line.
+        #infile = {infile}
+        #loglevel = {loglevel}
+        #   Include 'affectedEntities' in the validation result.
+        #is_expand_validation_with_affected_entities = {is_expand_validation_with_affected_entities}
+        #   Finally do not anonymize. To get familiar with the script and to test it.
+        #is_dry_run = {is_dry_run}
+        #   Try deleting the user. If not possible, do anonymize.
+        #is_try_delete_user = {is_try_delete_user}
+        #   Transfer roles to the user with this user key.
+        #new_owner_key = 
+        #   Initial delay in seconds the Anonymizer waits after the anonymization is
+        #   triggered and the first call to get the anonymization-progress.
+        #   Jira's default is {initial_delay} seconds.
+        #initial_delay = {initial_delay}
+        #   The delay in seconds between calls to get the anonymization-progress.
+        #   Jira's default is {regular_delay} seconds.
+        #regular_delay = {regular_delay}
+        #   If at least one user was anonymized, trigger a background re-index.
+        #is_do_background_reindex = {is_do_background_reindex}
+        #   Force a character-encoding. Empty means platform dependent Python suggests.
+        #encoding = 
+        #   Valid values are: {features}
+        #   Please read the docs about features.
+        #features = 
+        """.format(scriptname=os.path.basename(__file__),
+                   boolean_true=BOOLEAN_TRUE_VALUES,
+                   boolean_false=BOOLEAN_FALSE_VALUES,
+                   infile=g_config['infile'], loglevel=g_config['loglevel'],
+                   is_expand_validation_with_affected_entities=
+                                       g_config['is_expand_validation_with_affected_entities'],
+                   is_dry_run=g_config['is_dry_run'],
+                   is_try_delete_user=g_config['is_try_delete_user'],
+                   initial_delay=g_config['initial_delay'],
+                   regular_delay=g_config['regular_delay'],
+                   is_do_background_reindex=g_config['is_do_background_reindex'],
+                   features=PRETTY_PRINT_FEATURES)
+        f.write(textwrap.dedent(help_text))
 
 
 def read_configfile_and_merge_into_global_config(args):
@@ -379,7 +419,7 @@ def read_configfile_and_merge_into_global_config(args):
     parser.read(args.config_file)
     defaults = parser.defaults()
 
-    # parser.defaults() is documented as dict, but is something weird without an .items()-function.
+    # parser.defaults() is documented as dict, but it is something weird without an .items()-function.
     # A copy of the defaults solve this problem.
     defaultz = dict(defaults)
     real_dict = {}
@@ -505,16 +545,14 @@ def parse_parameters():
     # This argument belongs to the "anonymize" and therefore is parsed here in context of sp_anonymize.
     # But in future versions of the anonymizer this could become a more global argument.
     sub_parsers['anonymize']['parser'].add_argument('-f', '--features', nargs='+', metavar='FEATURES', default=None,
-                                                    help="choices: {}"
-                                                    .format(FEATURES).replace('[', '').replace(']', '').replace(
-                                                        '\'', ''))
+                                                    help="choices: {}".format(PRETTY_PRINT_FEATURES))
     sub_parsers['anonymize']['parser'].add_argument('-D', '--dry-run', action='store_true',
                                                     help="Finally do not anonymize."
                                                          " To get familiar with the script and to test it.")
     sub_parsers['anonymize']['parser'].add_argument('-x', '--background-reindex', action='store_true',
                                                     dest='is_do_background_reindex',
                                                     help="If at least one user was anonymized,"
-                                                         " trigger a background re-index")
+                                                         " trigger a background re-index.")
 
     parser.parse_args()
     args = parser.parse_args()
