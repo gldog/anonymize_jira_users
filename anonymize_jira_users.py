@@ -182,9 +182,7 @@ def merge_dicts(d1, d2):
     """
     res = d1.copy()
     for k, v in d2.items():
-        if k not in d1 and v is not None:
-            res[k] = v
-        elif k in d1 and v is not None:
+        if v is not None:
             res[k] = v
     d1.clear()
     d1.update(res)
@@ -404,7 +402,18 @@ def read_configfile_and_merge_into_global_config(args):
             try:
                 real_dict[k] = int(v)
             except ValueError:
-                real_dict[k] = v
+                # This value must be a string-value, because other types are processed so far.
+                # Take it only if not empty. This is important because merge_dicts() ignores only None-values, but
+                # takes into account empty strings. The ConfigParser delivers empty strings for not-set values,
+                # e. g.
+                #   loglevel =
+                # is equal to
+                #   loglevel = ''
+                # But because loglevel is not None, the value '' would overwrite the default-value INFO. As as result,
+                # the loglevel wouldn't be set at all and would lead to an error in set_loglevel().
+                # The loglevel is only an example. This would become a problem for several attributes.
+                if v:
+                    real_dict[k] = v
 
     merge_dicts(g_config, real_dict)
 
