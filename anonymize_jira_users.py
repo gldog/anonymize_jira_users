@@ -15,22 +15,6 @@
 # limitations under the License.
 
 
-"""
-Compatibility:  Python 3.7
-
-TODO help-text for --features
-TODO provide the parameter 'new_owner_name' as an alternative to 'new_owner_key' (more convenient)
-TODO Features: Add some docs. And for ANONHELPER_APPLICATIONUSER_URL, add a doc with a curl-example to check
-    API existence.
-TODO Report tool-execution errors (and 0 if none). But it is not that easy to decide what is a tool error
-    and what is not.
-TODO Known issues:
-TODO The returned error-messages in the JSON-responses are expected in the language-setting of the executing admin.
-        But they're sometimes in a different language. Is this "different language" the one of the user to be
-        anonymized, or the Jira-system-default-language? Or other?
-
-"""
-
 import argparse
 import configparser
 import csv
@@ -68,7 +52,8 @@ DEFAULT_CONFIG = {
     'is_expand_validation_with_affected_entities': False,
     'is_dry_run': False,
     'is_try_delete_user': False,
-    'new_owner_key': '',
+    # The user-name of the new owner.
+    'new_owner': '',
     # Delay between a scheduled anonymization and starting querying the progress. Jira's setting is 10s.
     'initial_delay': 10,
     # Interval between progress-queries. Jira's setting is 3s
@@ -346,7 +331,7 @@ def check_if_feature_do_report_anonymized_user_data_is_functional(user):
             error_message = True
         try:
             # Check if this is the JSON we expect here.
-            r.json()[g_config['new_owner_key']]
+            r.json()[g_config['new_owner']]
         except (KeyError, JSONDecodeError):
             error_message = True
 
@@ -408,9 +393,9 @@ def write_default_cfg_file(config_template_filename):
         #   Try deleting the user. If not possible, do anonymize.
         #   The given value is the default.
         #is_try_delete_user = {is_try_delete_user}
-        #   Transfer roles to the user with this user-key (not the user-name).
+        #   Transfer roles to the user with this user-name.
         #   The given value is an example.
-        #new_owner_key = JIRAUSER10200
+        #new_owner = new-owner
         #   Initial delay in seconds the Anonymizer waits after the anonymization is
         #   triggered and the first call to get the anonymization-progress.
         #   Jira's default is {initial_delay} seconds, and this is also the Anonymizer's default.
@@ -525,7 +510,7 @@ def parse_parameters():
       The file my-blank-default-config.cfg has been created.
     o Rename the file, e.g. to my-config.cfg.
     o In that file, set the attributes jira_base_url; jira_auth with
-      format 'Basic admin:admin', new_owner_key (the user-key, not the user-name).
+      format 'Basic admin:admin'; new_owner.
     o Call
           anonymize_jira_users.py validate -c my-config.cfg
       to see what would happen in case of anonymizing.
@@ -593,8 +578,8 @@ def parse_parameters():
     #
     # Add arguments special to "anonymize".
     #
-    sp_anonymize.add_argument('-n', '--new-owner-key',
-                              help="Transfer roles to the user with this user-key (not the user-name).")
+    sp_anonymize.add_argument('-n', '--new-owner',
+                              help="Transfer roles of all anonymized users to the user with this user-name.")
     # Combination of "default" and "action":
     # Imagine default=None is not given, and the user gives parameter -d. Then the arg-parser sets
     # args.is_try_delete_user to true as expected. But if the user omit -d, the arg-parser sets args.is_try_delete_user
@@ -715,13 +700,20 @@ def parse_parameters():
         # Checks for sub-parser 'anonymize'
         #
         if args.subparser_name == 'anonymize':
-            if not g_config['new_owner_key']:
-                sp_anonymize.error("Missing new_owner_key.")
+            if not g_config['new_owner']:
+                sp_anonymize.error("Missing new_owner.")
+            else:
+                r = get_user_data_from_rest(g_config['new_owner'])
+                if r.status_code != 200:
+                    if r.status_code == 404:
+                        sp_anonymize.error(r.json()['errorMessages'])
+                    else:
+                        r.raise_for_status()
 
             if g_config['features'] and 'do_report_anonymized_user_data' in g_config['features']:
-                # Take new_owner_key for this check, as this is the only user we are pretty sure it do exist.
+                # Take new_owner for this check, as this is the only user we assume it exists.
                 # We can't use the admin-user because they could use a Bearer-token (without any user-name).
-                error_message = check_if_feature_do_report_anonymized_user_data_is_functional(g_config['new_owner_key'])
+                error_message = check_if_feature_do_report_anonymized_user_data_is_functional(g_config['new_owner'])
                 if error_message:
                     sp_anonymize.error(error_message)
 
@@ -779,9 +771,20 @@ def serialize_response(r, is_include_json_response=True):
     return j
 
 
-def get_user_data_from_rest():
+def get_user_data_from_rest(user_name):
     rel_url = '/rest/api/2/user'
-    log.info("GET {}".format(rel_url))
+    log.info("for user {}".format(user_name))
+    url = g_config['jira_base_url'] + rel_url
+    url_params = {'username': user_name}
+    r = g_session.get(url=url, params=url_params)
+    g_execution['rest_get_user__new_owner'] = serialize_response(r)
+    log.debug(g_execution['rest_get_user__new_owner'])
+    return r
+
+
+def get_users_data_from_rest():
+    rel_url = '/rest/api/2/user'
+    log.info("for {} users".format(len(g_users)))
     url = g_config['jira_base_url'] + rel_url
     for user_name in g_users.keys():
         url_params = {'username': user_name}
@@ -792,7 +795,7 @@ def get_user_data_from_rest():
 
 def get_validation_data_from_rest():
     rel_url = '/rest/api/2/user/anonymization'
-    log.info("GET {}".format(rel_url))
+    log.info("")
     url = g_config['jira_base_url'] + rel_url
     for user_name, user_data in g_users.items():
         if user_data['rest_get_user__before_anonymization']['status_code'] != 200:
@@ -1328,7 +1331,7 @@ def main():
         log.debug("")
         read_user_names_from_infile()
         log.debug("")
-        get_user_data_from_rest()
+        get_users_data_from_rest()
         log.debug("")
         get_validation_data_from_rest()
         if is_feature_do_report_anonymized_user_data_enabled():
@@ -1348,7 +1351,9 @@ def main():
             anonymized_users = {user_name: user_data for (user_name, user_data) in g_users.items() if
                                 user_data['user_filter']['is_anonymize_approval'] is True}
             if not g_config['dry_run']:
-                run_user_anonymization(anonymized_users, g_config["new_owner_key"])
+                # run_user_anonymization() expects the user-key, not the user-name.
+                new_owner_key = g_execution['rest_get_user__new_owner']['json']['key']
+                run_user_anonymization(anonymized_users, new_owner_key)
                 if is_feature_do_report_anonymized_user_data_enabled():
                     log.debug("")
                     get_anonymized_user_data_from_rest(anonymized_users)
