@@ -19,6 +19,7 @@
 Compatibility:  Python 3.7
 
 TODO help-text for --features
+TODO provide the parameter 'new_owner_name' as an alternative to 'new_owner_key' (more convenient)
 TODO Features: Add some docs. And for ANONHELPER_APPLICATIONUSER_URL, add a doc with a curl-example to check
     API existence.
 TODO Report tool-execution errors (and 0 if none). But it is not that easy to decide what is a tool error
@@ -56,12 +57,13 @@ import urllib3
 # All configurations which must not configurable by the user are global constants.
 #
 
-VERSION = '1.0.0-SNAPSHOT'
+# This is not a valid Python-version, but who cares.
+__version__ = '1.0.0-SNAPSHOT'
 
 DEFAULT_CONFIG = {
     'jira_base_url': '',
     'jira_auth': '',
-    'infile': 'usernames.txt',
+    'infile': '',
     'loglevel': 'INFO',
     'is_expand_validation_with_affected_entities': False,
     'is_dry_run': False,
@@ -71,10 +73,11 @@ DEFAULT_CONFIG = {
     'initial_delay': 10,
     # Interval between progress-queries. Jira's setting is 3s
     'regular_delay': 3,
-    # Time in seconds the anonymization shall wait. 0 (or any negative value) means: Wait as long as it takes.
+    # Time in seconds the anonymization shall wait to be finished.
+    # 0 (or any negative value) means: Wait as long as it takes.
     'timeout': 0,
     'is_do_background_reindex': False,
-    # None: The default Python suggests.
+    # None: The default Python suggests. Do not use an empty string here.
     'encoding': None,
     # None instead of an empty string would also work regarding the program logic.
     # But None is forbidden in ConfigParser, which is used to write a default-config-file.
@@ -85,6 +88,8 @@ DEFAULT_CONFIG = {
 DEFAULT_CONFIG_REPORT_BASENAME = 'anonymizing_report'
 DEFAULT_CONFIG_TEMPLATE_FILENAME = 'my-blank-default-config.cfg'
 SSL_VERIFY = False
+LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+PRETTY_PRINT_LOG_LEVELS = "{}".format(LOG_LEVELS).replace('[', '').replace(']', '').replace('\'', '')
 # These values for false and true are taken from the docs of Python
 # configParser.getboolean().
 # But in configParser, there are also values 0 for false and 1 for true described.
@@ -353,7 +358,7 @@ def check_if_feature_do_report_anonymized_user_data_is_functional(user):
 
 
 def write_default_cfg_file(config_template_filename):
-    with open(config_template_filename, 'w', encoding=g_config['encoding']) as f:
+    with open(config_template_filename, 'w') as f:
         help_text = """        ####
         #
         # Configuration for {scriptname}
@@ -371,50 +376,69 @@ def write_default_cfg_file(config_template_filename):
         ####
         
         [DEFAULT]
-        
+
+        #   Loglevel. Valid levels are {valid_loglevels}.
+        #   The given value is the default.
+        #loglevel = {loglevel}
         #   Jira base-URL.
-        #jira_base_url = 
-        #   Admin user-authentication. Two auth-types are supported: Basic and Bearer.
+        #   The given value is an example.
+        #jira_base_url = http://localhost:2990/jira
+        #   Admin user-authentication. Two auth-types are supported: Basic, and Bearer (staring with Jira 8.14).
         #       - The format for Basic is:   Basic <user>:<pass>
         #       - The format for Bearer is:  Bearer <token>
-        #jira_auth = 
-        #   File with user-names to be validated or anonymized. Defaults to infile.txt.
-        #   One user-name per line. Comments are allowed. They must be prefixed by '#' and
-        #   they must appear on their own line.
-        #infile = {infile}
-        #loglevel = {loglevel}
-        #   Include 'affectedEntities' in the validation result.
+        #   The given values are examples.
+        #jira_auth = Basic admin:admin
+        #jira_auth = Bearer NDcyOTE1ODY4Nzc4Omj+FiGVuLh/vs4WjTS9/3lGaysM
+        #   File with user-names to be anonymized or just validated. One user-name per line. 
+        #   Comments are allowed: They must be prefixed by '#' and they must appear on their own line.
+        #   The character-encoding is platform dependent Python suggests.
+        #   If you have trouble with the encoding, try out the parameter '--encoding'.")
+        #   The given value is an example.
+        #infile = usernames.txt
+        #   Force a character-encoding for reading the infile. Empty means platform dependent Python suggests.
+        #   The given value is an example.
+        #encoding = utf-8
+        #   Include 'affectedEntities' in the validation result. This is only for documentation 
+        #   to enrich the detailed report. It doesn't affect the anonymization.
+        #   The given value is the default.
         #is_expand_validation_with_affected_entities = {is_expand_validation_with_affected_entities}
         #   Finally do not anonymize. To get familiar with the script and to test it.
+        #   The given value is the default.
         #is_dry_run = {is_dry_run}
         #   Try deleting the user. If not possible, do anonymize.
+        #   The given value is the default.
         #is_try_delete_user = {is_try_delete_user}
-        #   Transfer roles to the user with this user key.
-        #new_owner_key = 
+        #   Transfer roles to the user with this user-key (not the user-name).
+        #   The given value is an example.
+        #new_owner_key = JIRAUSER10200
         #   Initial delay in seconds the Anonymizer waits after the anonymization is
         #   triggered and the first call to get the anonymization-progress.
-        #   Jira's default is {initial_delay} seconds.
+        #   Jira's default is {initial_delay} seconds, and this is also the Anonymizer's default.
         #initial_delay = {initial_delay}
         #   The delay in seconds between calls to get the anonymization-progress.
-        #   Jira's default is {regular_delay} seconds.
+        #   Jira's default is {regular_delay} seconds, and this is also the Anonymizer's default.
         #regular_delay = {regular_delay}
+        #   Time in seconds the anonymization shall wait to be finished.
+        #   0 (or any negative value) means: Wait as long as it takes.
+        #timeout = {timeout}
         #   If at least one user was anonymized, trigger a background re-index.
+        #   The given value is the default.
         #is_do_background_reindex = {is_do_background_reindex}
-        #   Force a character-encoding. Empty means platform dependent Python suggests.
-        #encoding = 
-        #   Valid values are: {features}
+        #   Needs an add-on. Valid values are: {features}
         #   Please read the docs about features.
         #features = 
         """.format(scriptname=os.path.basename(__file__),
                    boolean_true=BOOLEAN_TRUE_VALUES,
                    boolean_false=BOOLEAN_FALSE_VALUES,
-                   infile=g_config['infile'], loglevel=g_config['loglevel'],
+                   valid_loglevels=PRETTY_PRINT_LOG_LEVELS,
+                   loglevel=g_config['loglevel'],
                    is_expand_validation_with_affected_entities=
                                        g_config['is_expand_validation_with_affected_entities'],
                    is_dry_run=g_config['is_dry_run'],
                    is_try_delete_user=g_config['is_try_delete_user'],
                    initial_delay=g_config['initial_delay'],
                    regular_delay=g_config['regular_delay'],
+                   timeout=g_config['timeout'],
                    is_do_background_reindex=g_config['is_do_background_reindex'],
                    features=PRETTY_PRINT_FEATURES)
         f.write(textwrap.dedent(help_text))
@@ -492,82 +516,115 @@ def parse_parameters():
     #
     # Part 1: Define and parse the arguments.
     #
+    epilog = """    How to start
+    
+    o Create the file usernames.txt with the user-names to be anonymized, one 
+      user-name per line.
+    o Create a config-file-template:
+          anonymize_jira_users.py -g
+      The file my-blank-default-config.cfg has been created.
+    o Rename the file, e.g. to my-config.cfg.
+    o In that file, set the attributes jira_base_url; jira_auth with
+      format 'Basic admin:admin', new_owner_key (the user-key, not the user-name).
+    o Call
+          anonymize_jira_users.py validate -c my-config.cfg
+      to see what would happen in case of anonymizing.
+    o Call
+          anonymize_jira_users.py anonymize -c my-config.cfg
+      to execute anonyization.
+    o Have a look at the report anonymization_report.csv. More details about the
+      users are given in anonymization_report_details.csv.
+    """
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     description="The Anonymizer is a Python3-script to help Jira-admins anonymizing Jira-users in bulk.",
+                                     epilog=textwrap.dedent(epilog))
+    parser.add_argument('--version', action='version', version='%(prog)s {}'.format(__version__))
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--version', action='version', version='%(prog)s {}'.format(VERSION))
-    parser.add_argument('-g', '--generate-config-template', metavar='CONFIG_TEMPLATE_FILE',
-                        const=DEFAULT_CONFIG_TEMPLATE_FILENAME, nargs='?',
-                        dest='config_template_filename',
-                        help="Generate a configuration-template. Defaults to {}.".format(
-                            DEFAULT_CONFIG_TEMPLATE_FILENAME))
-    parser.add_argument('--recreate-report', action='store_true',
-                        help="Re-create the reports from the details file. Only for development.")
-    parser.add_argument('-l', '--loglevel',
-                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-                        help="Log-level. Defaults to {}.".format(DEFAULT_CONFIG['loglevel']))
-    parser.add_argument('--encoding', metavar='ENCODING', help="Force encoding of in/out-files to this type.")
+    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser.add_argument('-l', '--loglevel', choices=LOG_LEVELS,
+                               help="Log-level. Defaults to {}.".format(DEFAULT_CONFIG['loglevel']))
+    parent_parser.add_argument('-c', '--config-file',
+                               help="Config-file to pre-set command-line-options."
+                                    " You can generate a config-file-template with option '-g'."
+                                    " There are parameters in the config-file not present on the command line."
+                                    " Empty parameters in the config-file are ignored."
+                                    " Parameters given on the command line overwrite parameters"
+                                    " given in the config-file. ")
+
+    #
+    # Add arguments for 'anonymize' and 'validate'.
+    #
+    parent_parser_for_validate_and_anonymize = argparse.ArgumentParser(add_help=False)
+    parent_parser_for_validate_and_anonymize \
+        .add_argument('--info', action='store_true',
+                      help="Print the effective config and the character-encoding Python suggests, then exit.")
+    parent_parser_for_validate_and_anonymize \
+        .add_argument('-b', '--jira-base-url', help="Jira base-URL.")
+    parent_parser_for_validate_and_anonymize \
+        .add_argument('-u', '--jira-auth', metavar='ADMIN_USER_AUTH',
+                      help="Admin user-authentication."
+                           " Two auth-types are supported: Basic, and Bearer (starting with Jira 8.14)."
+                           " The format for Basic is: 'Basic <user>:<pass>'."
+                           " The format for Bearer is: 'Bearer <token>'.")
+    parent_parser_for_validate_and_anonymize \
+        .add_argument('-i', '--infile',
+                      help="File with user-names to be anonymized or just validated."
+                           " One user-name per line. Comments are allowed:"
+                           " They must be prefixed by '#' and they must appear on their own line."
+                           " The character-encoding is platform dependent Python suggests."
+                           " If you have trouble with the encoding, try out the parameter '--encoding'.")
+    parent_parser_for_validate_and_anonymize \
+        .add_argument('--encoding', metavar='ENCODING',
+                      help="Force a character-encoding for reading the infile."
+                           " Empty means platform dependent Python suggests.")
+    parent_parser_for_validate_and_anonymize \
+        .add_argument('--expand-validation-with-affected-entities', default=False,
+                      action='store_true',
+                      dest='is_expand_validation_with_affected_entities',
+                      help="Include 'affectedEntities' in the validation result."
+                           " This is only for documentation to enrich the detailed report."
+                           " It doesn't affect the anonymization.")
 
     sp = parser.add_subparsers(dest='subparser_name')
-    sub_parsers = {
-        'validate': {
-            'parser': sp.add_parser('validate'),
-            'verb': 'validated'
-        },
-        'anonymize': {
-            'parser': sp.add_parser('anonymize'),
-            'verb': 'anonymized'
-        }
-    }
-
-    # The following arguments are common to 'validate' and 'anonymize'.
-    for name, sub_parser_data in sub_parsers.items():
-        sub_parser = sub_parser_data['parser']
-        verb = sub_parser_data['verb']
-
-        sub_parser.add_argument('-c', '--config-file',
-                                help="Config-file to pre-set command-line-options."
-                                     " You can generate a config-file-template with option '-g'."
-                                     " Parameters given on the command line will overwrite parameters"
-                                     " given in the config-file.")
-        sub_parser.add_argument('-b', '--jira-base-url', help="Jira base-URL.")
-        sub_parser.add_argument('-u', '--jira-auth', metavar='ADMIN_USER_AUTH',
-                                help="Admin user-authentication."
-                                     " Two auth-types are supported: Basic and Bearer."
-                                     " The format for Basic is: 'Basic <user>:<pass>'."
-                                     " The format for Bearer is: 'Bearer <token>'.")
-        sub_parser.add_argument('-i', '--infile',
-                                help="File with user-names to be {}. One user-name per line."
-                                     " Defaults to {}".format(verb, DEFAULT_CONFIG["infile"]))
-        sub_parser.add_argument('--expand-validation-with-affected-entities', default=False, action='store_true',
-                                dest='is_expand_validation_with_affected_entities',
-                                help="Include 'affectedEntities' in the validation result.")
+    sp_anonymize = sp.add_parser('anonymize', parents=[parent_parser, parent_parser_for_validate_and_anonymize])
+    sp_validate = sp.add_parser('validate', parents=[parent_parser, parent_parser_for_validate_and_anonymize])
+    sp_misc = sp.add_parser('misc', parents=[parent_parser])
 
     #
     # Add arguments special to "anonymize".
     #
-
-    sub_parsers['anonymize']['parser'].add_argument('-n', '--new-owner-key',
-                                                    help="Transfer roles to the user with this user key.")
+    sp_anonymize.add_argument('-n', '--new-owner-key',
+                              help="Transfer roles to the user with this user-key (not the user-name).")
     # Combination of "default" and "action":
     # Imagine default=None is not given, and the user gives parameter -d. Then the arg-parser sets
     # args.is_try_delete_user to true as expected. But if the user omit -d, the arg-parser sets args.is_try_delete_user
     # to false implicitly. This would overwrite the setting from the config-file.
     # Default=None sets args.is_try_delete_user to None if the user omits -d. By this, the script can distinguish
     # between the given or the omitted -d.
-    sub_parsers['anonymize']['parser'].add_argument('-d', '--try-delete-user', default=None, action='store_true',
-                                                    dest='is_try_delete_user',
-                                                    help="Try deleting the user. If not possible, do anonymize.")
+    sp_anonymize.add_argument('-d', '--try-delete-user', default=None, action='store_true',
+                              dest='is_try_delete_user',
+                              help="Try deleting the user. If not possible, do anonymize.")
     # This argument belongs to the "anonymize" and therefore is parsed here in context of sp_anonymize.
     # But in future versions of the anonymizer this could become a more global argument.
-    sub_parsers['anonymize']['parser'].add_argument('-f', '--features', nargs='+', metavar='FEATURES', default=None,
-                                                    help="choices: {}".format(PRETTY_PRINT_FEATURES))
-    sub_parsers['anonymize']['parser'].add_argument('-D', '--dry-run', action='store_true',
-                                                    help="Finally do not anonymize."
-                                                         " To get familiar with the script and to test it.")
-    sub_parsers['anonymize']['parser'].add_argument('-x', '--background-reindex', action='store_true',
-                                                    dest='is_do_background_reindex',
-                                                    help="If at least one user was anonymized,"
-                                                         " trigger a background re-index.")
+    sp_anonymize.add_argument('-f', '--features', nargs='+', metavar='FEATURES', default=None,
+                              help="Needs an add-on. Choices: {}".format(PRETTY_PRINT_FEATURES))
+    sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
+                              help="Finally do not delete nor anonymize."
+                                   " To get familiar with the script and to test it.")
+    sp_anonymize.add_argument('-x', '--background-reindex', action='store_true',
+                              dest='is_do_background_reindex',
+                              help="If at least one user was anonymized, trigger a background re-index.")
+
+    #
+    # Add arguments special to "misc".
+    #
+    sp_misc.add_argument('-g', '--generate-config-template', metavar='CONFIG_TEMPLATE_FILE',
+                         const=DEFAULT_CONFIG_TEMPLATE_FILENAME, nargs='?',
+                         dest='config_template_filename',
+                         help="Generate a configuration-template. Defaults to {}.".format(
+                             DEFAULT_CONFIG_TEMPLATE_FILENAME))
+    sp_misc.add_argument('--recreate-report', action='store_true',
+                         help="Re-create the reports from the details file. Only for development.")
 
     parser.parse_args()
     args = parser.parse_args()
@@ -582,21 +639,23 @@ def parse_parameters():
         parser.print_help()
         sys.exit(0)
 
-    if args.config_template_filename:
-        write_default_cfg_file(args.config_template_filename)
-        sys.exit(0)
-
-    g_config['report_detailed_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '_detailed.json'
+    g_config['report_details_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '_details.json'
     g_config['report_json_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '.json'
     g_config['report_text_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '.csv'
 
-    if args.recreate_report:
-        recreate_reports()
-        sys.exit(0)
+    if args.subparser_name == 'misc':
+        if args.config_template_filename:
+            write_default_cfg_file(args.config_template_filename)
+            sys.exit(0)
+        elif args.recreate_report:
+            recreate_reports()
+            sys.exit(0)
+        else:
+            sp_misc.error("Command 'misc' needs '-g' or '--recreate-report'")
 
     # In a config-file is given, merge it into the global config. Non-None-values overwrites the values present so far.
     # Note, a config-file can only be present for the sub-parsers.
-    if (args.subparser_name == "validate" or args.subparser_name == "anonymize") and args.config_file:
+    if (args.subparser_name == 'validate' or args.subparser_name == 'anonymize') and args.config_file:
         read_configfile_and_merge_into_global_config(args)
 
     # Merge command line arguments in and over the global config. Non-None-values overwrites the values present so far.
@@ -607,51 +666,64 @@ def parse_parameters():
         parser.error('{}'.format(
             "Features contain at least one unsupported feature-name. Supported features are: {}".format(FEATURES)))
 
-    if args.subparser_name == "validate" or args.subparser_name == "anonymize":
-        #
-        # Checks for both sub-parsers.
-        #
+    #
+    # Checks for both sub-parsers.
+    #
+    if args.subparser_name == 'validate' or args.subparser_name == 'anonymize':
+        if args.info:
+            gd = get_sanitized_global_details()
+            print("  Effective config: {}".format(json.dumps(gd['effective_config'], indent=4)))
+            print("  getpreferredencoding {}, getfilesystemencoding {}".format(locale.getpreferredencoding(),
+                                                                               sys.getfilesystemencoding()))
+            print("")
+            sys.exit(0)
 
-        # Check infile for existence.
-        try:
-            open(g_config['infile'])
-        except IOError:
-            sub_parsers[args.subparser_name]['parser'].error(
-                "Infile {} does not exist or is not accessible".format(g_config['infile']))
+        errors = []
+        # Check infile is given does exist.
+        if not g_config['infile']:
+            errors.append("Missing infile")
+        else:
+            try:
+                open(g_config['infile'])
+            except IOError:
+                errors.append("Infile {} does not exist or is not accessible".format(g_config['infile']))
 
         if not g_config['jira_base_url']:
-            sub_parsers[args.subparser_name]['parser'].error("Missing jira-base-url.")
+            errors.append("Missing jira-base-url")
         else:
             # Remove trailing slash if present.
             g_config['jira_base_url'] = g_config['jira_base_url'].rstrip('/')
 
         if not g_config['jira_auth']:
-            sub_parsers[args.subparser_name]['parser'].error("Missing authentication.")
+            errors.append("Missing authentication")
 
         auth_error, auth_type, user_or_bearer, passwd = validate_auth_parameter(g_config["jira_auth"])
         if auth_error:
-            sub_parsers[args.subparser_name]['parser'].error(auth_error)
-
-        error_message = setup_http_session(auth_type, user_or_bearer, passwd)
-        if error_message:
-            sub_parsers[args.subparser_name]['parser'].error(error_message)
-        error_message = check_for_admin_permission()
-        if error_message:
-            sub_parsers[args.subparser_name]['parser'].error(error_message)
+            errors.append(auth_error)
+        else:
+            error_message = setup_http_session(auth_type, user_or_bearer, passwd)
+            if error_message:
+                errors.append(error_message)
+            else:
+                error_message = check_for_admin_permission()
+                if error_message:
+                    errors.append(error_message)
+        if len(errors) > 0:
+            parent_parser_for_validate_and_anonymize.error('; '.join(errors))
 
         #
-        # Checks for sub-parser "anonymize"
+        # Checks for sub-parser 'anonymize'
         #
         if args.subparser_name == 'anonymize':
             if not g_config['new_owner_key']:
-                sub_parsers['anonymize']['parser'].error("Missing new_owner_key.")
+                sp_anonymize.error("Missing new_owner_key.")
 
             if g_config['features'] and 'do_report_anonymized_user_data' in g_config['features']:
                 # Take new_owner_key for this check, as this is the only user we are pretty sure it do exist.
                 # We can't use the admin-user because they could use a Bearer-token (without any user-name).
                 error_message = check_if_feature_do_report_anonymized_user_data_is_functional(g_config['new_owner_key'])
                 if error_message:
-                    sub_parsers['anonymize']['parser'].error(error_message)
+                    sp_anonymize.error(error_message)
 
     set_logging()
 
@@ -929,7 +1001,7 @@ def run_user_anonymization(valid_users, new_owner_key):
 
     log.info("Going to {}anonymize {} users".format(phrase, len(valid_users), rel_url_for_anonymizing))
     if g_config['is_dry_run']:
-        log.warning("DRY-RUN IS ENABLED. No user will be anonymized.")
+        log.warning("DRY-RUN IS ENABLED. No user will be deleted nor anonymized.")
 
     url_for_deletion = g_config['jira_base_url'] + rel_url_for_deletion
     url_for_anonymizing = g_config['jira_base_url'] + rel_url_for_anonymizing
@@ -969,7 +1041,7 @@ def run_user_anonymization(valid_users, new_owner_key):
                     if r.status_code == 400 or r.status_code == 403 or r.status_code == 409:
                         log.error(
                             "A problem occurred scheduling anonymization user {}. See report {} for details.".format(
-                                user_name, g_config['report_detailed_filename']))
+                                user_name, g_config['report_details_filename']))
                     else:
                         # For all other, not documented HTTP-problems:
                         r.raise_for_status()
@@ -1149,12 +1221,12 @@ def create_raw_report(overall_report):
             user_report['anonymized_user_key'] = anonymized_user_key
             user_report['anonymized_user_display_name'] = anonymized_user_display_name
 
-            if is_deleted:
-                user_report['action'] = "deleted"
-            elif is_anonymized:
-                user_report['action'] = "anonymized"
-            else:
-                user_report['action'] = "skipped"
+        if is_deleted:
+            user_report['action'] = "deleted"
+        elif is_anonymized:
+            user_report['action'] = "anonymized"
+        else:
+            user_report['action'] = "skipped"
 
         report["users"].append(user_report)
 
@@ -1193,7 +1265,7 @@ def write_reports(report):
 
 
 def recreate_reports():
-    with open(g_config['report_detailed_filename'], 'r', encoding=g_config['encoding']) as f:
+    with open(g_config['report_details_filename'], 'r', encoding=g_config['encoding']) as f:
         overall_report = json.load(f)
         # The overall-report was written from the g_details.
         report = create_raw_report(overall_report)
@@ -1201,7 +1273,7 @@ def recreate_reports():
 
 
 def write_result_to_stdout(overview):
-    print("Anonymizer Result:")
+    print("Anonymizing Result:")
     print("  Users in infile:   {}".format(overview['number_of_users_in_infile']))
     print("  Skipped users:     {}".format(overview['number_of_skipped_users']))
     print("  Deleted users:     {}".format(overview['number_of_deleted_users']))
@@ -1300,7 +1372,7 @@ def main():
         write_reports(raw_report)
         write_result_to_stdout(raw_report['overview'])
 
-        with open(g_config['report_detailed_filename'], 'w', encoding=g_config['encoding']) as f:
+        with open(g_config['report_details_filename'], 'w', encoding=g_config['encoding']) as f:
             print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
 
 
