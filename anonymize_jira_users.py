@@ -506,7 +506,7 @@ def parse_parameters():
     o Create the file usernames.txt with the user-names to be anonymized, one 
       user-name per line.
     o Create a config-file-template:
-          anonymize_jira_users.py -g
+          anonymize_jira_users.py misc -g
       The file my-blank-default-config.cfg has been created.
     o Rename the file, e.g. to my-config.cfg.
     o In that file, set the attributes jira_base_url; jira_auth with
@@ -530,7 +530,7 @@ def parse_parameters():
                                help="Log-level. Defaults to {}.".format(DEFAULT_CONFIG['loglevel']))
     parent_parser.add_argument('-c', '--config-file',
                                help="Config-file to pre-set command-line-options."
-                                    " You can generate a config-file-template with option '-g'."
+                                    " You can generate a config-file-template with option 'miisc -g'."
                                     " There are parameters in the config-file not present on the command line."
                                     " Empty parameters in the config-file are ignored."
                                     " Parameters given on the command line overwrite parameters"
@@ -542,7 +542,7 @@ def parse_parameters():
     parent_parser_for_validate_and_anonymize = argparse.ArgumentParser(add_help=False)
     parent_parser_for_validate_and_anonymize \
         .add_argument('--info', action='store_true',
-                      help="Print the effective config and the character-encoding Python suggests, then exit.")
+                      help="Print the effective config, and the character-encoding Python suggests, then exit.")
     parent_parser_for_validate_and_anonymize \
         .add_argument('-b', '--jira-base-url', help="Jira base-URL.")
     parent_parser_for_validate_and_anonymize \
@@ -592,7 +592,8 @@ def parse_parameters():
     # This argument belongs to the "anonymize" and therefore is parsed here in context of sp_anonymize.
     # But in future versions of the anonymizer this could become a more global argument.
     sp_anonymize.add_argument('-f', '--features', nargs='+', metavar='FEATURES', default=None,
-                              help="Needs an add-on. Choices: {}".format(PRETTY_PRINT_FEATURES))
+                              help="Features need external tools. See the docs. Choices: {}".format(
+                                  PRETTY_PRINT_FEATURES))
     sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
                               help="Finally do not delete nor anonymize."
                                    " To get familiar with the script and to test it.")
