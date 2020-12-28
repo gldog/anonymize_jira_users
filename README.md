@@ -6,6 +6,7 @@ Other articles
 - [Atlassian: Anonymizing users](https://confluence.atlassian.com/adminjiraserver/anonymizing-users-992677655.html)
 - [Me: How anonymizing works with the Jira-UI](doc/How_anonymization_works_with_the_Jira-UI.md)
 - [Me: About user-names and user-keys](doc/About_user-names_and_user-keys.md)
+- [Me: Add-on jira-anonymizinghelper](https://bitbucket.org/jheger/jira-anonymizinghelper/src/master/)
 
 User Manual
 =
@@ -135,6 +136,27 @@ Parameters for command `misc`:
     --recreate-report     Re-create the reports from the details file. Only for
                           development.
 
+
+## Combination of parameters from the conig-file and the command-line
+
+The Anonymizer has up to three places where configurations could exist:
+
+1. The internal default-configuration.
+2. Your settings from the config-file (which overwrites the internal default-configuration).
+3. Your parameters given on the command line (which overwrites the settings from the 
+  config-file).
+
+The anonymizer builds an effective configuration from the above configurations.
+
+You can combine parameters from a config-file and the command-line. E.g. if you
+don't want your auth-settings stay in a file (because you like to check-in this), 
+you can set them at the command-line using shell-variables:
+
+    export MY_USERNAME=admin
+    export MY_PASSWORD=admin
+    anonymize_jira_users.py validate -c my-config.cfg -u "Basic $MY_USERNAME:$MY_PASSWORD"
+
+
 ## Details about some options
 
 ### --info
@@ -142,14 +164,7 @@ Parameters for command `misc`:
 Print the effective config and the character-encoding Python suggests, then exit.
 
 You can combine this parameter with parameters of `validate` and `anonymize`
-to get the effective configuration. This is the combination of
-- the internal default-configuration,
-- your settings from the config-file (which overwrites the internal 
-  default-configuration), and 
-- your parameters given on the command line (which overwrites the settings from the 
-  config-file).
-
-If `--info` is given, the commands `validate` and `anonymize` won't be executed.
+If `--info` is given in these cases, these commands won't be executed.
 
 ### --infile and --encoding
 
