@@ -1,0 +1,16 @@
+{
+    "baseUrl": "http://localhost:2990/jira",
+    "version": "8.14.0",
+    "versionNumbers": [
+        8,
+        14,
+        0
+    ],
+    "deploymentType": "Server",
+    "buildNumber": 814001,
+    "buildDate": "2020-11-23T00:00:00.000+0100",
+    "databaseBuildNumber": 814001,
+    "serverTime": "2020-12-17T00:23:14.029+0100",
+    "scmInfo": "ab08d3d2b500818bdad5c85d636b509d4cade801",
+    "serverTitle": "Your Company Jira"
+}
