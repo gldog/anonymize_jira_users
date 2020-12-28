@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import argparse
+import atexit
 import configparser
 import csv
 import json
@@ -743,7 +743,7 @@ def read_user_names_from_infile():
             if line and not line.startswith('#'):
                 user_name = line
                 g_users[user_name] = {}
-    log.info("  The user-names are: {}".format(list(g_users.keys())))
+    log.info("  The user-names are ({}): {}".format(len(g_users.keys()), list(g_users.keys())))
 
 
 def serialize_response(r, is_include_json_response=True):
@@ -1149,15 +1149,19 @@ def create_raw_report(overall_report):
 
         try:
             validation_has_errors = len(user_data['rest_get_anonymization__query_validation']['errors']) > 0
-        except:
+        except KeyError:
             validation_has_errors = False
 
         try:
             user_filter = user_data['user_filter']
             if not user_filter['is_anonymize_approval']:
                 number_of_skipped_users += 1
+            filter_is_anonymize_approval = user_filter['is_anonymize_approval']
+            filter_error_message = user_filter['error_message']
         except KeyError:
             user_filter = {}
+            filter_is_anonymize_approval = None
+            filter_error_message = None
 
         try:
             time_start = user_data['rest_user_delete_time']
@@ -1197,8 +1201,8 @@ def create_raw_report(overall_report):
             'user_display_name': user_display_name,
             'active': active,
             'validation_has_errors': validation_has_errors,
-            'filter_is_anonymize_approval': user_filter['is_anonymize_approval'],
-            'filter_error_message': user_filter['error_message'],
+            'filter_is_anonymize_approval': filter_is_anonymize_approval,
+            'filter_error_message': filter_error_message,
             'time_start': time_start,
             'time_finish': time_finish,
             'time_duration': '{}'.format(get_formatted_timediff_mmss(diff)) if diff is not None else None
@@ -1286,7 +1290,7 @@ def write_result_to_stdout(overview):
     print("")
 
 
-def reindex():
+def trigger_reindex():
     """Trigger a background reindex.
 
     Note,
@@ -1324,11 +1328,35 @@ def now_to_date_string():
     return to_date_string(datetime.now())
 
 
+def at_exit():
+    """Regardless of the exit-reason, write the reports."""
+
+    try:
+        # Check if finished-date is present. If not, the script was aborted.
+        g_details['execution']['script_finished']
+    except KeyError:
+        g_details['execution']['script_finished'] = now_to_date_string()
+        g_details['execution']['is_script_aborted'] = True
+        log.warning("Script has been aborted.")
+
+    raw_report = create_raw_report(g_details)
+    g_details['execution']['script_execution_time'] = get_formatted_timediff_hhmmss(
+        time_diff(
+            g_details['execution']['script_started'] + '.000',
+            g_details['execution']['script_finished'] + '.000'))
+    write_reports(raw_report)
+    write_result_to_stdout(raw_report['overview'])
+
+    with open(g_config['report_details_filename'], 'w', encoding=g_config['encoding']) as f:
+        print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
+
+
 def main():
     g_details['execution']['script_started'] = now_to_date_string()
     args = parse_parameters()
 
     if args.subparser_name == 'validate' or args.subparser_name == 'anonymize':
+        atexit.register(at_exit)
         log.debug("")
         read_user_names_from_infile()
         log.debug("")
@@ -1364,22 +1392,16 @@ def main():
         # anonymized users, so we have to create the report fist.
         raw_report = create_raw_report(g_details)
         if raw_report['overview']['number_of_anonymized_users'] > 0 and args.is_do_background_reindex:
-            # Let the user know if a re-index has beem triggered.
-            # The attribute 'is_background_reindex_triggered' is not the parameter 'is_do_background_reindex' got
-            # from the command-line.
+            # Let the user know if a re-index has been triggered.
+            # The following attribute 'is_background_reindex_triggered' is not the parameter
+            # 'is_do_background_reindex' got from the command-line.
             raw_report['overview']['is_background_reindex_triggered'] = True
-            reindex()
+            trigger_reindex()
 
         g_details['execution']['script_finished'] = now_to_date_string()
-        g_details['execution']['script_execution_time'] = get_formatted_timediff_hhmmss(
-            time_diff(
-                g_details['execution']['script_started'] + '.000',
-                g_details['execution']['script_finished'] + '.000'))
-        write_reports(raw_report)
-        write_result_to_stdout(raw_report['overview'])
+        g_details['execution']['is_script_aborted'] = False
 
-        with open(g_config['report_details_filename'], 'w', encoding=g_config['encoding']) as f:
-            print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
+        # Let at_exit() write the reports.
 
 
 if __name__ == '__main__':
