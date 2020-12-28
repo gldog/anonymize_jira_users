@@ -196,7 +196,18 @@ def merge_dicts(d1, d2):
 
 
 def validate_auth_parameter(auth):
-    auth_parts = re.split(r'[\s:]+', auth)
+    """Check parameter 'auth' for valid auth-type 'Basic' or 'Bearer, extract the auth-data, and return them.
+    :param auth: Expected is either something like 'Basic user:pass', or
+                'Bearer NDcyOTE1ODY4Nzc4Omj+FiGVuLh/vs4WjTS9/3lGaysM'
+    :return:
+        1 - Error-message in case the auth couldn't be parsed properly. None otherwise.
+        2 - The auth-type 'basic' or 'bearer' (lower case).
+        3 - In case of 'basic': The user-name. In case of 'bearer': The token.
+        4 - In case of 'basic': The password. In case  of 'bearer': None.
+    """
+
+    # Split 'Basic' or 'Bearer' from the rest.
+    auth_parts = re.split(r'\s+', auth, 1)
 
     if len(auth_parts) < 2:
         return "Invalid format in authentication parameter.", None, None, None
@@ -205,15 +216,29 @@ def validate_auth_parameter(auth):
     if not auth_type.lower() in ['basic', 'bearer']:
         return "Invalid authentication type '{}'. Expect 'Basic' or 'Bearer'.".format(auth_type), None, None, None
 
+    username = None
+    password = None
     if auth_type == 'basic':
-        if len(auth_parts) != 3:
+        # Split only at the first colon, as a colon could be part of the password.
+        name_and_password = re.split(r':', auth_parts[1], 1)
+        if len(name_and_password) != 2:
             return "Invalid format for 'Basic' in authentication argument.", None, None, None
+        else:
+            username = name_and_password[0]
+            password = name_and_password[1]
 
+    token = None
     if auth_type == 'bearer':
         if len(auth_parts) != 2:
             return "Invalid format for 'Bearer' in authentication argument.", None, None, None
+        else:
+            token = auth_parts[1]
 
-    return None, auth_type, auth_parts[1], auth_parts[2] if len(auth_parts) == 3 else None
+    return \
+        None, \
+        auth_type, \
+        username if auth_type == 'basic' else token, \
+        password if auth_type == 'basic' else None
 
 
 def setup_http_session(auth_type, user_or_bearer, passwd):
@@ -683,11 +708,11 @@ def parse_parameters():
         if not g_config['jira_auth']:
             errors.append("Missing authentication")
 
-        auth_error, auth_type, user_or_bearer, passwd = validate_auth_parameter(g_config["jira_auth"])
+        auth_error, auth_type, user_or_bearer, password = validate_auth_parameter(g_config["jira_auth"])
         if auth_error:
             errors.append(auth_error)
         else:
-            error_message = setup_http_session(auth_type, user_or_bearer, passwd)
+            error_message = setup_http_session(auth_type, user_or_bearer, password)
             if error_message:
                 errors.append(error_message)
             else:
