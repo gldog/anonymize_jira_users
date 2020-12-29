@@ -104,6 +104,10 @@ Parameters for commands `validate`, `anonymize`:
                           encoding'.
     --encoding ENCODING   Force a character-encoding for reading the infile.
                           Empty means platform dependent Python suggests.
+    -o OUT_DIR, --out-dir OUT_DIR
+                          Output-directory to write the reports into. If you'd
+                          like the date included, give something like `date
+                          +%y%m%d-%H%M-anonymize-instance1`. Defaults to '.'.
     --expand-validation-with-affected-entities
                           Include 'affectedEntities' in the validation result.
                           This is only for documentation to enrich the detailed
