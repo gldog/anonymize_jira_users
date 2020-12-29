@@ -635,10 +635,8 @@ The output is:
     2020-12-27 20:51:46,147:INFO:run_user_anonymization(): Going to delete or anonymize 4 users
     2020-12-27 20:51:46,147:INFO:run_user_anonymization(): for user 1 (name/key): user1pre84/user1pre84
     2020-12-27 20:51:46,282:INFO:run_user_anonymization(): for user 2 (name/key): user2pre84/user2pre84
-    2020-12-27 20:51:48,380:INFO:wait_until_anonymization_is_finished_or_timedout(): for user 2: user2pre84
     2020-12-27 20:51:48,395:INFO:run_user_anonymization(): for user 3 (name/key): user1post84/JIRAUSER10200
     2020-12-27 20:51:48,427:INFO:run_user_anonymization(): for user 4 (name/key): user2post84/JIRAUSER10201
-    2020-12-27 20:51:50,453:INFO:wait_until_anonymization_is_finished_or_timedout(): for user 4: user2post84
     Anonymizing Result:
       Users in infile:   4
       Skipped users:     0
@@ -856,10 +854,8 @@ The output is:
     2020-12-27 22:10:30,676:INFO:run_user_anonymization(): Going to delete or anonymize 4 users
     2020-12-27 22:10:30,676:INFO:run_user_anonymization(): for user 1 (name/key): user1pre84/user1pre84
     2020-12-27 22:10:30,718:INFO:run_user_anonymization(): for user 2 (name/key): user2pre84/user2pre84
-    2020-12-27 22:10:32,790:INFO:wait_until_anonymization_is_finished_or_timedout(): for user 2: user2pre84
     2020-12-27 22:10:32,803:INFO:run_user_anonymization(): for user 3 (name/key): user1post84/JIRAUSER10200
     2020-12-27 22:10:32,832:INFO:run_user_anonymization(): for user 4 (name/key): user2post84/JIRAUSER10201
-    2020-12-27 22:10:34,859:INFO:wait_until_anonymization_is_finished_or_timedout(): for user 4: user2post84
     2020-12-27 22:10:34,870:INFO:get_anonymized_user_data_from_rest(): for all anonymized users
     Anonymizing Result:
       Users in infile:   4

@@ -22,6 +22,7 @@ import json
 import locale
 import logging
 import os
+import pathlib
 import re
 import sys
 import textwrap
@@ -48,6 +49,9 @@ DEFAULT_CONFIG = {
     'jira_base_url': '',
     'jira_auth': '',
     'infile': '',
+    # Force a character-encoding for reading the infile. Empty means platform dependent Python suggests.
+    'encoding': None,
+    'out_dir': '.',
     'loglevel': 'INFO',
     'is_expand_validation_with_affected_entities': False,
     'is_dry_run': False,
@@ -62,8 +66,6 @@ DEFAULT_CONFIG = {
     # 0 (or any negative value) means: Wait as long as it takes.
     'timeout': 0,
     'is_do_background_reindex': False,
-    # None: The default Python suggests. Do not use an empty string here.
-    'encoding': None,
     # None instead of an empty string would also work regarding the program logic.
     # But None is forbidden in ConfigParser, which is used to write a default-config-file.
     # So we have to use the empty string.
@@ -409,6 +411,8 @@ def write_default_cfg_file(config_template_filename):
         #   Force a character-encoding for reading the infile. Empty means platform dependent Python suggests.
         #   The given value is an example.
         #encoding = utf-8
+        #   Output-directory to write the reports into.
+        #out_dir = {out_dir}
         #   Include 'affectedEntities' in the validation result. This is only for documentation 
         #   to enrich the detailed report. It doesn't affect the anonymization.
         #   The given value is the default.
@@ -443,6 +447,7 @@ def write_default_cfg_file(config_template_filename):
                    boolean_false=BOOLEAN_FALSE_VALUES,
                    valid_loglevels=PRETTY_PRINT_LOG_LEVELS,
                    loglevel=g_config['loglevel'],
+                   out_dir=g_config['out_dir'],
                    is_expand_validation_with_affected_entities=
                                        g_config['is_expand_validation_with_affected_entities'],
                    is_dry_run=g_config['is_dry_run'],
@@ -523,6 +528,20 @@ def set_logging():
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
+class PathAction(argparse.Action):
+    """Make a clean path: strip off trailing or multiple path-separators."""
+
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        if nargs is not None:
+            raise ValueError("nargs not allowed")
+        super(PathAction, self).__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        # print('%r %r %r' % (namespace, values, option_string))
+        values = str(pathlib.Path(values))
+        setattr(namespace, self.dest, values)
+
+
 def parse_parameters():
     #
     # Part 1: Define and parse the arguments.
@@ -589,6 +608,12 @@ def parse_parameters():
                       help="Force a character-encoding for reading the infile."
                            " Empty means platform dependent Python suggests.")
     parent_parser_for_validate_and_anonymize \
+        .add_argument('-o', '--out-dir', action=PathAction,
+                      help="Output-directory to write the reports into."
+                           " If you'd like the date included,"
+                           " give something like `date +%%y%%m%%d-%%H%%M-anonymize-instance1`."
+                           " Defaults to '{}'.".format(DEFAULT_CONFIG['out_dir']))
+    parent_parser_for_validate_and_anonymize \
         .add_argument('--expand-validation-with-affected-entities', default=False,
                       action='store_true',
                       dest='is_expand_validation_with_affected_entities',
@@ -635,8 +660,8 @@ def parse_parameters():
                          dest='config_template_filename',
                          help="Generate a configuration-template. Defaults to {}.".format(
                              DEFAULT_CONFIG_TEMPLATE_FILENAME))
-    sp_misc.add_argument('--recreate-report', action='store_true',
-                         help="Re-create the reports from the details file. Only for development.")
+    # sp_misc.add_argument('--recreate-report', action='store_true',
+    #                      help="Re-create the reports from the details file. Only for development.")
 
     parser.parse_args()
     args = parser.parse_args()
@@ -659,11 +684,12 @@ def parse_parameters():
         if args.config_template_filename:
             write_default_cfg_file(args.config_template_filename)
             sys.exit(0)
-        elif args.recreate_report:
-            recreate_reports()
-            sys.exit(0)
+        # elif args.recreate_report:
+        #     recreate_reports()
+        #     sys.exit(0)
         else:
-            sp_misc.error("Command 'misc' needs '-g' or '--recreate-report'")
+            # sp_misc.error("Command 'misc' needs '-g' or '--recreate-report'")
+            sp_misc.error("Command 'misc' needs '-g'")
 
     # In a config-file is given, merge it into the global config. Non-None-values overwrites the values present so far.
     # Note, a config-file can only be present for the sub-parsers.
@@ -891,11 +917,11 @@ def filter_users():
 
     vu = {user_name: user_data for (user_name, user_data) in g_users.items() if
           user_data['user_filter']['is_anonymize_approval'] is True}
-    log.info("Remaining users to be anonymized: {}".format(list(vu.keys())))
+    log.info("{} users remain to be anonymized: {}".format(len(vu.keys()), list(vu.keys())))
 
 
 def get_anonymization_progress(user_name=None, full_progress_url=None):
-    """Call the Get Progress API to check if there is an anonymization running.
+    """Call the Get Progress API and check if there is an anonymization running and to get the progress.
 
     There are two reasons to do this:
         1. Before the first anonymization to check if there is any anonymization running. In this case both parameters
@@ -905,16 +931,17 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
     When is an anonymization running, and when it is finished?
 
     Let's start with the HTTP status codes. 404 means "Returned if there is no user anonymization task found.". It is
-    obvious there is no anonymization running. We can return something like "No anon. running".
+    obvious there is no anonymization running. I can return something like "No anon. running".
 
     There is another status code documented: 403 "Returned if the logged-in user cannot anonymize users.". This is a
-    problem the script has handled before the anonymization has been scheduled and is not checked here with
-    regards to the running-status (in fact at the end of this function there is a r.raise_for_status() as a lifeline
-    in case I haven't implemented a bullet-proof permission check earlier).
+    problem the script has handled before the anonymization has been scheduled and is not checked here
+    (in fact at the end of this function there is a r.raise_for_status() as a lifeline in case I haven't implemented
+    a bullet-proof permission check earlier).
 
     There is the HTTP status code 200 left. If that is returned, I have to look into the JSON responses "status"-
     attribute. I haven't a mapping of HTTP status-code to progress "status"-attribute yet, by I have the list of
-     "status" values read from the Jira source code (jira-project/jira-components/jira-plugins/jira-rest/jira-rest-plugin/src/main/java/com/atlassian/jira/rest/v2/user/anonymization/UserAnonymizationProgressBean.java):
+     "status" values read from the Jira source code
+     (jira-project/jira-components/jira-plugins/jira-rest/jira-rest-plugin/src/main/java/com/atlassian/jira/rest/v2/user/anonymization/UserAnonymizationProgressBean.java):
     These are:
       - COMPLETED The anonymization process finished. Some errors or warnings might be present.
       - INTERRUPTED There is no connection with the node that was executing the anonymization process. Usually, this
@@ -922,6 +949,8 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
       - IN_PROGRESS The anonymization process is still being performed.
       - VALIDATION_FAILED The anonymization process hasn't been started because the validation has failed for some
             anonymization handlers.
+
+    Note, I have seen a "status" "IN_PROGRESS" with a "currentProgress" of 100.
 
     As a conclusion I can say:
 
@@ -931,14 +960,17 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
         200     |   other           |   Yes                                                     No
 
     The "errors" and "warnings" are not evaluated in this implementation step. Maybe later. I assume the validation
-    does the job to show errors, and the filter will filter user out in case of errors.
+    does the job to show errors, and the filter_users() will filter users out in case of errors.
 
     :param user_name: Optional. Given if there have been scheduled one of our anonymizations. In this case, the
         full_progress_url is also mandatory.
     :param full_progress_url: Optional. Given if there have been scheduled one of our anonymizations. In this case,
         the user_name is also mandatory.
-    :return: The progress (percentage) from the returned JSON. -1 if HTTP-status is 404 ("Returned if there is no user
-        anonymization task found.").
+    :return:
+        o The progress (percentage) from the returned JSON. 100 doesn't mean the "status" is also "COMPLETED".
+        o -1: if HTTP-status is 404 ("Returned if there is no user anonymization task found.").
+        o -2: if the "status" is "COMPLETED". I assume a "currentProgress" of 100.
+        o -3: Other "status" than "IN_PROGRESS" and "COMPLETED". Means "not in progress".
     """
     log.debug("user_name {}, full_progress_url {}".format(user_name, full_progress_url))
     assert not (bool(user_name) ^ bool(full_progress_url))
@@ -960,16 +992,20 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
         g_execution['rest_get_anonymization_progress__before_anonymization'] = serialize_response(r)
 
     progress_percentage = None
-    if r.status_code == 200:
-        if r.json()['status'] == 'IN_PROGRESS':
-            progress_percentage = r.json()['currentProgress']
-        else:
-            # Don't know if the API returns "currentProgress" and 100 in all other cases than IN_PROGRESS, so I
-            # force it to be 100.
-            progress_percentage = 100
-    elif r.status_code == 404:
+
+    if r.status_code == 404:
         # "Returned if there is no user anonymization task found."
         progress_percentage = -1
+    elif r.status_code == 200:
+        if r.json()['status'] == 'IN_PROGRESS':
+            # Value between 0 and 100.
+            progress_percentage = r.json()['currentProgress']
+        elif r.json()['status'] == 'COMPLETED':
+            progress_percentage = -2
+        else:
+            # Other "status" than "IN_PROGRESS" and "COMPLETED". Means "not in progress".
+            progress_percentage = -3
+
     log.debug("progress_percentage {}".format(progress_percentage))
 
     # For any other HTTP status:
@@ -1001,7 +1037,7 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
     :param user_name: The user-anonymization to wait for.
     :return: False if anonymization finished within the timeout. True otherwise (= timed out).
     """
-    log.info("for user {}: {}".format(i, user_name))
+    log.debug("for user {}: {}".format(i, user_name))
     user_data = g_users[user_name]
     url = g_config['jira_base_url'] + user_data['rest_post_anonymization']['json']['progressUrl']
     is_timed_out = True
@@ -1011,12 +1047,13 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
     next_progress_print_at = started_at + timedelta(minutes=1)
     while times_out_at is None or datetime.now() < times_out_at:
         progress_percentage = get_anonymization_progress(user_name, url)
+        # Any value <0 means "not in progress".
+        if progress_percentage < 0:
+            is_timed_out = False
+            break
         if datetime.now() >= next_progress_print_at:
             log.info("Progress {}".format(progress_percentage))
             next_progress_print_at += timedelta(minutes=1)
-        if progress_percentage == 100 or progress_percentage == -1:
-            is_timed_out = False
-            break
         time.sleep(g_config['regular_delay'])
 
     return is_timed_out
@@ -1096,7 +1133,8 @@ def get_anonymized_user_data_from_rest(anonymized_users):
 def is_any_anonymization_running():
     log.info("?")
     progress_percentage = get_anonymization_progress()
-    if progress_percentage == 100 or progress_percentage == -1:
+    # Any value <0 means "not in progress".
+    if progress_percentage < 0:
         log.info("No")
         return False
     else:
@@ -1285,10 +1323,18 @@ def write_reports(report):
     :param report:
     :return:
     """
-    with open(g_config['report_json_filename'], 'w', encoding=g_config['encoding']) as f:
+    pathlib.Path(g_config['out_dir']).mkdir(parents=True, exist_ok=True)
+
+    file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_details_filename'])
+    with open(file_path, 'w', encoding=g_config['encoding']) as f:
+        print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
+
+    file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_json_filename'])
+    with open(file_path, 'w', encoding=g_config['encoding']) as f:
         print("{}".format(json.dumps(report, indent=4)), file=f)
 
-    with open(g_config['report_text_filename'], 'w', newline='', encoding=g_config['encoding']) as f:
+    file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_text_filename'])
+    with open(file_path, 'w', newline='', encoding=g_config['encoding']) as f:
         fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
                       'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
@@ -1302,12 +1348,13 @@ def write_reports(report):
         writer.writerows(report['users'])
 
 
-def recreate_reports():
-    with open(g_config['report_details_filename'], 'r', encoding=g_config['encoding']) as f:
-        overall_report = json.load(f)
-        # The overall-report was written from the g_details.
-        raw_report = create_raw_report(overall_report)
-        write_reports(raw_report)
+# def recreate_reports():
+#     file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_details_filename'])
+#     with open(file_path, 'r', encoding=g_config['encoding']) as f:
+#         overall_report = json.load(f)
+#         # The overall-report was written from the g_details.
+#         raw_report = create_raw_report(overall_report)
+#         write_reports(raw_report)
 
 
 def write_result_to_stdout(overview):
@@ -1377,9 +1424,6 @@ def at_exit():
     write_reports(raw_report)
     write_result_to_stdout(raw_report['overview'])
 
-    with open(g_config['report_details_filename'], 'w', encoding=g_config['encoding']) as f:
-        print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
-
 
 def main():
     g_details['execution']['script_started'] = now_to_date_string()
@@ -1436,3 +1480,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
