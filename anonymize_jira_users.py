@@ -996,12 +996,12 @@ def get_applicationuser_data_from_rest():
         g_users[user_name]['rest_get_applicationuser'] = serialize_response(r)
 
 
-def wait_until_anonymization_is_finished_or_timedout(user_name):
+def wait_until_anonymization_is_finished_or_timedout(i, user_name):
     """Wait until the anonymization for the given user has been finished.
     :param user_name: The user-anonymization to wait for.
     :return: False if anonymization finished within the timeout. True otherwise (= timed out).
     """
-    log.info("for user {}".format(user_name))
+    log.info("for user {}: {}".format(i, user_name))
     user_data = g_users[user_name]
     url = g_config['jira_base_url'] + user_data['rest_post_anonymization']['json']['progressUrl']
     is_timed_out = True
@@ -1037,9 +1037,11 @@ def run_user_anonymization(valid_users, new_owner_key):
 
     url_for_deletion = g_config['jira_base_url'] + rel_url_for_deletion
     url_for_anonymizing = g_config['jira_base_url'] + rel_url_for_anonymizing
+    i = 0
     for user_name, user_data in valid_users.items():
+        i += 1
         user_key = user_data['rest_get_user__before_anonymization']['json']['key']
-        log.info("for user (name/key) {}/{}".format(user_name, user_key))
+        log.info("for user {} (name/key): {}/{}".format(i, user_name, user_key))
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
         if not g_config['is_dry_run']:
             is_user_deleted = False
@@ -1060,7 +1062,7 @@ def run_user_anonymization(valid_users, new_owner_key):
                 if r.status_code == 202:
                     log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
                     time.sleep(g_config['initial_delay'])
-                    is_timed_out = wait_until_anonymization_is_finished_or_timedout(user_name)
+                    is_timed_out = wait_until_anonymization_is_finished_or_timedout(i, user_name)
                     if is_timed_out:
                         log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
                                   " Abort script.".format(user_name, g_config['timeout']))
@@ -1304,8 +1306,8 @@ def recreate_reports():
     with open(g_config['report_details_filename'], 'r', encoding=g_config['encoding']) as f:
         overall_report = json.load(f)
         # The overall-report was written from the g_details.
-        report = create_raw_report(overall_report)
-        write_reports(report)
+        raw_report = create_raw_report(overall_report)
+        write_reports(raw_report)
 
 
 def write_result_to_stdout(overview):
