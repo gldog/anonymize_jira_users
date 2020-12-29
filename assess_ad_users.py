@@ -34,7 +34,7 @@ log.handlers[0].setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(mes
 numeric_level = getattr(logging, 'DEBUG', None)
 log.setLevel(numeric_level)
 
-#net_binary_name = '/Users/jo/atlas/prj/anonymize_jira_users/net_mock.py'
+# net_binary_name = '/Users/jo/atlas/prj/anonymize_jira_users/net_mock.py'
 net_binary_name = 'net'
 
 
@@ -72,20 +72,25 @@ def parse_ad_user_data(user_data):
 
 def get_ad_data_for_user(user_name):
     cmd = '{} user {} /domain'.format(net_binary_name, user_name)
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE)
+    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     # result contains: returncode, stderr, stdout
     return result
 
 
 def main():
+    print("getpreferredencoding {}, getfilesystemencoding {}".format(locale.getpreferredencoding(),
+                                                                     sys.getfilesystemencoding()))
     in_file_name = sys.argv[1]
     user_names = read_user_names_from_infile(in_file_name)
     log.info("User-names {}".format(user_names))
     lines = []
     for user_name in user_names:
+        # log.info("User {}".format(user_name))
         net_result = get_ad_data_for_user(user_name)
         if net_result.returncode == 0:
-            user_properties = parse_ad_user_data(net_result.stdout.decode('utf-8'))
+            # user_properties = parse_ad_user_data(net_result.stdout.decode('utf-8'))
+            decoded_stdout = net_result.stdout.decode('Latin-1')
+            user_properties = parse_ad_user_data(decoded_stdout)
             # log.debug("user_properties {}".format(user_properties))
             line_parts = []
             for k, v in user_properties.items():
@@ -105,7 +110,7 @@ def main():
 
     stem_name = Path(in_file_name).stem
     out_file_name = "{}_assessed.txt".format(stem_name)
-    with open(out_file_name, 'w') as f:
+    with open(out_file_name, 'w', encoding='utf-8') as f:
         # Create a date/time-string, but remove the nit-picky microseconds.
         date_string = "{}".format(datetime.now()).split('.')[0]
         f.write("# File generated at {}\n\n".format(date_string))
