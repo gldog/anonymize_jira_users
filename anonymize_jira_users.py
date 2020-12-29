@@ -26,7 +26,7 @@ import re
 import sys
 import textwrap
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from json.decoder import JSONDecodeError
 from urllib import parse
 
@@ -173,7 +173,8 @@ def get_sanitized_global_details():
     :return: The sanitized details.
     """
     sanitized_details = g_details.copy()
-    sanitized_details['effective_config']['jira_auth'] = '<sanitized>'
+    if sanitized_details['effective_config']['jira_auth']:
+        sanitized_details['effective_config']['jira_auth'] = '<sanitized>'
     return sanitized_details
 
 
@@ -998,25 +999,27 @@ def get_applicationuser_data_from_rest():
 def wait_until_anonymization_is_finished_or_timedout(user_name):
     """Wait until the anonymization for the given user has been finished.
     :param user_name: The user-anonymization to wait for.
-    :return: 0 if anonymization finished within the timeout. Otherwise the seconds waited until the timeout.
+    :return: False if anonymization finished within the timeout. True otherwise (= timed out).
     """
     log.info("for user {}".format(user_name))
     user_data = g_users[user_name]
     url = g_config['jira_base_url'] + user_data['rest_post_anonymization']['json']['progressUrl']
-    seconds_waited = 0
-    # Print progress once a minute
-    next_progress_print_at = 60
-    while g_config['timeout'] <= 0 or seconds_waited < g_config['timeout']:
+    is_timed_out = True
+    started_at = datetime.now()
+    times_out_at = started_at + timedelta(seconds=g_config['timeout']) if g_config['timeout'] else None
+    # Print progress once a minute.
+    next_progress_print_at = started_at + timedelta(minutes=1)
+    while times_out_at is None or datetime.now() < times_out_at:
         progress_percentage = get_anonymization_progress(user_name, url)
-        if seconds_waited >= next_progress_print_at:
+        if datetime.now() >= next_progress_print_at:
             log.info("Progress {}".format(progress_percentage))
-            next_progress_print_at += 60
+            next_progress_print_at += timedelta(minutes=1)
         if progress_percentage == 100 or progress_percentage == -1:
-            seconds_waited = 0
+            is_timed_out = False
             break
         time.sleep(g_config['regular_delay'])
-        seconds_waited += g_config['regular_delay']
-    return seconds_waited
+
+    return is_timed_out
 
 
 def run_user_anonymization(valid_users, new_owner_key):
@@ -1057,8 +1060,8 @@ def run_user_anonymization(valid_users, new_owner_key):
                 if r.status_code == 202:
                     log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
                     time.sleep(g_config['initial_delay'])
-                    waited = wait_until_anonymization_is_finished_or_timedout(user_name)
-                    if waited > 0:
+                    is_timed_out = wait_until_anonymization_is_finished_or_timedout(user_name)
+                    if is_timed_out:
                         log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
                                   " Abort script.".format(user_name, g_config['timeout']))
                         break
