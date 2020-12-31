@@ -66,10 +66,6 @@ DEFAULT_CONFIG = {
     # 0 (or any negative value) means: Wait as long as it takes.
     'timeout': 0,
     'is_do_background_reindex': False,
-    # None instead of an empty string would also work regarding the program logic.
-    # But None is forbidden in ConfigParser, which is used to write a default-config-file.
-    # So we have to use the empty string.
-    'features': ''
 }
 
 DEFAULT_CONFIG_REPORT_BASENAME = 'anonymizing_report'
@@ -86,42 +82,6 @@ BOOLEAN_FALSE_VALUES = ['no', 'false', 'off']
 BOOLEAN_TRUE_VALUES = ['yes', 'true', 'on']
 
 #
-# Features are some kind of extensions only functional with some configuration outside this script.
-#
-# Feature FEATURE_DO_REPORT_ANONYMIZED_USER_DATA:
-# Prerequisite:
-#   The REST-endpint
-ANONHELPER_APPLICATIONUSER_URL = '/rest/anonhelper/latest/applicationuser'
-#   provided by add-on jira-anonymizinghelper, see https://bitbucket.org/jheger/jira-anonymizinghelper/src/master/
-#
-# Description:
-#
-# The anonymization changes a user-name to the format "username12345" and the display-name to the format "user-a2b4e".
-# If a user was created in Jira-version <8.4, the user-key mostly is equal to the user-name. In this case,
-# the anonymization changes also the user-key to the format "JIRAUSER12345". Users created in Jira >= 8.4 already
-# have a user-key of this format. We can see, the ID is the base to form the user-name and -key.
-#
-# During anonymization, the Jira REST-API do not provide any information about the new user-name, user-key,
-# display-name, nor the ID ("12345").
-#
-# If you have to record a mapping from the un-anonymized user to the anonymized user e. g. for legal department,
-# this is not possible out of the box.
-#
-# This feature
-#   - reads the user-ID which is the base for the anonymized user-name and -key,
-#       from GET /rest/anonhelper/latest/applicationuser before anonymization,
-#   - predicts the new user-names,
-#   - query the anonymized users by the predicted user-names after anonymization,
-#   - records the anonymized user-name, -key, and display-name in addition.
-#
-# Check if this REST-endpoint can be reached:
-#   curl --insecure -u <user>:<pass> <jira-base-url>/rest/anonhelper/latest/applicationuser?username=<a-username>
-#
-FEATURE_DO_REPORT_ANONYMIZED_USER_DATA = 'do_report_anonymized_user_data'
-FEATURES = [FEATURE_DO_REPORT_ANONYMIZED_USER_DATA]
-PRETTY_PRINT_FEATURES = "{}".format(FEATURES).replace('[', '').replace(']', '').replace('\'', '')
-
-#
 # Global vars.
 #
 
@@ -130,10 +90,15 @@ log = logging.getLogger()
 g_config = DEFAULT_CONFIG
 
 # The keys are:
+#   - script_started
 #   - rest_get_mypermissions
-#   - rest_get_applicationuser__check_if_api_do_respond
+#   - rest_get_	user__new_owner
 #   - rest_get_anonymization_progress__before_anonymization
+#   - rest_auditing_events
 #   - rest_post_reindex
+#   - script_finished
+#   - is_script_aborted
+#   - script_execution_time
 g_execution = {}
 
 # The user data.
@@ -145,9 +110,10 @@ g_execution = {}
 #           - error_message
 #           - is_anonymize_approval
 #       - rest_delete_user
+#       - rest_user_delete_time
 #       - rest_post_anonymization
 #       - rest_get_anonymization_progress
-#       - rest_get_user__query_anonymized_user
+#       - anonymized_data_from_rest_auditing_events
 g_users = {
     # 'doc': 'This is for collecting user-related data during execution.'
 }
@@ -178,10 +144,6 @@ def get_sanitized_global_details():
     if sanitized_details['effective_config']['jira_auth']:
         sanitized_details['effective_config']['jira_auth'] = '<sanitized>'
     return sanitized_details
-
-
-def is_feature_do_report_anonymized_user_data_enabled():
-    return g_config['features'] and FEATURE_DO_REPORT_ANONYMIZED_USER_DATA in g_config['features']
 
 
 def merge_dicts(d1, d2):
@@ -332,44 +294,6 @@ def check_for_admin_permission():
     return error_message
 
 
-def check_if_feature_do_report_anonymized_user_data_is_functional(user):
-    """Check if REST-endpoint for this feature can be reached.
-    :return: None if functional. Otherwise an error-message.
-    """
-    rel_url = ANONHELPER_APPLICATIONUSER_URL
-    url = g_config['jira_base_url'] + rel_url
-    url_params = {'username': user}
-    r = g_session.get(url=url, params=url_params)
-    g_execution['rest_get_applicationuser__check_if_api_do_respond'] = serialize_response(r)
-    error_message = None
-    # In case the URL can't be reached the auth-methodes' results differ:
-    #   - With Basic, the status-code is 404. Easy to detect.
-    #   - With Bearer, Jira redirects to the Login-page and the status-code is 200! In the first place 200 sounds like
-    #       the original request succeeded. But in fact it hasn't.
-    #       There are several ways to detect a redirect.
-    #           - The length of r.history() is greater than 0. The (in this case single) entry has status-code 302.
-    #           - In r.text() is not the JSON-structure we expect (not a JSON at all).
-    #           - In r.url() something like "login.jsp" is present.
-    #       I'm not confident in this, but I think taking the history into account is the most proper solution.
-    if r.status_code == 404:
-        error_message = True
-    elif r.status_code == 200:
-        if len(r.history) > 0:
-            # Ran into the redirect (or at least any unexpected behaviour).
-            error_message = True
-        try:
-            # Check if this is the JSON we expect here.
-            r.json()[g_config['new_owner']]
-        except (KeyError, JSONDecodeError):
-            error_message = True
-
-    if error_message:
-        error_message = "The URL {} {} needed by feature {} can't be reached.".format(
-            r.request.method, ANONHELPER_APPLICATIONUSER_URL, FEATURE_DO_REPORT_ANONYMIZED_USER_DATA)
-
-    return error_message
-
-
 def write_default_cfg_file(config_template_filename):
     with open(config_template_filename, 'w') as f:
         help_text = """        ####
@@ -439,9 +363,6 @@ def write_default_cfg_file(config_template_filename):
         #   If at least one user was anonymized, trigger a background re-index.
         #   The given value is the default.
         #is_do_background_reindex = {is_do_background_reindex}
-        #   Needs an add-on. Valid values are: {features}
-        #   Please read the docs about features.
-        #features = 
         """.format(scriptname=os.path.basename(__file__),
                    boolean_true=BOOLEAN_TRUE_VALUES,
                    boolean_false=BOOLEAN_FALSE_VALUES,
@@ -455,8 +376,7 @@ def write_default_cfg_file(config_template_filename):
                    initial_delay=g_config['initial_delay'],
                    regular_delay=g_config['regular_delay'],
                    timeout=g_config['timeout'],
-                   is_do_background_reindex=g_config['is_do_background_reindex'],
-                   features=PRETTY_PRINT_FEATURES)
+                   is_do_background_reindex=g_config['is_do_background_reindex'])
         f.write(textwrap.dedent(help_text))
 
 
@@ -483,16 +403,6 @@ def read_configfile_and_merge_into_global_config(args):
             real_dict[k] = True
         elif v.lower() in BOOLEAN_FALSE_VALUES:
             real_dict[k] = False
-        elif k.lower() == 'features':
-            # The ConfigParser doesn't parse lists. We have to convert the delimited feature-string to a list by
-            # ourself.
-            if v:
-                real_dict[k] = re.split(r'[\s,;]+', v)
-                # If there is a trailing comma, the resulting list contains an entry with an empty string.
-                # The following code removes empty entries:
-                real_dict[k] = list(filter(None, real_dict[k]))
-            else:
-                real_dict[k] = []
         else:
             try:
                 real_dict[k] = int(v)
@@ -640,11 +550,6 @@ def parse_parameters():
     sp_anonymize.add_argument('-d', '--try-delete-user', default=None, action='store_true',
                               dest='is_try_delete_user',
                               help="Try deleting the user. If not possible, do anonymize.")
-    # This argument belongs to the "anonymize" and therefore is parsed here in context of sp_anonymize.
-    # But in future versions of the anonymizer this could become a more global argument.
-    sp_anonymize.add_argument('-f', '--features', nargs='+', metavar='FEATURES', default=None,
-                              help="Features need external tools. See the docs. Choices: {}".format(
-                                  PRETTY_PRINT_FEATURES))
     sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
                               help="Finally do not delete nor anonymize."
                                    " To get familiar with the script and to test it.")
@@ -698,11 +603,6 @@ def parse_parameters():
 
     # Merge command line arguments in and over the global config. Non-None-values overwrites the values present so far.
     merge_dicts(g_config, vars(args))
-
-    # The "features"-feature is not bound to a specific sub-parser, so it is validated here.
-    if g_config['features'] and not set(g_config['features']).issubset(FEATURES):
-        parser.error('{}'.format(
-            "Features contain at least one unsupported feature-name. Supported features are: {}".format(FEATURES)))
 
     #
     # Checks for both sub-parsers.
@@ -762,13 +662,6 @@ def parse_parameters():
                         sp_anonymize.error(r.json()['errorMessages'])
                     else:
                         r.raise_for_status()
-
-            if g_config['features'] and 'do_report_anonymized_user_data' in g_config['features']:
-                # Take new_owner for this check, as this is the only user we assume it exists.
-                # We can't use the admin-user because they could use a Bearer-token (without any user-name).
-                error_message = check_if_feature_do_report_anonymized_user_data_is_functional(g_config['new_owner'])
-                if error_message:
-                    sp_anonymize.error(error_message)
 
     set_logging()
 
@@ -1015,23 +908,6 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
     return progress_percentage
 
 
-def get_applicationuser_data_from_rest():
-    """Read the ID, USER_KEY, LOWER_USER_NAME, and ACTIVE from Jira-DB for the user-names given as the dict-keys and
-    supplement it to the dict.
-
-    This functions assumes there is the REST endpoint ANONHELPER_APPLICATIONUSER_URL available!
-
-    :return:    Nothing.
-    """
-    rel_url = ANONHELPER_APPLICATIONUSER_URL
-    log.info("GET {}".format(rel_url))
-    url = g_config['jira_base_url'] + rel_url
-    for user_name in g_users.keys():
-        url_params = {'username': user_name}
-        r = g_session.get(url=url, params=url_params)
-        g_users[user_name]['rest_get_applicationuser'] = serialize_response(r)
-
-
 def wait_until_anonymization_is_finished_or_timedout(i, user_name):
     """Wait until the anonymization for the given user has been finished.
     :param user_name: The user-anonymization to wait for.
@@ -1116,19 +992,6 @@ def run_user_anonymization(valid_users, new_owner_key):
                     else:
                         # For all other, not documented HTTP-problems:
                         r.raise_for_status()
-
-
-def get_anonymized_user_data_from_rest(anonymized_users_data):
-    rel_url = '/rest/api/2/user'
-    log.info("for all anonymized users".format(rel_url))
-    url = g_config['jira_base_url'] + rel_url
-    for user_name, user_data in anonymized_users_data.items():
-        anonymized_user_name = 'jirauser{}'.format(user_data['rest_get_applicationuser']['json'][user_name]['id'])
-        url_params = {'username': anonymized_user_name}
-        # TODO should only be called if the user was anonymized, but not deleted.
-        r = g_session.get(url=url, params=url_params)
-        g_users[user_name]['rest_get_user__query_anonymized_user'] = serialize_response(r)
-        log.debug(g_users[user_name]['rest_get_user__query_anonymized_user'])
 
 
 def is_anonymized_user_data_complete_for_user(user_name):
@@ -1223,17 +1086,6 @@ def get_anonymized_user_data_from_audit_data(anonymized_users_data):
                     g_users[from_name]['anonymized_data_from_rest_auditing_events']['user_name'] = changedValue['to']
                     g_users[from_name]['anonymized_data_from_rest_auditing_events']['user_key'] = \
                         entity['affectedObjects'][0]['id']
-        # elif action == 'User\'s key changed':
-        #    # First get the user's user-name.
-        #    # Saw a list with 2 dicts, both with a 'name' key. I think it is save to access by [0].
-        #    user_name = entity['affectedObjects'][0]['name']
-        #    if user_name not in anonymized_users or is_anonymized_user_data_complete_for_user(user_name):
-        #        continue
-        #    for changedValue in entity['changedValues']:
-        #        # I think this list has only one entry: the 'Key'. But technically it is a list, so we should
-        #        # iterate over it.
-        #        if changedValue['key'] == 'Key':
-        #            g_users[user_name]['anonymized_data_from_rest_auditing_events']['user_key'] = changedValue['to']
         elif action == 'User updated':
             # Saw a list with 1 dict, with a 'name' key. I think it is save to access by [0].
             user_name = entity['affectedObjects'][0]['name']
@@ -1392,27 +1244,6 @@ def create_raw_report(overall_report):
             'time_duration': '{}'.format(get_formatted_timediff_mmss(diff)) if diff is not None else None
         }
 
-        # if is_feature_do_report_anonymized_user_data_enabled():
-        #     if is_anonymized:
-        #         try:
-        #             anonymized_user_name = user_data['rest_get_user__query_anonymized_user']['json']['name']
-        #             anonymized_user_key = user_data['rest_get_user__query_anonymized_user']['json']['key']
-        #             anonymized_user_display_name = user_data['rest_get_user__query_anonymized_user']['json'][
-        #                 'displayName']
-        #         except KeyError:
-        #             # This is an error! Let the user know.
-        #             assert False, "The user '{}' was anonymized and the feature/API {} is functional," \
-        #                           "but the anonymized user-name could not retrieved".format(
-        #                 user_name, ANONHELPER_APPLICATIONUSER_URL)
-        #     else:
-        #         anonymized_user_name = ""
-        #         anonymized_user_key = ""
-        #         anonymized_user_display_name = ""
-        #
-        #     user_report['anonymized_user_name'] = anonymized_user_name
-        #     user_report['anonymized_user_key'] = anonymized_user_key
-        #     user_report['anonymized_user_display_name'] = anonymized_user_display_name
-
         if is_anonymized:
             try:
                 anonymized_user_name = user_data['anonymized_data_from_rest_auditing_events']['user_name']
@@ -1472,9 +1303,8 @@ def write_reports(report):
                       'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
                       'action',
-                      'time_start', 'time_finish', 'time_duration']
-        if is_feature_do_report_anonymized_user_data_enabled():
-            fieldnames.extend(['anonymized_user_name', 'anonymized_user_key', 'anonymized_user_display_name'])
+                      'time_start', 'time_finish', 'time_duration',
+                      'anonymized_user_name', 'anonymized_user_key', 'anonymized_user_display_name']
 
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -1570,12 +1400,8 @@ def main():
         get_users_data_from_rest()
         log.debug("")
         get_validation_data_from_rest()
-        if is_feature_do_report_anonymized_user_data_enabled():
-            log.debug("")
-            get_applicationuser_data_from_rest()
         log.debug("")
         filter_users()
-
         if args.subparser_name == 'anonymize':
             log.debug("")
             if is_any_anonymization_running():
@@ -1590,9 +1416,6 @@ def main():
                 # run_user_anonymization() expects the user-key, not the user-name.
                 new_owner_key = g_execution['rest_get_user__new_owner']['json']['key']
                 run_user_anonymization(anonymized_users_data, new_owner_key)
-                if is_feature_do_report_anonymized_user_data_enabled():
-                    log.debug("")
-                    get_anonymized_user_data_from_rest(anonymized_users_data)
                 get_anonymized_user_data_from_audit_data(anonymized_users_data)
 
         # Re-indexing is specific to the "if args.subparser_name == 'anonymize'". But the re-index shall only be
@@ -1614,4 +1437,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
