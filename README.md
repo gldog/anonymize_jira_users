@@ -332,8 +332,8 @@ The output is:
 
     2020-12-27 21:27:55,651:INFO:read_user_names_from_infile(): usernames.txt
     2020-12-27 21:27:55,652:INFO:read_user_names_from_infile():   The user-names are (2): ['user1pre84', 'user1post84']
-    2020-12-27 21:27:55,652:INFO:get_users_data_from_rest(): for 2 users
-    2020-12-27 21:27:55,689:INFO:get_validation_data_from_rest(): 
+    2020-12-27 21:27:55,652:INFO:get_users_data(): for 2 users
+    2020-12-27 21:27:55,689:INFO:get_validation_data(): 
     2020-12-27 21:27:55,778:INFO:filter_users(): by existence and validation-data
     2020-12-27 21:27:55,779:INFO:filter_users(): 2 users remain to be anonymized: ['user1pre84', 'user1post84']
     Anonymizing Result:
@@ -427,8 +427,8 @@ The output is:
 
     2020-12-27 21:34:39,776:INFO:read_user_names_from_infile(): usernames.txt
     2020-12-27 21:34:39,777:INFO:read_user_names_from_infile():   The user-names are (3): ['user1pre84', 'deleted-user', 'user-from-ad']
-    2020-12-27 21:34:39,777:INFO:get_users_data_from_rest(): for 3 users
-    2020-12-27 21:34:39,825:INFO:get_validation_data_from_rest(): 
+    2020-12-27 21:34:39,777:INFO:get_users_data(): for 3 users
+    2020-12-27 21:34:39,825:INFO:get_validation_data(): 
     2020-12-27 21:34:39,835:INFO:filter_users(): by existence and validation-data
     2020-12-27 21:34:39,835:WARNING:filter_users(): User user1pre84: Is an active user.
     2020-12-27 21:34:39,835:WARNING:filter_users(): User deleted-user: The user named 'deleted-user' does not exist
@@ -614,8 +614,8 @@ The output is:
 
     2020-12-27 20:51:45,957:INFO:read_user_names_from_infile(): test/usernames.txt
     2020-12-27 20:51:45,958:INFO:read_user_names_from_infile():   The user-names are (4): ['user1pre84', 'user2pre84', 'user1post84', 'user2post84']
-    2020-12-27 20:51:45,958:INFO:get_users_data_from_rest(): for 4 users
-    2020-12-27 20:51:46,013:INFO:get_validation_data_from_rest(): 
+    2020-12-27 20:51:45,958:INFO:get_users_data(): for 4 users
+    2020-12-27 20:51:46,013:INFO:get_validation_data(): 
     2020-12-27 20:51:46,132:INFO:filter_users(): by existence and validation-data
     2020-12-27 20:51:46,132:INFO:filter_users(): 4 users remain to be anonymized: ['user1pre84', 'user2pre84', 'user1post84', 'user2post84']
     2020-12-27 20:51:46,132:INFO:is_any_anonymization_running(): ?

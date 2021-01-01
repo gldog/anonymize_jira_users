@@ -671,7 +671,7 @@ def parse_parameters():
             if not g_config['new_owner']:
                 sp_anonymize.error("Missing new_owner.")
             else:
-                r = get_user_data_from_rest(g_config['new_owner'])
+                r = get_user_data(g_config['new_owner'])
                 if r.status_code != 200:
                     if r.status_code == 404:
                         sp_anonymize.error(r.json()['errorMessages'])
@@ -732,7 +732,7 @@ def serialize_response(r, is_include_json_response=True):
     return j
 
 
-def get_user_data_from_rest(user_name):
+def get_user_data(user_name):
     rel_url = '/rest/api/2/user'
     log.info("for user {}".format(user_name))
     url = g_config['jira_base_url'] + rel_url
@@ -743,7 +743,7 @@ def get_user_data_from_rest(user_name):
     return r
 
 
-def get_users_data_from_rest():
+def get_users_data():
     rel_url = '/rest/api/2/user'
     log.info("for {} users".format(len(g_users)))
     url = g_config['jira_base_url'] + rel_url
@@ -754,7 +754,7 @@ def get_users_data_from_rest():
         log.debug(g_users[user_name]['rest_get_user__before_anonymization'])
 
 
-def get_validation_data_from_rest():
+def get_validation_data():
     rel_url = '/rest/api/2/user/anonymization'
     log.info("")
     url = g_config['jira_base_url'] + rel_url
@@ -1510,9 +1510,9 @@ def main():
         log.debug("")
         read_user_names_from_infile()
         log.debug("")
-        get_users_data_from_rest()
+        get_users_data()
         log.debug("")
-        get_validation_data_from_rest()
+        get_validation_data()
         log.debug("")
         filter_users()
         if args.subparser_name == 'anonymize':
