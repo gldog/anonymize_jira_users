@@ -113,7 +113,7 @@ g_execution = {}
 #       - rest_user_delete_time
 #       - rest_post_anonymization
 #       - rest_get_anonymization_progress
-#       - anonymized_data_from_rest_auditing_events
+#       - anonymized_data_from_rest
 g_users = {
     # 'doc': 'This is for collecting user-related data during execution.'
 }
@@ -292,6 +292,18 @@ def check_for_admin_permission():
             r.status_code,
             r.text)
     return error_message
+
+
+def get_jira_serverinfo():
+    rel_url = '/rest/api/2/serverInfo'
+    url = g_config['jira_base_url'] + rel_url
+    r = g_session.get(url=url)
+    g_execution['rest_get_serverInfo'] = serialize_response(r)
+    r.raise_for_status()
+
+
+def is_jira_version_8_7():
+    return str(g_execution['rest_get_serverInfo']['json']['version']).startswith('8.7.')
 
 
 def write_default_cfg_file(config_template_filename):
@@ -646,6 +658,9 @@ def parse_parameters():
                 error_message = check_for_admin_permission()
                 if error_message:
                     errors.append(error_message)
+                else:
+                    get_jira_serverinfo()
+
         if len(errors) > 0:
             parent_parser_for_validate_and_anonymize.error('; '.join(errors))
 
@@ -994,15 +1009,15 @@ def run_user_anonymization(valid_users, new_owner_key):
                         r.raise_for_status()
 
 
-def is_anonymized_user_data_complete_for_user(user_name):
+def is_anonymized_user_data_complete_for_user(user_name, key):
     """Check if all three items user-name, -key, and display-name are collected so far.
      If so, we're done with this user."""
-    anonymized_data_for_user = g_users[user_name]['anonymized_data_from_rest_auditing_events']
+    anonymized_data_for_user = g_users[user_name][key]
     return anonymized_data_for_user['user_name'] and anonymized_data_for_user['user_key'] and anonymized_data_for_user[
         'display_name']
 
 
-def get_anonymized_user_data_from_audit_data(anonymized_users_data):
+def get_anonymized_user_data_from_audit_events(anonymized_users_data):
     # Format of "script_started" is "2020-12-29T23:17:35".
     script_start_date_str = g_execution['script_started']
     # Convert to UTC. The conversion respects DST.
@@ -1041,15 +1056,15 @@ def get_anonymized_user_data_from_audit_data(anonymized_users_data):
     # global g_users
     # g_users = g_d['users_from_infile']
 
+    anonymized_data = 'anonymized_data_from_rest'
     for user_name, user_data in g_users.items():
-        user_data['anonymized_data_from_rest_auditing_events'] = {
+        user_data[anonymized_data] = {
             'user_name': None,
             'user_key': None,
             'display_name': None
         }
 
     anonymized_users = anonymized_users_data.keys()
-
     for entity in auditing_events['entities']:
         # try: This is a very defensive implementation. I'm not that experienced with the auditing-API.
         # Maybe there is a type.action in every entity.
@@ -1081,21 +1096,119 @@ def get_anonymized_user_data_from_audit_data(anonymized_users_data):
                 # TODO comment about list
                 if changedValue['key'] == 'Username':
                     from_name = changedValue['from']
-                    if from_name not in anonymized_users or is_anonymized_user_data_complete_for_user(from_name):
+                    if from_name not in anonymized_users or \
+                            is_anonymized_user_data_complete_for_user(from_name, anonymized_data):
                         break
-                    g_users[from_name]['anonymized_data_from_rest_auditing_events']['user_name'] = changedValue['to']
-                    g_users[from_name]['anonymized_data_from_rest_auditing_events']['user_key'] = \
+                    g_users[from_name][anonymized_data]['user_name'] = changedValue['to']
+                    g_users[from_name][anonymized_data]['user_key'] = \
                         entity['affectedObjects'][0]['id']
         elif action == 'User updated':
             # Saw a list with 1 dict, with a 'name' key. I think it is save to access by [0].
             user_name = entity['affectedObjects'][0]['name']
-            if user_name not in anonymized_users or is_anonymized_user_data_complete_for_user(user_name):
+            if user_name not in anonymized_users or \
+                    is_anonymized_user_data_complete_for_user(user_name, anonymized_data):
                 continue
             for changedValue in entity['changedValues']:
                 # I think this list has only one entry: the 'Key'. But technically it is a list, so we should
                 # iterate over it.
                 if changedValue['key'] == 'Full name':
-                    g_users[user_name]['anonymized_data_from_rest_auditing_events']['display_name'] = changedValue['to']
+                    g_users[user_name][anonymized_data]['display_name'] = changedValue['to']
+
+
+def get_anonymized_user_data_from_audit_records(anonymized_users_data):
+    # Format of "script_started" is "2020-12-29T23:17:35".
+    script_start_date_str = g_execution['script_started']
+    # Convert to UTC. The conversion respects DST.
+    script_start_date_local = datetime.strptime(script_start_date_str, '%Y-%m-%dT%H:%M:%S')
+    script_start_date_utc = time.strftime("%Y-%m-%dT%H:%M:%S.000Z",
+                                          time.gmtime(
+                                              time.mktime(time.strptime(script_start_date_str, '%Y-%m-%dT%H:%M:%S'))))
+    log.info("")
+    log.debug("script_start_date: local {}, UTC {}".format(script_start_date_local, script_start_date_utc))
+
+    rel_url = '/rest/api/2/auditing/record'
+    url = g_config['jira_base_url'] + rel_url
+    # URL-parameters:
+    # Include the from-date, to not include e.g. previous renamings which has nothing to do with the anonymization,
+    # and to limit the amount of response-data. The date must be given in UTC with format "2020-12-30T13:53:17.996Z".
+    # The response-JSON is sorted by date descending.
+    url_params = {'from': script_start_date_utc}
+    # url_params = {} -- for testing
+    r = g_session.get(url=url, params=url_params)
+    # TODO store whole response only in case the to-date-filter was set.
+    g_execution['rest_auditing_records'] = {'doc': "The date in the URL-param is UTC."}
+    g_execution['rest_auditing_records'].update(serialize_response(r))
+    # Expect 200 OK here.
+    r.raise_for_status()
+    auditing_records = r.json()
+
+    # auditing_records = None
+    # with open('out.json', 'r') as f:
+    #    auditing_records = json.load(f)
+
+    # with open('anonymizing_report_details.json', 'r') as details_f:
+    #    g_d = json.load(details_f)
+
+    # print("auditing_records {}".format(auditing_records['entities']))
+
+    # global g_users
+    # g_users = g_d['users_from_infile']
+
+    anonymized_data = 'anonymized_data_from_rest'
+    for user_name, user_data in g_users.items():
+        user_data[anonymized_data] = {
+            'user_name': None,
+            'user_key': None,
+            'display_name': None
+        }
+
+    anonymized_users = anonymized_users_data.keys()
+    for record in auditing_records['records']:
+        # try: This is a very defensive implementation. I'm not that experienced with the auditing-API.
+        # Maybe there is a type.summary in every record.
+        try:
+            summary = record['summary']
+        except KeyError:
+            continue
+
+        #
+        # About the actions
+        #
+        # The order of actions after an anonymization is:
+        #   1. record.summary: "User anonymization started"
+        #   2. record.summary: "User updated"
+        #   3. record.summary: "User's key changed"
+        #   4. record.summary: "User renamed"
+        #   5. record.summary: "User anonymized"
+        #
+        # The events are sorted by date descending. This means, the above actions come in the order 5 to 1.
+        #
+        # We're looking here for the new user-name, the new user-key (if the user is pre-Jira-8.4-user), and
+        # the new display-name. It is sufficient to hook into 'User renamed' and 'User updated' to get these data.
+        #
+
+        if summary == 'User renamed':
+            # Expect only one list-item here, but for sure I iterate over it.
+            for changedValue in record['changedValues']:
+                # TODO comment about list
+                if changedValue['fieldName'] == 'Username':
+                    from_name = changedValue['changedFrom']
+                    if from_name not in anonymized_users or \
+                            is_anonymized_user_data_complete_for_user(from_name, anonymized_data):
+                        break
+                    g_users[from_name][anonymized_data]['user_name'] = changedValue['changedTo']
+                    g_users[from_name][anonymized_data]['user_key'] = record['objectItem']['id']
+        elif summary == 'User updated':
+            # Saw a list with 1 dict, with a 'name' key. I think it is save to access by [0].
+            user_name = record['objectItem']['name']
+            if user_name not in anonymized_users or \
+                    is_anonymized_user_data_complete_for_user(user_name, anonymized_data):
+                continue
+            for changedValue in record['changedValues']:
+                # I think this list has only one entry: the 'Key'. But technically it is a list, so we should
+                # iterate over it.
+                if changedValue['fieldName'] == 'Full name':
+                    g_users[user_name][anonymized_data]['display_name'] = changedValue['changedTo']
 
 
 def is_any_anonymization_running():
@@ -1246,12 +1359,12 @@ def create_raw_report(overall_report):
 
         if is_anonymized:
             try:
-                anonymized_user_name = user_data['anonymized_data_from_rest_auditing_events']['user_name']
-                anonymized_user_key = user_data['anonymized_data_from_rest_auditing_events']['user_key']
-                anonymized_user_display_name = user_data['anonymized_data_from_rest_auditing_events']['display_name']
+                anonymized_user_name = user_data['anonymized_data_from_rest']['user_name']
+                anonymized_user_key = user_data['anonymized_data_from_rest']['user_key']
+                anonymized_user_display_name = user_data['anonymized_data_from_rest']['display_name']
             except KeyError:
                 # This is an error! Let the user know.
-                assert False, "Can't read anonymized user-data from 'anonymized_data_from_rest_auditing_events'"
+                assert False, "Can't read anonymized user-data from 'anonymized_data_from_rest'"
         else:
             anonymized_user_name = ""
             anonymized_user_key = ""
@@ -1416,7 +1529,18 @@ def main():
                 # run_user_anonymization() expects the user-key, not the user-name.
                 new_owner_key = g_execution['rest_get_user__new_owner']['json']['key']
                 run_user_anonymization(anonymized_users_data, new_owner_key)
-                get_anonymized_user_data_from_audit_data(anonymized_users_data)
+                # Atlassian introduced anonymization in Jira 8.7.
+                # Jira supports two auditing REST-APIs:
+                #   1. GET /rest/api/2/auditing/record, deprecated since 8.12.
+                #       https://docs.atlassian.com/software/jira/docs/api/REST/8.0.0/#api/2/auditing-getRecords
+                #   2. "Audit log improvements for developers", introduced in 8.8.
+                #       https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html
+                # The following switch delegates calling the audit REST-API depending on the Jira-version:
+                # For 8.7, the previous API 1) is used. For 8.8 and later, the new API 2) is used.
+                if is_jira_version_8_7():
+                    get_anonymized_user_data_from_audit_records(anonymized_users_data)
+                else:
+                    get_anonymized_user_data_from_audit_events(anonymized_users_data)
 
         # Re-indexing is specific to the "if args.subparser_name == 'anonymize'". But the re-index shall only be
         # triggered if there is at least one anonymized user. Only the report provides information about the number of

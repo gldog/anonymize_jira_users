@@ -34,6 +34,9 @@ User Manual
 
 The Anonymizer is a Python3-script to help Jira-admins anonymizing Jira-users in bulk.
 
+Atlassian introduced user anonymization in Jira 8.7. So the Anonymizer works 
+in Jira versions equal or greater than 8.7.
+
 All information stated here is about Jira Server and Jira Data Center. Jira Cloud is not considered yet.
 
 # Quick-start
