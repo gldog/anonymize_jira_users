@@ -488,7 +488,8 @@ def parse_parameters():
       users are given in anonymization_report_details.csv.
     """
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                     description="The Anonymizer is a Python3-script to help Jira-admins anonymizing Jira-users in bulk.",
+                                     description="The Anonymizer is a Python3-script to help Jira-admins"
+                                                 " anonymizing Jira-users in bulk.",
                                      epilog=textwrap.dedent(epilog))
     parser.add_argument('--version', action='version', version='%(prog)s {}'.format(__version__))
 
@@ -991,6 +992,29 @@ def run_user_anonymization(valid_users, new_owner_key):
                     log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
                     time.sleep(g_config['initial_delay'])
                     is_timed_out = wait_until_anonymization_is_finished_or_timedout(i, user_name)
+                    # Atlassian introduced anonymization in Jira 8.7.
+                    # We query the anonymized user-data from the audit-log.
+                    # Jira supports two auditing REST-APIs:
+                    #   1. GET /rest/api/2/auditing/record, deprecated since 8.12.
+                    #       https://docs.atlassian.com/software/jira/docs/api/REST/8.0.0/#api/2/auditing-getRecords
+                    #   2. "Audit log improvements for developers", introduced in 8.8.
+                    #       https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html
+                    # The following switch delegates calls the audit REST-API depending on the Jira-version:
+                    # For 8.7, the previous API 1) is used. For 8.8 and later, the new API 2) is used.
+                    # For pre-8.7 it doesn't care as that versions do not support anonymization.
+                    #
+                    # Collecting the anonymized user-data is done before handling the timeout to save what still can
+                    # be saved.
+                    #
+                    # Collecting the anonymized user-data could also be done in one go after all users have been
+                    # anonymized. But that is not as easy as it sounds: Both APIs are limited in output. the API 1) is
+                    # limited to 1.000 records, and the API 2) is paged with a default of 200 events/page. That could
+                    # be fiddly. I'm confident there is not really a downside in execution-time if the anonymized
+                    # data is called for each user one by one.
+                    if is_jira_version_8_7():
+                        get_anonymized_user_data_from_audit_records(user_name)
+                    else:
+                        get_anonymized_user_data_from_audit_events(user_name)
                     if is_timed_out:
                         log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
                                   " Abort script.".format(user_name, g_config['timeout']))
@@ -1017,16 +1041,17 @@ def is_anonymized_user_data_complete_for_user(user_name, key):
         'display_name']
 
 
-def get_anonymized_user_data_from_audit_events(anonymized_users_data):
-    # Format of "script_started" is "2020-12-29T23:17:35".
-    script_start_date_str = g_execution['script_started']
+def get_anonymized_user_data_from_audit_events(user_name):
+    # Format of "script_started" is "2020-12-29T23:17:35.399+0100".
+    user_data = g_users[user_name]
+    anonymization_start_date_str = user_data['rest_post_anonymization']['json']['submittedTime'].split('.')[0]
     # Convert to UTC. The conversion respects DST.
-    script_start_date_local = datetime.strptime(script_start_date_str, '%Y-%m-%dT%H:%M:%S')
-    script_start_date_utc = time.strftime("%Y-%m-%dT%H:%M:%S.000Z",
-                                          time.gmtime(
-                                              time.mktime(time.strptime(script_start_date_str, '%Y-%m-%dT%H:%M:%S'))))
-    log.info("")
-    log.debug("script_start_date: local {}, UTC {}".format(script_start_date_local, script_start_date_utc))
+    anonymization_start_date_local = datetime.strptime(anonymization_start_date_str, '%Y-%m-%dT%H:%M:%S')
+    anonymization_start_date_utc = time.strftime("%Y-%m-%dT%H:%M:%S.000Z",
+                                                 time.gmtime(time.mktime(
+                                                     time.strptime(anonymization_start_date_str, '%Y-%m-%dT%H:%M:%S'))))
+    log.debug("anonymization_start_date: local {}, UTC {}".format(anonymization_start_date_local,
+                                                                  anonymization_start_date_utc))
 
     rel_url = '/rest/auditing/1.0/events'
     url = g_config['jira_base_url'] + rel_url
@@ -1034,40 +1059,27 @@ def get_anonymized_user_data_from_audit_events(anonymized_users_data):
     # Include the from-date, to not include e.g. previous renamings which has nothing to do with the anonymization,
     # and to limit the amount of response-data. The date must be given in UTC with format "2020-12-30T13:53:17.996Z".
     # The response-JSON is sorted by date descending.
-    url_params = {'from': script_start_date_utc}
+    url_params = {'from': anonymization_start_date_utc}
     # url_params = {} -- for testing
     r = g_session.get(url=url, params=url_params)
     # TODO store whole response only in case the to-date-filter was set.
-    g_execution['rest_auditing_events'] = {'doc': "The date in the URL-param is UTC."}
-    g_execution['rest_auditing_events'].update(serialize_response(r))
+    user_data['rest_auditing_events'] = {'doc': "The date in the URL-param is UTC."}
+    user_data['rest_auditing_events'].update(serialize_response(r))
     # Expect 200 OK here.
     r.raise_for_status()
     auditing_events = r.json()
 
-    # auditing_events = None
-    # with open('out.json', 'r') as f:
-    #    auditing_events = json.load(f)
+    anonymized_data_key = 'anonymized_data_from_rest'
 
-    # with open('anonymizing_report_details.json', 'r') as details_f:
-    #    g_d = json.load(details_f)
+    user_data[anonymized_data_key] = {
+        'user_name': None,
+        'user_key': None,
+        'display_name': None
+    }
 
-    # print("auditing_events {}".format(auditing_events['entities']))
-
-    # global g_users
-    # g_users = g_d['users_from_infile']
-
-    anonymized_data = 'anonymized_data_from_rest'
-    for user_name, user_data in g_users.items():
-        user_data[anonymized_data] = {
-            'user_name': None,
-            'user_key': None,
-            'display_name': None
-        }
-
-    anonymized_users = anonymized_users_data.keys()
     for entity in auditing_events['entities']:
         # try: This is a very defensive implementation. I'm not that experienced with the auditing-API.
-        # Maybe there is a type.action in every entity.
+        # Maybe there is not a type.action in every entity.
         try:
             action = entity['type']['action']
         except KeyError:
@@ -1096,35 +1108,37 @@ def get_anonymized_user_data_from_audit_events(anonymized_users_data):
                 # TODO comment about list
                 if changedValue['key'] == 'Username':
                     from_name = changedValue['from']
-                    if from_name not in anonymized_users or \
-                            is_anonymized_user_data_complete_for_user(from_name, anonymized_data):
+                    if from_name != user_name or is_anonymized_user_data_complete_for_user(from_name,
+                                                                                           anonymized_data_key):
                         break
-                    g_users[from_name][anonymized_data]['user_name'] = changedValue['to']
-                    g_users[from_name][anonymized_data]['user_key'] = \
+                    g_users[from_name][anonymized_data_key]['user_name'] = changedValue['to']
+                    g_users[from_name][anonymized_data_key]['user_key'] = \
                         entity['affectedObjects'][0]['id']
         elif action == 'User updated':
             # Saw a list with 1 dict, with a 'name' key. I think it is save to access by [0].
             user_name = entity['affectedObjects'][0]['name']
-            if user_name not in anonymized_users or \
-                    is_anonymized_user_data_complete_for_user(user_name, anonymized_data):
+            if user_name != user_name or is_anonymized_user_data_complete_for_user(user_name, anonymized_data_key):
                 continue
             for changedValue in entity['changedValues']:
                 # I think this list has only one entry: the 'Key'. But technically it is a list, so we should
                 # iterate over it.
+                # Just for the records: If the user was an active user, one separate event is to set
+                # changedValue['key']: "Active / Inactive" "from": "Active" "to": "Inactive".
                 if changedValue['key'] == 'Full name':
-                    g_users[user_name][anonymized_data]['display_name'] = changedValue['to']
+                    g_users[user_name][anonymized_data_key]['display_name'] = changedValue['to']
 
 
-def get_anonymized_user_data_from_audit_records(anonymized_users_data):
+def get_anonymized_user_data_from_audit_records(user_name):
     # Format of "script_started" is "2020-12-29T23:17:35".
-    script_start_date_str = g_execution['script_started']
+    user_data = g_users[user_name]
+    anonymization_start_date_str = user_data['rest_post_anonymization']['json']['submittedTime'].split('.')[0]
     # Convert to UTC. The conversion respects DST.
-    script_start_date_local = datetime.strptime(script_start_date_str, '%Y-%m-%dT%H:%M:%S')
-    script_start_date_utc = time.strftime("%Y-%m-%dT%H:%M:%S.000Z",
-                                          time.gmtime(
-                                              time.mktime(time.strptime(script_start_date_str, '%Y-%m-%dT%H:%M:%S'))))
-    log.info("")
-    log.debug("script_start_date: local {}, UTC {}".format(script_start_date_local, script_start_date_utc))
+    anonymization_start_date_local = datetime.strptime(anonymization_start_date_str, '%Y-%m-%dT%H:%M:%S')
+    anonymization_start_date_utc = time.strftime("%Y-%m-%dT%H:%M:%S.000Z",
+                                                 time.gmtime(time.mktime(
+                                                     time.strptime(anonymization_start_date_str, '%Y-%m-%dT%H:%M:%S'))))
+    log.debug("anonymization_start_date: local {}, UTC {}".format(anonymization_start_date_local,
+                                                                  anonymization_start_date_utc))
 
     rel_url = '/rest/api/2/auditing/record'
     url = g_config['jira_base_url'] + rel_url
@@ -1132,40 +1146,25 @@ def get_anonymized_user_data_from_audit_records(anonymized_users_data):
     # Include the from-date, to not include e.g. previous renamings which has nothing to do with the anonymization,
     # and to limit the amount of response-data. The date must be given in UTC with format "2020-12-30T13:53:17.996Z".
     # The response-JSON is sorted by date descending.
-    url_params = {'from': script_start_date_utc}
+    url_params = {'from': anonymization_start_date_utc}
     # url_params = {} -- for testing
     r = g_session.get(url=url, params=url_params)
-    # TODO store whole response only in case the to-date-filter was set.
-    g_execution['rest_auditing_records'] = {'doc': "The date in the URL-param is UTC."}
-    g_execution['rest_auditing_records'].update(serialize_response(r))
+    user_data['rest_auditing_records'] = {'doc': "The date in the URL-param is UTC."}
+    user_data['rest_auditing_records'].update(serialize_response(r))
     # Expect 200 OK here.
     r.raise_for_status()
     auditing_records = r.json()
 
-    # auditing_records = None
-    # with open('out.json', 'r') as f:
-    #    auditing_records = json.load(f)
+    anonymized_data_key = 'anonymized_data_from_rest'
+    user_data[anonymized_data_key] = {
+        'user_name': None,
+        'user_key': None,
+        'display_name': None
+    }
 
-    # with open('anonymizing_report_details.json', 'r') as details_f:
-    #    g_d = json.load(details_f)
-
-    # print("auditing_records {}".format(auditing_records['entities']))
-
-    # global g_users
-    # g_users = g_d['users_from_infile']
-
-    anonymized_data = 'anonymized_data_from_rest'
-    for user_name, user_data in g_users.items():
-        user_data[anonymized_data] = {
-            'user_name': None,
-            'user_key': None,
-            'display_name': None
-        }
-
-    anonymized_users = anonymized_users_data.keys()
     for record in auditing_records['records']:
         # try: This is a very defensive implementation. I'm not that experienced with the auditing-API.
-        # Maybe there is a type.summary in every record.
+        # Maybe there is not a type.summary in every record.
         try:
             summary = record['summary']
         except KeyError:
@@ -1193,22 +1192,21 @@ def get_anonymized_user_data_from_audit_records(anonymized_users_data):
                 # TODO comment about list
                 if changedValue['fieldName'] == 'Username':
                     from_name = changedValue['changedFrom']
-                    if from_name not in anonymized_users or \
-                            is_anonymized_user_data_complete_for_user(from_name, anonymized_data):
+                    if from_name != user_name or is_anonymized_user_data_complete_for_user(from_name,
+                                                                                           anonymized_data_key):
                         break
-                    g_users[from_name][anonymized_data]['user_name'] = changedValue['changedTo']
-                    g_users[from_name][anonymized_data]['user_key'] = record['objectItem']['id']
+                    g_users[from_name][anonymized_data_key]['user_name'] = changedValue['changedTo']
+                    g_users[from_name][anonymized_data_key]['user_key'] = record['objectItem']['id']
         elif summary == 'User updated':
             # Saw a list with 1 dict, with a 'name' key. I think it is save to access by [0].
             user_name = record['objectItem']['name']
-            if user_name not in anonymized_users or \
-                    is_anonymized_user_data_complete_for_user(user_name, anonymized_data):
+            if user_name != user_name or is_anonymized_user_data_complete_for_user(user_name, anonymized_data_key):
                 continue
             for changedValue in record['changedValues']:
                 # I think this list has only one entry: the 'Key'. But technically it is a list, so we should
                 # iterate over it.
                 if changedValue['fieldName'] == 'Full name':
-                    g_users[user_name][anonymized_data]['display_name'] = changedValue['changedTo']
+                    g_users[user_name][anonymized_data_key]['display_name'] = changedValue['changedTo']
 
 
 def is_any_anonymization_running():
@@ -1529,18 +1527,6 @@ def main():
                 # run_user_anonymization() expects the user-key, not the user-name.
                 new_owner_key = g_execution['rest_get_user__new_owner']['json']['key']
                 run_user_anonymization(anonymized_users_data, new_owner_key)
-                # Atlassian introduced anonymization in Jira 8.7.
-                # Jira supports two auditing REST-APIs:
-                #   1. GET /rest/api/2/auditing/record, deprecated since 8.12.
-                #       https://docs.atlassian.com/software/jira/docs/api/REST/8.0.0/#api/2/auditing-getRecords
-                #   2. "Audit log improvements for developers", introduced in 8.8.
-                #       https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html
-                # The following switch delegates calling the audit REST-API depending on the Jira-version:
-                # For 8.7, the previous API 1) is used. For 8.8 and later, the new API 2) is used.
-                if is_jira_version_8_7():
-                    get_anonymized_user_data_from_audit_records(anonymized_users_data)
-                else:
-                    get_anonymized_user_data_from_audit_events(anonymized_users_data)
 
         # Re-indexing is specific to the "if args.subparser_name == 'anonymize'". But the re-index shall only be
         # triggered if there is at least one anonymized user. Only the report provides information about the number of

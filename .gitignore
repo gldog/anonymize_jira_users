@@ -7,9 +7,17 @@
 anonymizing_details.json
 anonymizing_report.json
 anonymizing_report.txt
+my-blank-default-config.cfg
 my-config.json
+out.json
 usernames.txt
-tmp
+usernames-assess*
+dev/
+eval/
+test/
+tmp/
+reports/
+
 
 
 # Node artifact files
