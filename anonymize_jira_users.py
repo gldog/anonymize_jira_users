@@ -516,7 +516,7 @@ def parse_parameters():
     parent_parser_for_validate_and_anonymize \
         .add_argument('-b', '--jira-base-url', help="Jira base-URL.")
     parent_parser_for_validate_and_anonymize \
-        .add_argument('-u', '--jira-auth', metavar='ADMIN_USER_AUTH',
+        .add_argument('-a', '--jira-auth', metavar='ADMIN_USER_AUTH',
                       help="Admin user-authentication."
                            " Two auth-types are supported: Basic, and Bearer (starting with Jira 8.14)."
                            " The format for Basic is: 'Basic <user>:<pass>'."

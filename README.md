@@ -85,7 +85,7 @@ Parameters for commands `validate`, `anonymize`:
                           Python suggests, then exit.
     -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
                           Jira base-URL.
-    -u ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
+    -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
                           Admin user-authentication. Two auth-types are
                           supported: Basic, and Bearer (starting with Jira
                           8.14). The format for Basic is: 'Basic <user>:<pass>'.
@@ -147,7 +147,7 @@ file (because you like to check-in this), you can set them at the command-line u
 
     export MY_USERNAME=admin
     export MY_PASSWORD=admin
-    anonymize_jira_users.py validate -c my-config.cfg -u "Basic $MY_USERNAME:$MY_PASSWORD"
+    anonymize_jira_users.py validate -c my-config.cfg -a "Basic $MY_USERNAME:$MY_PASSWORD"
 
 ## Details about some options
 
