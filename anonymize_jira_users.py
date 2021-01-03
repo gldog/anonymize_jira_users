@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright 2020 Johannes Heger
+# Copyright 2021 Johannes Heger
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -951,7 +951,7 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
     return is_timed_out
 
 
-def run_user_anonymization(valid_users, new_owner_key):
+def delete_or_anonymize_users(valid_users, new_owner_key):
     rel_url_for_deletion = '/rest/api/2/user'
     rel_url_for_anonymizing = '/rest/api/2/user/anonymization'
 
@@ -970,7 +970,7 @@ def run_user_anonymization(valid_users, new_owner_key):
     for user_name, user_data in valid_users.items():
         i += 1
         user_key = user_data['rest_get_user__before_anonymization']['json']['key']
-        log.info("for user {} (name/key): {}/{}".format(i, user_name, user_key))
+        log.info("#{} (name/key): {}/{}".format(i, user_name, user_key))
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
         if not g_config['is_dry_run']:
             is_user_deleted = False
@@ -1526,7 +1526,7 @@ def main():
             if not g_config['dry_run']:
                 # run_user_anonymization() expects the user-key, not the user-name.
                 new_owner_key = g_execution['rest_get_user__new_owner']['json']['key']
-                run_user_anonymization(anonymized_users_data, new_owner_key)
+                delete_or_anonymize_users(anonymized_users_data, new_owner_key)
 
         # Re-indexing is specific to the "if args.subparser_name == 'anonymize'". But the re-index shall only be
         # triggered if there is at least one anonymized user. Only the report provides information about the number of

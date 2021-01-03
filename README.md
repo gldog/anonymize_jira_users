@@ -621,11 +621,11 @@ The output is:
     2020-12-27 20:51:46,132:INFO:is_any_anonymization_running(): ?
     2020-12-27 20:51:46,133:INFO:get_anonymization_progress(): Checking if any anonymization is running
     2020-12-27 20:51:46,147:INFO:is_any_anonymization_running(): No
-    2020-12-27 20:51:46,147:INFO:run_user_anonymization(): Going to delete or anonymize 4 users
-    2020-12-27 20:51:46,147:INFO:run_user_anonymization(): for user 1 (name/key): user1pre84/user1pre84
-    2020-12-27 20:51:46,282:INFO:run_user_anonymization(): for user 2 (name/key): user2pre84/user2pre84
-    2020-12-27 20:51:48,395:INFO:run_user_anonymization(): for user 3 (name/key): user1post84/JIRAUSER10200
-    2020-12-27 20:51:48,427:INFO:run_user_anonymization(): for user 4 (name/key): user2post84/JIRAUSER10201
+    2020-12-27 20:51:46,147:INFO:delete_or_anonymize_users(): Going to delete or anonymize 4 users
+    2020-12-27 20:51:46,147:INFO:delete_or_anonymize_users(): #1 (name/key): user1pre84/user1pre84
+    2020-12-27 20:51:46,282:INFO:delete_or_anonymize_users(): #2 (name/key): user2pre84/user2pre84
+    2020-12-27 20:51:48,395:INFO:delete_or_anonymize_users(): #3 (name/key): user1post84/JIRAUSER10200
+    2020-12-27 20:51:48,427:INFO:delete_or_anonymize_users(): #4 (name/key): user2post84/JIRAUSER10201
     Anonymizing Result:
       Users in infile:   4
       Skipped users:     0
