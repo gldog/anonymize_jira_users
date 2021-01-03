@@ -341,10 +341,12 @@ def write_default_cfg_file(config_template_filename):
         #   File with user-names to be anonymized or just validated. One user-name per line. 
         #   Comments are allowed: They must be prefixed by '#' and they must appear on their own line.
         #   The character-encoding is platform dependent Python suggests.
-        #   If you have trouble with the encoding, try out the parameter '--encoding'.")
+        #   If you have trouble with the encoding, try out the parameter '--encoding'.
         #   The given value is an example.
         #infile = usernames.txt
         #   Force a character-encoding for reading the infile. Empty means platform dependent Python suggests.
+        #   If you run on Win or the infile was created on Win, try out one of these encodings:
+        #     utf-8, cp1252, latin1 
         #   The given value is an example.
         #encoding = utf-8
         #   Output-directory to write the reports into.
@@ -529,7 +531,9 @@ def parse_parameters():
     parent_parser_for_validate_and_anonymize \
         .add_argument('--encoding', metavar='ENCODING',
                       help="Force a character-encoding for reading the infile."
-                           " Empty means platform dependent Python suggests.")
+                           " Empty means platform dependent Python suggests."
+                           " If you run on Win or the infile was created on Win, try out one of these encodings:"
+                           " utf-8, cp1252, latin1.")
     parent_parser_for_validate_and_anonymize \
         .add_argument('-o', '--out-dir', action=PathAction,
                       help="Output-directory to write the reports into."
@@ -1060,9 +1064,7 @@ def get_anonymized_user_data_from_audit_events(user_name):
     # and to limit the amount of response-data. The date must be given in UTC with format "2020-12-30T13:53:17.996Z".
     # The response-JSON is sorted by date descending.
     url_params = {'from': anonymization_start_date_utc}
-    # url_params = {} -- for testing
     r = g_session.get(url=url, params=url_params)
-    # TODO store whole response only in case the to-date-filter was set.
     user_data['rest_auditing_events'] = {'doc': "The date in the URL-param is UTC."}
     user_data['rest_auditing_events'].update(serialize_response(r))
     # Expect 200 OK here.
@@ -1103,9 +1105,8 @@ def get_anonymized_user_data_from_audit_events(user_name):
         #
 
         if action == 'User renamed':
-            # Expect only one list-item here, but for sure I iterate over it.
+            # Expect only one list-item here, but for sure iterate over it.
             for changedValue in entity['changedValues']:
-                # TODO comment about list
                 if changedValue['key'] == 'Username':
                     from_name = changedValue['from']
                     if from_name != user_name or is_anonymized_user_data_complete_for_user(from_name,
@@ -1420,15 +1421,6 @@ def write_reports(report):
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(report['users'])
-
-
-# def recreate_reports():
-#     file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_details_filename'])
-#     with open(file_path, 'r', encoding=g_config['encoding']) as f:
-#         overall_report = json.load(f)
-#         # The overall-report was written from the g_details.
-#         raw_report = create_raw_report(overall_report)
-#         write_reports(raw_report)
 
 
 def write_result_to_stdout(overview):
