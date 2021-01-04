@@ -1402,15 +1402,15 @@ def write_reports(report):
     pathlib.Path(g_config['out_dir']).mkdir(parents=True, exist_ok=True)
 
     file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_details_filename'])
-    with open(file_path, 'w', encoding=g_config['encoding']) as f:
+    with open(file_path, 'w') as f:
         print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
 
     file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_json_filename'])
-    with open(file_path, 'w', encoding=g_config['encoding']) as f:
+    with open(file_path, 'w') as f:
         print("{}".format(json.dumps(report, indent=4)), file=f)
 
     file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_text_filename'])
-    with open(file_path, 'w', newline='', encoding=g_config['encoding']) as f:
+    with open(file_path, 'w', newline='') as f:
         fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
                       'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
