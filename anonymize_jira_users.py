@@ -45,13 +45,19 @@ import urllib3
 # This is not a valid Python-version, but who cares.
 __version__ = '1.0.0-SNAPSHOT'
 
+CMD_ANONYMIZE = 'anonymize'
+# The validate-command is a subset of the anonymize-command. They share a lot of code and the "anonymization"-reports.
+CMD_VALIDATE = 'validate'
+CMD_MISC = 'misc'
+CMD_INACTIVE_USERS = 'inactive-users'
+
 DEFAULT_CONFIG = {
     'jira_base_url': '',
     'jira_auth': '',
     'infile': '',
     # Force a character-encoding for reading the infile. Empty means platform dependent Python suggests.
     'encoding': None,
-    'out_dir': '.',
+    'report_out_dir': '.',
     'loglevel': 'INFO',
     'is_expand_validation_with_affected_entities': False,
     'is_dry_run': False,
@@ -123,7 +129,6 @@ g_users = {
 # The keys are:
 #   - effective_config
 #   - execution: Information about script-execution not specific to users.
-#   - users_from_infile: Details about users.
 g_details = {
     'effective_config': g_config,
     'execution': g_execution,
@@ -350,7 +355,7 @@ def write_default_cfg_file(config_template_filename):
         #   The given value is an example.
         #encoding = utf-8
         #   Output-directory to write the reports into.
-        #out_dir = {out_dir}
+        #report_out_dir = {report_out_dir}
         #   Include 'affectedEntities' in the validation result. This is only for documentation 
         #   to enrich the detailed report. It doesn't affect the anonymization.
         #   The given value is the default.
@@ -382,7 +387,7 @@ def write_default_cfg_file(config_template_filename):
                    boolean_false=BOOLEAN_FALSE_VALUES,
                    valid_loglevels=PRETTY_PRINT_LOG_LEVELS,
                    loglevel=g_config['loglevel'],
-                   out_dir=g_config['out_dir'],
+                   report_out_dir=g_config['report_out_dir'],
                    is_expand_validation_with_affected_entities=
                                        g_config['is_expand_validation_with_affected_entities'],
                    is_dry_run=g_config['is_dry_run'],
@@ -395,7 +400,7 @@ def write_default_cfg_file(config_template_filename):
 
 
 def read_configfile_and_merge_into_global_config(args):
-    """Read the config-file and merge it into the gobal defaults-dict.
+    """Read the config-file and merge it into the global defaults-dict.
 
     The values within a ConfigParser are always strings. After a merge with a Python dict, the expected types could
     be gone. E.g. if a boolean is expected, but the ConfigParser delivers the string "false", this string is
@@ -405,7 +410,10 @@ def read_configfile_and_merge_into_global_config(args):
     :return: Nothing.
     """
     parser = configparser.ConfigParser()
-    parser.read(args.config_file)
+    # The parser could read the file by itself by calling parser.read(args.config_file). But if the file doesn't exist,
+    # the parser uses an empty dict silently. The open() is to throw an error in case the file can't be opened.
+    with open(args.config_file) as f:
+        parser.read_file(f)
     defaults = parser.defaults()
 
     # parser.defaults() is documented as dict, but it is something weird without an .items()-function.
@@ -507,40 +515,46 @@ def parse_parameters():
                                     " given in the config-file. ")
 
     #
-    # Add arguments for 'anonymize' and 'validate'.
+    # Arguments common to 'anonymize', 'inactive-users', and 'validate'.
     #
-    parent_parser_for_validate_and_anonymize = argparse.ArgumentParser(add_help=False)
-    parent_parser_for_validate_and_anonymize \
+    parent_parser_for_anonymize_and_inactiveusers_and_validate = argparse.ArgumentParser(add_help=False)
+    parent_parser_for_anonymize_and_inactiveusers_and_validate \
         .add_argument('--info', action='store_true',
                       help="Print the effective config, and the character-encoding Python suggests, then exit.")
-    parent_parser_for_validate_and_anonymize \
+    parent_parser_for_anonymize_and_inactiveusers_and_validate \
         .add_argument('-b', '--jira-base-url', help="Jira base-URL.")
-    parent_parser_for_validate_and_anonymize \
+    parent_parser_for_anonymize_and_inactiveusers_and_validate \
         .add_argument('-a', '--jira-auth', metavar='ADMIN_USER_AUTH',
                       help="Admin user-authentication."
                            " Two auth-types are supported: Basic, and Bearer (starting with Jira 8.14)."
                            " The format for Basic is: 'Basic <user>:<pass>'."
                            " The format for Bearer is: 'Bearer <token>'.")
-    parent_parser_for_validate_and_anonymize \
+    parent_parser_for_anonymize_and_inactiveusers_and_validate \
+        .add_argument('-o', '--report-out-dir', action=PathAction,
+                      help="Output-directory to write the reports into."
+                           " If it doesn't exist, it'll be created."
+                           " If you'd like the date included,"
+                           " give something like `date +%%Y%%m%%d-%%H%%M-anonymize-instance1`."
+                           " Defaults to '{}'.".format(DEFAULT_CONFIG['report_out_dir']))
+
+    #
+    # Arguments common to 'anonymize' and 'validate'.
+    #
+    parent_parser_for_anonymize_and_validate = argparse.ArgumentParser(add_help=False)
+    parent_parser_for_anonymize_and_validate \
         .add_argument('-i', '--infile',
                       help="File with user-names to be anonymized or just validated."
                            " One user-name per line. Comments are allowed:"
                            " They must be prefixed by '#' and they must appear on their own line."
                            " The character-encoding is platform dependent Python suggests."
                            " If you have trouble with the encoding, try out the parameter '--encoding'.")
-    parent_parser_for_validate_and_anonymize \
+    parent_parser_for_anonymize_and_validate \
         .add_argument('--encoding', metavar='ENCODING',
                       help="Force a character-encoding for reading the infile."
                            " Empty means platform dependent Python suggests."
                            " If you run on Win or the infile was created on Win, try out one of these encodings:"
                            " utf-8, cp1252, latin1.")
-    parent_parser_for_validate_and_anonymize \
-        .add_argument('-o', '--out-dir', action=PathAction,
-                      help="Output-directory to write the reports into."
-                           " If you'd like the date included,"
-                           " give something like `date +%%Y%%m%%d-%%H%%M-anonymize-instance1`."
-                           " Defaults to '{}'.".format(DEFAULT_CONFIG['out_dir']))
-    parent_parser_for_validate_and_anonymize \
+    parent_parser_for_anonymize_and_validate \
         .add_argument('--expand-validation-with-affected-entities', default=False,
                       action='store_true',
                       dest='is_expand_validation_with_affected_entities',
@@ -549,12 +563,16 @@ def parse_parameters():
                            " It doesn't affect the anonymization.")
 
     sp = parser.add_subparsers(dest='subparser_name')
-    sp_anonymize = sp.add_parser('anonymize', parents=[parent_parser, parent_parser_for_validate_and_anonymize])
-    sp_validate = sp.add_parser('validate', parents=[parent_parser, parent_parser_for_validate_and_anonymize])
-    sp_misc = sp.add_parser('misc', parents=[parent_parser])
+    sp_anonymize = sp.add_parser(CMD_ANONYMIZE,
+                                 parents=[parent_parser, parent_parser_for_anonymize_and_inactiveusers_and_validate,
+                                          parent_parser_for_anonymize_and_validate])
+    sp_validate = sp.add_parser(CMD_VALIDATE,
+                                parents=[parent_parser, parent_parser_for_anonymize_and_inactiveusers_and_validate,
+                                         parent_parser_for_anonymize_and_validate])
+    sp_misc = sp.add_parser(CMD_MISC, parents=[parent_parser])
 
     #
-    # Add arguments special to "anonymize".
+    # Add arguments special to command "anonymize".
     #
     sp_anonymize.add_argument('-n', '--new-owner',
                               help="Transfer roles of all anonymized users to the user with this user-name.")
@@ -575,15 +593,24 @@ def parse_parameters():
                               help="If at least one user was anonymized, trigger a background re-index.")
 
     #
-    # Add arguments special to "misc".
+    # Add arguments special to command "misc".
     #
     sp_misc.add_argument('-g', '--generate-config-template', metavar='CONFIG_TEMPLATE_FILE',
                          const=DEFAULT_CONFIG_TEMPLATE_FILENAME, nargs='?',
                          dest='config_template_filename',
                          help="Generate a configuration-template. Defaults to {}.".format(
                              DEFAULT_CONFIG_TEMPLATE_FILENAME))
-    # sp_misc.add_argument('--recreate-report', action='store_true',
-    #                      help="Re-create the reports from the details file. Only for development.")
+
+    #
+    # Add arguments special to command "inactive-users".
+    #
+    sp_inactive_users = sp.add_parser(CMD_INACTIVE_USERS,
+                                      parents=[parent_parser,
+                                               parent_parser_for_anonymize_and_inactiveusers_and_validate])
+    sp_inactive_users.add_argument('--exclude-groups', nargs='+')
+    sp_inactive_users \
+        .add_argument('-f', '--out-file', help="Output-file to write the users into."
+                                               " If the path doesn't exist, it'll be created.")
 
     parser.parse_args()
     args = parser.parse_args()
@@ -602,7 +629,7 @@ def parse_parameters():
     g_config['report_json_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '.json'
     g_config['report_text_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '.csv'
 
-    if args.subparser_name == 'misc':
+    if args.subparser_name == CMD_MISC:
         if args.config_template_filename:
             write_default_cfg_file(args.config_template_filename)
             sys.exit(0)
@@ -611,20 +638,21 @@ def parse_parameters():
         #     sys.exit(0)
         else:
             # sp_misc.error("Command 'misc' needs '-g' or '--recreate-report'")
-            sp_misc.error("Command 'misc' needs '-g'")
+            sp_misc.error("Command '{}' needs '-g'".format(CMD_MISC))
 
     # In a config-file is given, merge it into the global config. Non-None-values overwrites the values present so far.
     # Note, a config-file can only be present for the sub-parsers.
-    if (args.subparser_name == 'validate' or args.subparser_name == 'anonymize') and args.config_file:
+    if (args.subparser_name in [CMD_ANONYMIZE, CMD_INACTIVE_USERS, CMD_VALIDATE]) and args.config_file:
         read_configfile_and_merge_into_global_config(args)
 
     # Merge command line arguments in and over the global config. Non-None-values overwrites the values present so far.
     merge_dicts(g_config, vars(args))
 
+    errors = []
     #
-    # Checks for both sub-parsers.
+    # Checks for 'anonymize', 'inactive-users', and 'validate'.
     #
-    if args.subparser_name == 'validate' or args.subparser_name == 'anonymize':
+    if args.subparser_name in [CMD_ANONYMIZE, CMD_INACTIVE_USERS, CMD_VALIDATE]:
         if args.info:
             gd = get_sanitized_global_details()
             print("  Effective config: {}".format(json.dumps(gd['effective_config'], indent=4)))
@@ -632,16 +660,6 @@ def parse_parameters():
                                                                                sys.getfilesystemencoding()))
             print("")
             sys.exit(0)
-
-        errors = []
-        # Check infile is given does exist.
-        if not g_config['infile']:
-            errors.append("Missing infile")
-        else:
-            try:
-                open(g_config['infile'])
-            except IOError:
-                errors.append("Infile {} does not exist or is not accessible".format(g_config['infile']))
 
         if not g_config['jira_base_url']:
             errors.append("Missing jira-base-url")
@@ -667,21 +685,43 @@ def parse_parameters():
                     get_jira_serverinfo()
 
         if len(errors) > 0:
-            parent_parser_for_validate_and_anonymize.error('; '.join(errors))
+            parent_parser_for_anonymize_and_inactiveusers_and_validate.error('; '.join(errors))
 
-        #
-        # Checks for sub-parser 'anonymize'
-        #
-        if args.subparser_name == 'anonymize':
-            if not g_config['new_owner']:
-                sp_anonymize.error("Missing new_owner.")
-            else:
-                r = get_user_data(g_config['new_owner'])
-                if r.status_code != 200:
-                    if r.status_code == 404:
-                        sp_anonymize.error(r.json()['errorMessages'])
-                    else:
-                        r.raise_for_status()
+    if args.subparser_name in [CMD_ANONYMIZE, CMD_VALIDATE]:
+        # Check if infile is given does exist.
+        if not g_config['infile']:
+            errors.append("Missing infile")
+        else:
+            try:
+                open(g_config['infile'])
+            except IOError:
+                errors.append("Infile {} does not exist or is not accessible".format(g_config['infile']))
+
+    if args.subparser_name == CMD_ANONYMIZE:
+        if not g_config['new_owner']:
+            sp_anonymize.error("Missing new_owner.")
+        else:
+            r = get_user_data(g_config['new_owner'])
+            if r.status_code != 200:
+                if r.status_code == 404:
+                    sp_anonymize.error(r.json()['errorMessages'])
+                else:
+                    r.raise_for_status()
+
+    if args.subparser_name == CMD_INACTIVE_USERS:
+        try:
+            if not g_config['out_file']:
+                sp_inactive_users.error("Missing parameter outfile.")
+        except KeyError:
+            sp_inactive_users.error("Missing outfile.")
+        try:
+            # exclude_groups could be absent.
+            errors = check_if_groups_exist(g_config['exclude_groups'])
+        except KeyError:
+            pass
+        if len(errors) > 0:
+            print("{}".format(errors))
+            sp_inactive_users.error(', '.join(errors))
 
     set_logging()
 
@@ -1394,35 +1434,6 @@ def create_raw_report(overall_report):
     return report
 
 
-def write_reports(report):
-    """Write the data got from the raw-report to files as a) a JSON and b) as CSV.
-    :param report:
-    :return:
-    """
-    pathlib.Path(g_config['out_dir']).mkdir(parents=True, exist_ok=True)
-
-    file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_details_filename'])
-    with open(file_path, 'w') as f:
-        print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
-
-    file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_json_filename'])
-    with open(file_path, 'w') as f:
-        print("{}".format(json.dumps(report, indent=4)), file=f)
-
-    file_path = pathlib.Path(g_config['out_dir']).joinpath(g_config['report_text_filename'])
-    with open(file_path, 'w', newline='') as f:
-        fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
-                      'validation_has_errors',
-                      'filter_is_anonymize_approval', 'filter_error_message',
-                      'action',
-                      'time_start', 'time_finish', 'time_duration',
-                      'anonymized_user_name', 'anonymized_user_key', 'anonymized_user_display_name']
-
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(report['users'])
-
-
 def write_result_to_stdout(overview):
     print("Anonymizing Result:")
     print("  Users in infile:   {}".format(overview['number_of_users_in_infile']))
@@ -1464,6 +1475,7 @@ def trigger_reindex():
 
 
 def to_date_string(date_time: datetime):
+    """Create a uniform date/time-string without nit-picky milliseconds"""
     return date_time.strftime('%Y-%m-%dT%H:%M:%S')
 
 
@@ -1471,11 +1483,29 @@ def now_to_date_string():
     return to_date_string(datetime.now())
 
 
-def at_exit():
-    """Regardless of the exit-reason, write the reports."""
+def at_exit_complete_and_write_details_report():
+    log.debug("")
 
     try:
         # Check if finished-date is present. If not, the script was aborted.
+        g_details['execution']['script_finished']
+    except KeyError:
+        g_details['execution']['script_finished'] = now_to_date_string()
+        g_details['execution']['is_script_aborted'] = True
+        log.warning("Script has been aborted.")
+
+    if g_config['report_out_dir'] != '.':
+        pathlib.Path(g_config['report_out_dir']).mkdir(parents=True, exist_ok=True)
+    file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_details_filename'])
+    with open(file_path, 'w') as f:
+        print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
+
+
+def at_exit_write_anonymization_reports():
+    log.debug("")
+
+    try:
+        # Check if finished-date is present. If not, the script has been aborted.
         g_details['execution']['script_finished']
     except KeyError:
         g_details['execution']['script_finished'] = now_to_date_string()
@@ -1487,16 +1517,196 @@ def at_exit():
         time_diff(
             g_details['execution']['script_started'] + '.000',
             g_details['execution']['script_finished'] + '.000'))
-    write_reports(raw_report)
+
+    file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_json_filename'])
+    with open(file_path, 'w') as f:
+        print("{}".format(json.dumps(raw_report, indent=4)), file=f)
+
+    file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_text_filename'])
+    with open(file_path, 'w', newline='') as f:
+        fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
+                      'validation_has_errors',
+                      'filter_is_anonymize_approval', 'filter_error_message',
+                      'action',
+                      'time_start', 'time_finish', 'time_duration',
+                      'anonymized_user_name', 'anonymized_user_key', 'anonymized_user_display_name']
+
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(raw_report['users'])
+
     write_result_to_stdout(raw_report['overview'])
+
+
+def get_inactive_users(excluded_users):
+    """Query inactive users and filter-out users from the excluded_users and
+    the already anonymized users.
+
+    Already anonymized users have the e-mail-address '@jira.invalid'.
+
+    The query-possibilities of '/rest/api/2/user/search' are limited:
+    A 'username' must be given, there is no wildcard documented (by Atlassian),
+    and there is no exclude-pattern.
+
+    The 'username' is "A query string used to search username, name or e-mail
+    address". But in fact there are 'wildcard'-characters documented in
+    JRASERVER-29069. Didn't check the Jira source-code so far.
+    These are:
+        o "" (double quotes)
+        o '' (single quotes)
+        o . (dot)
+        o % (percent)
+        o _ (underscore)
+
+    To give a dummy 'username', I the '.' here.
+
+    The resulting REST-call is something like:
+    `/rest/api/2/user/search?username=.&includeInactive=true&includeActive=false&maxResults=1000`.
+
+    This API pretends to be paged, but in practice it isn't. This is a bug and
+    documented in JRASERVER-29069. This means also I can query maxResults=1000
+    and omit the paging. But for the case the bug could be resoved some time,
+    I implemented the paging though.
+
+    If the API returns exact 1.000 users, it is unclear if the result is truly
+    1.000, or the API has limited the result. This functions warns the user in
+    this case of 1.000.
+
+    :return: Users.
+    """
+
+    excluded_user_names = excluded_users.keys()
+    log.debug(" Excluded users: {}".format(excluded_user_names))
+
+    rel_url = '/rest/api/2/user/search'
+    log.debug("")
+    is_beyond_last_page = False
+    url = g_config['jira_base_url'] + rel_url
+    # max_results = 1000
+    start_at = 0
+    user_count_so_far = 0
+    last_page_size = 0
+    users = {}
+    # Query the paged API until an empty page.
+    while not is_beyond_last_page:
+        url_params = {
+            'username': '.',
+            'includeActive': False,
+            'includeInactive': True,
+            # 'maxResults': max_results,
+            'startAt': start_at}
+        r = g_session.get(url=url, params=url_params)
+        log.debug("{}".format(serialize_response(r, False)))
+        r.raise_for_status()
+        user_count_so_far += len(r.json())
+        if len(r.json()) == 0:
+            is_beyond_last_page = True
+            # Warning about JRASERVER-29069.
+            if user_count_so_far == 1000:
+                log.warning(
+                    "The REST API '{}' returned exact 1000 users."
+                    " This could mean you ran into JRASERVER-29069."
+                    " In that case there could be more inactive users".format(rel_url))
+            continue
+        start_at += len(r.json())
+
+        for user in r.json():
+            user_name = str(user['name'])
+            email_address = user['emailAddress']
+            if user_name in excluded_user_names or email_address.find('@jira.invalid') >= 0:
+                continue
+            users.update({
+                user_name: {
+                    'name': user['name'],
+                    'key': user['key'],
+                    'display_name': user['displayName'],
+                    'email_address': user['emailAddress']
+                }
+            })
+    return users
+
+
+def check_if_groups_exist(group_names):
+    rel_url = '/rest/api/2/group/member'
+    log.debug("{}".format(group_names))
+    url = g_config['jira_base_url'] + rel_url
+    errors = []
+    for group_name in group_names:
+        url_params = {'groupname': group_name}
+        r = g_session.get(url=url, params=url_params)
+        if r.status_code == 404:
+            errors.append(', '.join(r.json()['errorMessages']))
+        else:
+            r.raise_for_status()
+    return errors
+
+
+def get_users_from_group(group_name):
+    rel_url = '/rest/api/2/group/member'
+    log.debug("{}".format(group_name))
+    is_last_page = False
+    url = g_config['jira_base_url'] + rel_url
+    start_at = 0
+    users = {}
+    while not is_last_page:
+        url_params = {'groupname': group_name, 'includeInactiveUsers': True, 'startAt': start_at}
+        r = g_session.get(url=url, params=url_params)
+        r.raise_for_status()
+        for user in r.json()['values']:
+            users.update({
+                user['name']: {
+                    'name': user['name'],
+                    'key': user['key'],
+                    'display_name': user['displayName'],
+                    'email_address': user['emailAddress']
+                }
+            })
+        is_last_page = r.json()['isLast']
+        start_at += r.json()['maxResults']
+    return users
+
+
+def get_users_from_groups(group_names):
+    log.debug(" {}".format(group_names))
+    excluded_users = {}
+    for group_name in group_names:
+        excluded_users.update(get_users_from_group(group_name))
+    return excluded_users
+
+
+def subcommand_inactive_users():
+    try:
+        # exclude_groups could be absent.
+        excluded_users = get_users_from_groups(g_config['exclude_groups'])
+        g_details['excluded_users'] = excluded_users
+    except KeyError:
+        excluded_users = {}
+
+    remaining_inactive_users = get_inactive_users(excluded_users)
+    g_details['remaining_inactive_users'] = remaining_inactive_users
+
+    out_path = os.path.dirname(g_config['out_file'])
+    if out_path:
+        os.makedirs(out_path, exist_ok=True)
+    with open(g_config['out_file'], 'w') as f:
+        print("# File generated at {}".format(now_to_date_string()), file=f)
+        print("# Users: {}".format(len(remaining_inactive_users)), file=f)
+        print("# User attributes: User-name; user-key; display-name; email-address\n", file=f)
+        for user_name, user_data in remaining_inactive_users.items():
+            print("# {}; {}; {}; {}"
+                  .format(user_data['name'], user_data['key'], user_data['display_name'], user_data['email_address']),
+                  file=f)
+            print("{}\n".format(user_data['name']), file=f)
 
 
 def main():
     g_details['execution']['script_started'] = now_to_date_string()
     args = parse_parameters()
 
-    if args.subparser_name == 'validate' or args.subparser_name == 'anonymize':
-        atexit.register(at_exit)
+    if args.subparser_name in [CMD_ANONYMIZE, CMD_VALIDATE]:
+        # => Let at_exit_...() write the reports.
+        atexit.register(at_exit_complete_and_write_details_report)
+        atexit.register(at_exit_write_anonymization_reports)
         log.debug("")
         read_user_names_from_infile()
         log.debug("")
@@ -1505,7 +1715,7 @@ def main():
         get_validation_data()
         log.debug("")
         filter_users()
-        if args.subparser_name == 'anonymize':
+        if args.subparser_name == CMD_ANONYMIZE:
             log.debug("")
             if is_any_anonymization_running():
                 log.error("There is an anonymization running, or the status of anonymization couldn't be read."
@@ -1534,7 +1744,12 @@ def main():
         g_details['execution']['script_finished'] = now_to_date_string()
         g_details['execution']['is_script_aborted'] = False
 
-        # Let at_exit() write the reports.
+    elif args.subparser_name == CMD_INACTIVE_USERS:
+        # => Let at_exit_...() write the reports.
+        atexit.register(at_exit_complete_and_write_details_report)
+        subcommand_inactive_users()
+        g_details['execution']['script_finished'] = now_to_date_string()
+        g_details['execution']['is_script_aborted'] = False
 
 
 if __name__ == '__main__':

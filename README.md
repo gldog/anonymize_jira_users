@@ -100,7 +100,7 @@ Parameters for commands `validate`, `anonymize`:
                           encoding'.
     --encoding ENCODING   Force a character-encoding for reading the infile.
                           Empty means platform dependent Python suggests.
-    -o OUT_DIR, --out-dir OUT_DIR
+    -o REPORT_OUT_DIR, --report-out-dir REPORT_OUT_DIR
                           Output-directory to write the reports into. If you'd
                           like the date included, give something like `date
                           +%Y%m%d-%H%M-anonymize-instance1`. Defaults to '.'.
