@@ -506,21 +506,19 @@ def parse_parameters():
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument('-l', '--loglevel', choices=LOG_LEVELS,
                                help="Log-level. Defaults to {}.".format(DEFAULT_CONFIG['loglevel']))
-    parent_parser.add_argument('-c', '--config-file',
-                               help="Config-file to pre-set command-line-options."
-                                    " You can generate a config-file-template with option 'miisc -g'."
-                                    " There are parameters in the config-file not present on the command line."
-                                    " Empty parameters in the config-file are ignored."
-                                    " Parameters given on the command line overwrite parameters"
-                                    " given in the config-file. ")
 
     #
     # Arguments common to 'anonymize', 'inactive-users', and 'validate'.
     #
     parent_parser_for_anonymize_and_inactiveusers_and_validate = argparse.ArgumentParser(add_help=False)
     parent_parser_for_anonymize_and_inactiveusers_and_validate \
-        .add_argument('--info', action='store_true',
-                      help="Print the effective config, and the character-encoding Python suggests, then exit.")
+        .add_argument('-c', '--config-file',
+                      help="Config-file to pre-set command-line-options."
+                           " You can generate a config-file-template with option 'miisc -g'."
+                           " There are parameters in the config-file not present on the command line."
+                           " Empty parameters in the config-file are ignored."
+                           " Parameters given on the command line overwrite parameters"
+                           " given in the config-file. ")
     parent_parser_for_anonymize_and_inactiveusers_and_validate \
         .add_argument('-b', '--jira-base-url', help="Jira base-URL.")
     parent_parser_for_anonymize_and_inactiveusers_and_validate \
@@ -536,6 +534,11 @@ def parse_parameters():
                            " If you'd like the date included,"
                            " give something like `date +%%Y%%m%%d-%%H%%M-anonymize-instance1`."
                            " Defaults to '{}'.".format(DEFAULT_CONFIG['report_out_dir']))
+
+    parent_parser_for_anonymize_and_inactiveusers_and_validate_post = argparse.ArgumentParser(add_help=False)
+    parent_parser_for_anonymize_and_inactiveusers_and_validate_post \
+        .add_argument('--info', action='store_true',
+                      help="Print the effective config, and the character-encoding Python suggests, then exit.")
 
     #
     # Arguments common to 'anonymize' and 'validate'.
@@ -564,12 +567,20 @@ def parse_parameters():
 
     sp = parser.add_subparsers(dest='subparser_name')
     sp_anonymize = sp.add_parser(CMD_ANONYMIZE,
-                                 parents=[parent_parser, parent_parser_for_anonymize_and_inactiveusers_and_validate,
-                                          parent_parser_for_anonymize_and_validate])
+                                 parents=[parent_parser,
+                                          parent_parser_for_anonymize_and_inactiveusers_and_validate,
+                                          parent_parser_for_anonymize_and_validate,
+                                          parent_parser_for_anonymize_and_inactiveusers_and_validate_post],
+                                 help="Anonymizes users.")
     sp_validate = sp.add_parser(CMD_VALIDATE,
-                                parents=[parent_parser, parent_parser_for_anonymize_and_inactiveusers_and_validate,
-                                         parent_parser_for_anonymize_and_validate])
-    sp_misc = sp.add_parser(CMD_MISC, parents=[parent_parser])
+                                parents=[parent_parser,
+                                         parent_parser_for_anonymize_and_inactiveusers_and_validate,
+                                         parent_parser_for_anonymize_and_validate,
+                                         parent_parser_for_anonymize_and_inactiveusers_and_validate_post],
+                                help="Validates user anonymization process.")
+    sp_misc = sp.add_parser(CMD_MISC, parents=[parent_parser],
+                            help="Intended to bundle diverse functions."
+                                 " Currently `-g` to generate a template-config-file is the only function.")
 
     #
     # Add arguments special to command "anonymize".
@@ -606,8 +617,12 @@ def parse_parameters():
     #
     sp_inactive_users = sp.add_parser(CMD_INACTIVE_USERS,
                                       parents=[parent_parser,
-                                               parent_parser_for_anonymize_and_inactiveusers_and_validate])
-    sp_inactive_users.add_argument('--exclude-groups', nargs='+')
+                                               parent_parser_for_anonymize_and_inactiveusers_and_validate,
+                                               parent_parser_for_anonymize_and_inactiveusers_and_validate_post],
+                                      help="Retrieves a list of inactive, not-yet anonymized users."
+                                           " These users are candidates for anonymization.")
+    sp_inactive_users.add_argument('--exclude-groups', nargs='+',
+                                   help="Exclude members of these groups.")
     sp_inactive_users \
         .add_argument('-f', '--out-file', help="Output-file to write the users into."
                                                " If the path doesn't exist, it'll be created.")
@@ -1561,7 +1576,7 @@ def get_inactive_users(excluded_users):
     To give a dummy 'username', I the '.' here.
 
     The resulting REST-call is something like:
-    `/rest/api/2/user/search?username=.&includeInactive=true&includeActive=false&maxResults=1000`.
+    `/rest/api/2/user/search?username=.&includeInactive=true&includeActive=false&startAt=...`.
 
     This API pretends to be paged, but in practice it isn't. This is a bug and
     documented in JRASERVER-29069. This means also I can query maxResults=1000
