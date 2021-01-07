@@ -34,8 +34,7 @@ User Manual
 
 The Anonymizer is a Python3-script to help Jira-admins anonymizing Jira-users in bulk.
 
-Atlassian introduced user anonymization in Jira 8.7. So the Anonymizer works 
-in Jira versions equal or greater than 8.7.
+Atlassian introduced user anonymization in Jira 8.7. So the Anonymizer works in Jira versions equal or greater than 8.7.
 
 All information stated here is about Jira Server and Jira Data Center. Jira Cloud is not considered yet.
 
@@ -58,10 +57,17 @@ All information stated here is about Jira Server and Jira Data Center. Jira Clou
 
 You may call the Anonymizer with preceding `python`. Assure it is Python3.
 
-Documentation is also available through the command line help -h.
+Documentation is also available by the command line help `-h`.
 
-The Anonymizer has the three commands `validate`, `anonymize`, and `misc`. These commands have different lists of
-options.
+The Anonymizer has the following commands:
+
+- `validate`: Validates user anonymization process.
+- `anonymize`: Anonymizes users.
+- `inactive-users`: Retrieves a list of inactive, not-yet anonymized users. These users are candidates for
+  anonymization (but should be assessed before).
+- `misc`: Intended to bundle diverse functions. Currently `-g` to generate a template-config-file is the only function.
+
+These commands have different lists of options.
 
 Parameter without command:
 
@@ -72,65 +78,106 @@ Parameters for commands `validate`, `anonymize`, `misc`:
     -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
                         Log-level. Defaults to INFO.
 
-Parameters for commands `validate`, `anonymize`:
+Parameters for commands `validate` and `anonymize`:
 
-    -c CONFIG_FILE, --config-file CONFIG_FILE
-                          Config-file to pre-set command-line-options. You can
-                          generate a config-file-template with option 'misc -g'.
-                          There are parameters in the config-file not present on
-                          the command line. Empty parameters in the config-file
-                          are ignored. Parameters given on the command line
-                          overwrite parameters given in the config-file.
-    --info                Print the effective config, and the character-encoding
-                          Python suggests, then exit.
-    -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
-                          Jira base-URL.
-    -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
-                          Admin user-authentication. Two auth-types are
-                          supported: Basic, and Bearer (starting with Jira
-                          8.14). The format for Basic is: 'Basic <user>:<pass>'.
-                          The format for Bearer is: 'Bearer <token>'.
-    -i INFILE, --infile INFILE
-                          File with user-names to be anonymized or just
-                          validated. One user-name per line. Comments are
-                          allowed: They must be prefixed by '#' and they must
-                          appear on their own line. The character-encoding is
-                          platform dependent Python suggests. If you have
-                          trouble with the encoding, try out the parameter '--
-                          encoding'.
-    --encoding ENCODING   Force a character-encoding for reading the infile.
-                          Empty means platform dependent Python suggests.
-    -o REPORT_OUT_DIR, --report-out-dir REPORT_OUT_DIR
-                          Output-directory to write the reports into. If you'd
-                          like the date included, give something like `date
-                          +%Y%m%d-%H%M-anonymize-instance1`. Defaults to '.'.
-    --expand-validation-with-affected-entities
-                          Include 'affectedEntities' in the validation result.
-                          This is only for documentation to enrich the detailed
-                          report. It doesn't affect the anonymization.
+      -h, --help            show this help message and exit
+      -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
+                            Log-level. Defaults to INFO.
+      -c CONFIG_FILE, --config-file CONFIG_FILE
+                            Config-file to pre-set command-line-options. You can
+                            generate a config-file-template with option 'miisc
+                            -g'. There are parameters in the config-file not
+                            present on the command line. Empty parameters in the
+                            config-file are ignored. Parameters given on the
+                            command line overwrite parameters given in the config-
+                            file.
+      -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
+                            Jira base-URL.
+      -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
+                            Admin user-authentication. Two auth-types are
+                            supported: Basic, and Bearer (starting with Jira
+                            8.14). The format for Basic is: 'Basic <user>:<pass>'.
+                            The format for Bearer is: 'Bearer <token>'.
+      -o REPORT_OUT_DIR, --report-out-dir REPORT_OUT_DIR
+                            Output-directory to write the reports into. If it
+                            doesn't exist, it'll be created. If you'd like the
+                            date included, give something like `date
+                            +%Y%m%d-%H%M-anonymize-instance1`. Defaults to '.'.
+      -i INFILE, --infile INFILE
+                            File with user-names to be anonymized or just
+                            validated. One user-name per line. Comments are
+                            allowed: They must be prefixed by '#' and they must
+                            appear on their own line. The character-encoding is
+                            platform dependent Python suggests. If you have
+                            trouble with the encoding, try out the parameter '--
+                            encoding'.
+      --encoding ENCODING   Force a character-encoding for reading the infile.
+                            Empty means platform dependent Python suggests. If you
+                            run on Win or the infile was created on Win, try out
+                            one of these encodings: utf-8, cp1252, latin1.
+      --expand-validation-with-affected-entities
+                            Include 'affectedEntities' in the validation result.
+                            This is only for documentation to enrich the detailed
+                            report. It doesn't affect the anonymization.
+      --info                Print the effective config, and the character-encoding
+                            Python suggests, then exit.
 
 Parameters for command `anonymize`:
 
 These parameters extend the above parameters (`validate` doesn't have a specific parameter-list).
 
-    -n NEW_OWNER, --new-owner NEW_OWNER
-                          Transfer roles of all anonymized users to the user
-                          with this user-name.
-    -d, --try-delete-user
-                          Try deleting the user. If not possible, do anonymize.
-    -D, --dry-run         Finally do not delete nor anonymize. To get familiar
-                          with the script and to test it.
-    -x, --background-reindex
-                          If at least one user was anonymized, trigger a
-                          background re-index.
+      -n NEW_OWNER, --new-owner NEW_OWNER
+                            Transfer roles of all anonymized users to the user
+                            with this user-name.
+      -d, --try-delete-user
+                            Try deleting the user. If not possible, do anonymize.
+      -D, --dry-run         Finally do not delete nor anonymize. To get familiar
+                            with the script and to test it.
+      -x, --background-reindex
+                            If at least one user was anonymized, trigger a
+                            background re-index.
+
+Parameters for command `inactive-users`
+
+      -h, --help            show this help message and exit
+      -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
+                            Log-level. Defaults to INFO.
+      -c CONFIG_FILE, --config-file CONFIG_FILE
+                            Config-file to pre-set command-line-options. You can
+                            generate a config-file-template with option 'miisc
+                            -g'. There are parameters in the config-file not
+                            present on the command line. Empty parameters in the
+                            config-file are ignored. Parameters given on the
+                            command line overwrite parameters given in the config-
+                            file.
+      -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
+                            Jira base-URL.
+      -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
+                            Admin user-authentication. Two auth-types are
+                            supported: Basic, and Bearer (starting with Jira
+                            8.14). The format for Basic is: 'Basic <user>:<pass>'.
+                            The format for Bearer is: 'Bearer <token>'.
+      -o REPORT_OUT_DIR, --report-out-dir REPORT_OUT_DIR
+                            Output-directory to write the reports into. If it
+                            doesn't exist, it'll be created. If you'd like the
+                            date included, give something like `date
+                            +%Y%m%d-%H%M-anonymize-instance1`. Defaults to '.'.
+      --info                Print the effective config, and the character-encoding
+                            Python suggests, then exit.
+      --exclude-groups EXCLUDE_GROUPS [EXCLUDE_GROUPS ...]
+                            Exclude members of these groups
+      -f OUT_FILE, --out-file OUT_FILE
+                            Output-file to write the users into. If the path
+                            doesn't exist, it'll be created.
 
 Parameters for command `misc`:
 
-    -g [CONFIG_TEMPLATE_FILE], --generate-config-template [CONFIG_TEMPLATE_FILE]
-                          Generate a configuration-template. Defaults to my-
-                          blank-default-config.cfg.
-    --recreate-report     Re-create the reports from the details file. Only for
-                          development.
+      -h, --help            show this help message and exit
+      -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
+                            Log-level. Defaults to INFO.
+      -g [CONFIG_TEMPLATE_FILE], --generate-config-template [CONFIG_TEMPLATE_FILE]
+                            Generate a configuration-template. Defaults to my-
+                            blank-default-config.cfg.
 
 ## Combination of parameters from the conig-file and the command-line
 
@@ -771,7 +818,43 @@ Only the user-name was anonymized:
     User key is already anonymized (JIRAUSER10201), no need to change it
     Username is not anonymized (user2post84), should rename to (jirauser10201)
 
+## Command `inactive-users`
+
+Retrieve a list of inactive, not-yet anonymized users. These users are candidates for anonymization (but should be
+assessed before).
+
+`anonymize_jira_users.py inactive-users -c my-config.cfg -f inactive-users.txt --exclude-groups technical_users do_no_anonymize_users`
+
+The above command writes the file `inactive-users.txt`. The content is like:
+
+    # File generated at 2021-01-05T21:07:32
+    # Users: 2
+    # User attributes: User-name; user-key; display-name; email-address
+    
+    # user1pre84; user1pre84; User 1 Pre 84; user1pre84@example.com
+    user1pre84
+    
+    # user2pre84; user2pre84; User 2 Pre 84; user2pre84@example.com
+    user2pre84
+
 # Known issues
+
+## Command `inactive-users` might return a max. of 1000 users
+
+The command `inactive-users` uses the REST API `/rest/api/2/user/search`. There is a open Jira-bug documented in
+[JRASERVER-29069](https://jira.atlassian.com/browse/JRASERVER-29069) which leads
+(in some Jira instances) to a max. of 1000 users. I have seen this bug in some instances, but others delivered more than
+1000 users as expected.
+
+If the list of users in the out-file of command `inactive-users` is exact 1000, it is likely you ran into the bug. The
+Anonymizer logs a warning to the command line in that case.
+
+The anonymizer calls the API with following parameters:
+
+`/rest/api/2/user/search?username=.&includeInactive=true&includeActive=false&startAt=...`
+
+Unfortunately the REST API itself hasn't an exclude-parameter, so the amount of users will grow over time (the users
+anonymized so far still counts to the users the API delivers).
 
 ## Validation error-messages in unexpected language
 
