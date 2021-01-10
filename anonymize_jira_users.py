@@ -75,7 +75,7 @@ DEFAULT_CONFIG = {
 }
 
 DEFAULT_CONFIG_REPORT_BASENAME = 'anonymizing_report'
-DEFAULT_CONFIG_TEMPLATE_FILENAME = 'my-blank-default-config.cfg'
+DEFAULT_CONFIG_TEMPLATE_FILENAME = 'my-bare-default-config.cfg'
 SSL_VERIFY = False
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 PRETTY_PRINT_LOG_LEVELS = "{}".format(LOG_LEVELS).replace('[', '').replace(']', '').replace('\'', '')
@@ -484,7 +484,7 @@ def parse_parameters():
       user-name per line.
     o Create a config-file-template:
           anonymize_jira_users.py misc -g
-      The file my-blank-default-config.cfg has been created.
+      The file my-bare-default-config.cfg has been created.
     o Rename the file, e.g. to my-config.cfg.
     o In that file, set the attributes jira_base_url; jira_auth with
       format 'Basic admin:admin'; new_owner.
