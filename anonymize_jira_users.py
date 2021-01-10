@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
     'infile': '',
     # Force a character-encoding for reading the infile. Empty means platform dependent Python suggests.
     'encoding': None,
+    'is_infile_lists_user_keys': False,
     'report_out_dir': '.',
     'loglevel': 'INFO',
     'is_expand_validation_with_affected_entities': False,
@@ -343,12 +344,16 @@ def write_default_cfg_file(config_template_filename):
         #   The given values are examples.
         #jira_auth = Basic admin:admin
         #jira_auth = Bearer NDcyOTE1ODY4Nzc4Omj+FiGVuLh/vs4WjTS9/3lGaysM
-        #   File with user-names to be anonymized or just validated. One user-name per line. 
+        #   File with user-names or -keys to be anonymized or just validated. One user per line.
+        #   The users are processed case-sensitive. 
         #   Comments are allowed: They must be prefixed by '#' and they must appear on their own line.
         #   The character-encoding is platform dependent Python suggests.
         #   If you have trouble with the encoding, try out the parameter '--encoding'.
         #   The given value is an example.
         #infile = usernames.txt
+        #   The users in infile are interpreted as user-keys, not user-names. Defaults to user-names.
+        #   The given value is the default. 
+        #is_infile_lists_user_keys = {is_infile_lists_user_keys}
         #   Force a character-encoding for reading the infile. Empty means platform dependent Python suggests.
         #   If you run on Win or the infile was created on Win, try out one of these encodings:
         #     utf-8, cp1252, latin1 
@@ -387,6 +392,7 @@ def write_default_cfg_file(config_template_filename):
                    boolean_false=BOOLEAN_FALSE_VALUES,
                    valid_loglevels=PRETTY_PRINT_LOG_LEVELS,
                    loglevel=g_config['loglevel'],
+                   is_infile_lists_user_keys=g_config['is_infile_lists_user_keys'],
                    report_out_dir=g_config['report_out_dir'],
                    is_expand_validation_with_affected_entities=
                                        g_config['is_expand_validation_with_affected_entities'],
@@ -396,6 +402,12 @@ def write_default_cfg_file(config_template_filename):
                    regular_delay=g_config['regular_delay'],
                    timeout=g_config['timeout'],
                    is_do_background_reindex=g_config['is_do_background_reindex'])
+        # Make 'True' and 'False' look like JSON's and Java's properties 'true' and 'false'. That
+        # might be more convenient for users. This is also the format the --info command line
+        # options prints out. In fact, the Python's 'True' and 'False' (beginning with upper case)
+        # are also allowed but not mentioned, because the replace() would replace them also.
+        help_text = help_text.replace('True', 'true').replace('False', 'false')
+        # dedent() removes common leading spaces.
         f.write(textwrap.dedent(help_text))
 
 
@@ -546,8 +558,10 @@ def parse_parameters():
     parent_parser_for_anonymize_and_validate = argparse.ArgumentParser(add_help=False)
     parent_parser_for_anonymize_and_validate \
         .add_argument('-i', '--infile',
-                      help="File with user-names to be anonymized or just validated."
-                           " One user-name per line. Comments are allowed:"
+                      help="File with user-names or -keys to be anonymized or just validated."
+                           " One user-name per line."
+                           " The users are processed case-sensitive."
+                           " Comments are allowed:"
                            " They must be prefixed by '#' and they must appear on their own line."
                            " The character-encoding is platform dependent Python suggests."
                            " If you have trouble with the encoding, try out the parameter '--encoding'.")
@@ -557,6 +571,9 @@ def parse_parameters():
                            " Empty means platform dependent Python suggests."
                            " If you run on Win or the infile was created on Win, try out one of these encodings:"
                            " utf-8, cp1252, latin1.")
+    parent_parser_for_anonymize_and_validate \
+        .add_argument('-k', '--infile-lists-user-keys', action='store_true', default=None,
+                      help="The items in infile are interpreted as user-keys, not user-names. Defaults to false.")
     parent_parser_for_anonymize_and_validate \
         .add_argument('--expand-validation-with-affected-entities', default=False,
                       action='store_true',
@@ -748,7 +765,7 @@ def parse_parameters():
     return args
 
 
-def read_user_names_from_infile():
+def read_users_from_infile():
     """Read the Jira user-names from the infile. Skip lines starting with hash '#'.
 
     :return: None.
@@ -803,35 +820,74 @@ def get_user_data(user_name):
     return r
 
 
-def get_users_data(users):
+def get_users_data(users, is_user_keys):
+    """Get user-details from GET /rest/api/2/user.
+
+    The URL-parameter 'includeDeleted' was introduced in Jira 8.10. But older
+    versions are robust against usage and ignores it. Older versions returns
+    404 Not Found and the error message
+    "The user with the key 'user1pre84' does not exist".
+
+    Also in 8.10 Atlassian introduced the boolean attribute "deleted".
+
+    :param users: The users
+    :param is_user_keys: false in case of user-names, true in case
+        of user-keys.
+    :return: None
+    """
     rel_url = '/rest/api/2/user'
     log.info("for {} users".format(len(users)))
     url = g_config['jira_base_url'] + rel_url
-    for user_name in users.keys():
-        url_params = {'includeDeleted': True, 'username': user_name}
+    for user_name_or_key in users.keys():
+        if is_user_keys:
+            url_params = {'includeDeleted': True, 'key': user_name_or_key}
+        else:
+            url_params = {'includeDeleted': True, 'username': user_name_or_key}
         r = g_session.get(url=url, params=url_params)
-        users[user_name]['rest_get_user__before_anonymization'] = serialize_response(r)
-        log.debug(users[user_name]['rest_get_user__before_anonymization'])
+        users[user_name_or_key]['rest_get_user__before_anonymization'] = serialize_response(r)
+        log.debug(users[user_name_or_key]['rest_get_user__before_anonymization'])
 
 
-def get_validation_data(users):
+def get_validation_data(users, is_user_keys):
+    """Get validation data for all users from GET /rest/api/2/user/anonymization.
+
+    This is done by user-key and works also for deleted users since introduction
+    of the anonymization in 8.7 (despite the fact the API /rest/api/2/user
+    introduced the URL-parameter 'includeDeleted' and the response-attribute
+    "deleted" later in 8.10).
+
+    In case of deleted users, the attributes "userName" and "displayName"
+    contain the DB app_user.lower_user_key. The "email" contains "?".
+    This API do not respond any attribute for "deleted" as /rest/api/2/user
+    since 8.10.
+
+    The question-mark is a Jira-internal marker for an unknown user. See also
+    the Jira source-code UserResource.java and DefaultUserManager.java.
+
+    :param users: The users.
+    :param is_user_keys: true if user-keys, false if user-names.
+    :return: None
+    """
     rel_url = '/rest/api/2/user/anonymization'
     log.info("")
     url = g_config['jira_base_url'] + rel_url
-    for user_name, user_data in users.items():
-        if user_data['rest_get_user__before_anonymization']['status_code'] != 200:
-            # The user does not exist. A message about this missing user is logged later on
-            # in filter_users().
-            continue
+    for user_name_or_key, user_data in users.items():
 
-        user_key = user_data['rest_get_user__before_anonymization']['json']['key']
+        if is_user_keys:
+            user_key = user_name_or_key
+        else:
+            if user_data['rest_get_user__before_anonymization']['status_code'] != 200:
+                # The user does not exist. A message about this missing user is logged later on
+                # in filter_users().
+                continue
+            user_key = user_data['rest_get_user__before_anonymization']['json']['key']
+
         url_params = {'userKey': user_key}
         if g_config['is_expand_validation_with_affected_entities']:
             url_params['expand'] = 'affectedEntities'
-        # https://docs.atlassian.com/software/jira/docs/api/REST/8.13.0/#api/2/user-getUser
         r = g_session.get(url=url, params=url_params)
-        g_users[user_name]['rest_get_anonymization__query_validation'] = serialize_response(r)
-        log.debug(g_users[user_name]['rest_get_anonymization__query_validation'])
+        g_users[user_name_or_key]['rest_get_anonymization__query_validation'] = serialize_response(r)
+        log.debug(g_users[user_name_or_key]['rest_get_anonymization__query_validation'])
 
         # These status-codes are documented:
         #  - 200 Returned when validation succeeded.
@@ -1035,6 +1091,11 @@ def delete_or_anonymize_users(users_to_be_anonymized, new_owner_key):
     i = 0
     for user_name, user_data in users_to_be_anonymized.items():
         i += 1
+
+        # The user-key can't be read from user_data['rest_get_user__before_anonymization']['json']['key']
+        # because the key could belong to a deleted user. In that case, there is not data at
+        # 'rest_get_user__before_anonymization'.
+
         user_key = user_data['rest_get_user__before_anonymization']['json']['key']
         log.info("#{} (name/key): {}/{}".format(i, user_name, user_key))
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
@@ -1357,16 +1418,22 @@ def create_raw_report(overall_report):
     number_of_deleted_users = 0
     number_of_anonymized_users = 0
     users_data = overall_report['users_from_infile']
-    for user_name, user_data in users_data.items():
+    for user_name_or_key, user_data in users_data.items():
 
         try:
-            user_key = user_data['rest_get_user__before_anonymization']['json']['key']
-            user_display_name = user_data['rest_get_user__before_anonymization']['json']['displayName']
-            active = user_data['rest_get_user__before_anonymization']['json']['active']
+            user_name = user_data['rest_get_anonymization__query_validation']['json']['userName']
+            user_key = user_data['rest_get_anonymization__query_validation']['json']['userKey']
+            user_display_name = user_data['rest_get_anonymization__query_validation']['json']['displayName']
+            user_email = user_data['rest_get_anonymization__query_validation']['json']['email']
+            # TODO user status
+            # active = user_data['rest_get_user__before_anonymization']['json']['active']
         except KeyError:
+            # TODO Something went wrong. Let the user know.
+            user_name = None
             user_key = None
             user_display_name = None
-            active = None
+            user_email = None
+            # active = None
 
         try:
             validation_has_errors = len(user_data['rest_get_anonymization__query_validation']['errors']) > 0
@@ -1420,7 +1487,9 @@ def create_raw_report(overall_report):
             'user_name': user_name,
             'user_key': user_key,
             'user_display_name': user_display_name,
-            'active': active,
+            'user_email': user_email,
+            # TODO user status
+            # 'active': active,
             'validation_has_errors': validation_has_errors,
             'filter_is_anonymize_approval': filter_is_anonymize_approval,
             'filter_error_message': filter_error_message,
@@ -1557,7 +1626,9 @@ def at_exit_write_anonymization_reports():
 
     file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_text_filename'])
     with open(file_path, 'w', newline='') as f:
-        fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
+        fieldnames = ['user_name', 'user_key', 'user_display_name', 'user_email',
+                      # TODO user status
+                      # 'active',
                       'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
                       'action',
@@ -1740,14 +1811,22 @@ def main():
         # => Let at_exit_...() write the reports.
         atexit.register(at_exit_complete_and_write_details_report)
         atexit.register(at_exit_write_anonymization_reports)
+
         log.debug("")
         read_users_from_infile()
 
+        #
+        # The validation API takes the user-key. If the infile lists user-names, we have to query
+        # the user-keys by their user-names before validation. This is done by get_users_data().
+        # In case the infile lists user-keys, we could skip get_users_data(). But that function
+        # returns information which could be interesting later on reading the detailed-report. At
+        # lest it checks which user exists and which not.
+        #
         log.debug("")
-        get_users_data(g_users)
+        get_users_data(g_users, g_config['is_infile_lists_user_keys'])
 
         log.debug("")
-        get_validation_data(g_users)
+        get_validation_data(g_users, g_config['is_infile_lists_user_keys'])
 
         log.debug("")
         filter_users(g_users)
