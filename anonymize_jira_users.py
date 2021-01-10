@@ -1094,22 +1094,35 @@ def delete_or_anonymize_users(valid_users, new_owner_key):
 
 def is_anonymized_user_data_complete_for_user(user_name, key):
     """Check if all three items user-name, -key, and display-name are collected so far.
-     If so, we're done with this user."""
-    anonymized_data_for_user = g_users[user_name][key]
-    return anonymized_data_for_user['user_name'] and anonymized_data_for_user['user_key'] and anonymized_data_for_user[
-        'display_name']
+     If so, we're done with this user.
+     """
+
+    anonymized_data = g_users[user_name][key]
+    return anonymized_data['user_name'] \
+           and anonymized_data['user_key'] \
+           and anonymized_data['display_name']
 
 
-def get_anonymized_user_data_from_audit_events(user_name):
-    # Format of "script_started" is "2020-12-29T23:17:35.399+0100".
-    user_data = g_users[user_name]
-    anonymization_start_date_str = user_data['rest_post_anonymization']['json']['submittedTime'].split('.')[0]
+def date_str_to_utc_str(date_str):
+    """Convert date/time-string of format "2020-12-29T23:17:35.399+0100" to UTC in format 2020-12-29T23:16:35.399Z.
+
+    :param date_str: Expect format "2020-12-29T23:17:35.399+0100"
+    :return: String UTC in format 2020-12-29T23:16:35.399Z
+    """
+    # Split string in "2020-12-29T23:17:35" and ".399+0100".
+    date_parts = date_str.split('.')
     # Convert to UTC. The conversion respects DST.
-    anonymization_start_date_local = datetime.strptime(anonymization_start_date_str, '%Y-%m-%dT%H:%M:%S')
-    anonymization_start_date_utc = time.strftime("%Y-%m-%dT%H:%M:%S.000Z",
-                                                 time.gmtime(time.mktime(
-                                                     time.strptime(anonymization_start_date_str, '%Y-%m-%dT%H:%M:%S'))))
-    log.debug("anonymization_start_date: local {}, UTC {}".format(anonymization_start_date_local,
+    date_utc = time.strftime("%Y-%m-%dT%H:%M:%S",
+                             time.gmtime(time.mktime(time.strptime(date_parts[0], '%Y-%m-%dT%H:%M:%S'))))
+    date_utc += '.{}Z'.format(date_parts[1][:3])
+    return date_utc
+
+
+def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
+    user_data = g_users[user_name_to_search_for]
+    anonymization_start_date = user_data['rest_post_anonymization']['json']['submittedTime']
+    anonymization_start_date_utc = date_str_to_utc_str(anonymization_start_date)
+    log.debug("anonymization_start_date: local {}, UTC {}".format(anonymization_start_date,
                                                                   anonymization_start_date_utc))
 
     rel_url = '/rest/auditing/1.0/events'
@@ -1163,17 +1176,18 @@ def get_anonymized_user_data_from_audit_events(user_name):
             # Expect only one list-item here, but for sure iterate over it.
             for changedValue in entity['changedValues']:
                 if changedValue['key'] == 'Username':
-                    from_name = changedValue['from']
-                    if from_name != user_name or is_anonymized_user_data_complete_for_user(from_name,
-                                                                                           anonymized_data_key):
+                    from_name_from_audit_log = changedValue['from']
+                    if from_name_from_audit_log != user_name_to_search_for \
+                            or is_anonymized_user_data_complete_for_user(user_name_to_search_for, anonymized_data_key):
                         break
-                    g_users[from_name][anonymized_data_key]['user_name'] = changedValue['to']
-                    g_users[from_name][anonymized_data_key]['user_key'] = \
+                    g_users[user_name_to_search_for][anonymized_data_key]['user_name'] = changedValue['to']
+                    g_users[user_name_to_search_for][anonymized_data_key]['user_key'] = \
                         entity['affectedObjects'][0]['id']
         elif action == 'User updated':
             # Saw a list with 1 dict, with a 'name' key. I think it is save to access by [0].
-            user_name = entity['affectedObjects'][0]['name']
-            if user_name != user_name or is_anonymized_user_data_complete_for_user(user_name, anonymized_data_key):
+            user_name_from_audit_log = entity['affectedObjects'][0]['name']
+            if user_name_from_audit_log != user_name_to_search_for \
+                    or is_anonymized_user_data_complete_for_user(user_name_to_search_for, anonymized_data_key):
                 continue
             for changedValue in entity['changedValues']:
                 # I think this list has only one entry: the 'Key'. But technically it is a list, so we should
@@ -1181,19 +1195,14 @@ def get_anonymized_user_data_from_audit_events(user_name):
                 # Just for the records: If the user was an active user, one separate event is to set
                 # changedValue['key']: "Active / Inactive" "from": "Active" "to": "Inactive".
                 if changedValue['key'] == 'Full name':
-                    g_users[user_name][anonymized_data_key]['display_name'] = changedValue['to']
+                    g_users[user_name_to_search_for][anonymized_data_key]['display_name'] = changedValue['to']
 
 
-def get_anonymized_user_data_from_audit_records(user_name):
-    # Format of "script_started" is "2020-12-29T23:17:35".
-    user_data = g_users[user_name]
-    anonymization_start_date_str = user_data['rest_post_anonymization']['json']['submittedTime'].split('.')[0]
-    # Convert to UTC. The conversion respects DST.
-    anonymization_start_date_local = datetime.strptime(anonymization_start_date_str, '%Y-%m-%dT%H:%M:%S')
-    anonymization_start_date_utc = time.strftime("%Y-%m-%dT%H:%M:%S.000Z",
-                                                 time.gmtime(time.mktime(
-                                                     time.strptime(anonymization_start_date_str, '%Y-%m-%dT%H:%M:%S'))))
-    log.debug("anonymization_start_date: local {}, UTC {}".format(anonymization_start_date_local,
+def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
+    user_data = g_users[user_name_to_search_for]
+    anonymization_start_date = user_data['rest_post_anonymization']['json']['submittedTime']
+    anonymization_start_date_utc = date_str_to_utc_str(anonymization_start_date)
+    log.debug("anonymization_start_date: local {}, UTC {}".format(anonymization_start_date,
                                                                   anonymization_start_date_utc))
 
     rel_url = '/rest/api/2/auditing/record'
@@ -1247,22 +1256,24 @@ def get_anonymized_user_data_from_audit_records(user_name):
             for changedValue in record['changedValues']:
                 # TODO comment about list
                 if changedValue['fieldName'] == 'Username':
-                    from_name = changedValue['changedFrom']
-                    if from_name != user_name or is_anonymized_user_data_complete_for_user(from_name,
-                                                                                           anonymized_data_key):
+                    from_name_from_audit_log = changedValue['changedFrom']
+                    if from_name_from_audit_log != user_name_to_search_for \
+                            or is_anonymized_user_data_complete_for_user(user_name_to_search_for,
+                                                                         anonymized_data_key):
                         break
-                    g_users[from_name][anonymized_data_key]['user_name'] = changedValue['changedTo']
-                    g_users[from_name][anonymized_data_key]['user_key'] = record['objectItem']['id']
+                    g_users[from_name_from_audit_log][anonymized_data_key]['user_name'] = changedValue['changedTo']
+                    g_users[from_name_from_audit_log][anonymized_data_key]['user_key'] = record['objectItem']['id']
         elif summary == 'User updated':
             # Saw a list with 1 dict, with a 'name' key. I think it is save to access by [0].
-            user_name = record['objectItem']['name']
-            if user_name != user_name or is_anonymized_user_data_complete_for_user(user_name, anonymized_data_key):
+            user_name_from_record = record['objectItem']['name']
+            if user_name_from_record != user_name_to_search_for \
+                    or is_anonymized_user_data_complete_for_user(user_name_to_search_for, anonymized_data_key):
                 continue
             for changedValue in record['changedValues']:
                 # I think this list has only one entry: the 'Key'. But technically it is a list, so we should
                 # iterate over it.
                 if changedValue['fieldName'] == 'Full name':
-                    g_users[user_name][anonymized_data_key]['display_name'] = changedValue['changedTo']
+                    g_users[user_name_to_search_for][anonymized_data_key]['display_name'] = changedValue['changedTo']
 
 
 def is_any_anonymization_running():
