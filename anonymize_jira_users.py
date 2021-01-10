@@ -803,25 +803,25 @@ def get_user_data(user_name):
     return r
 
 
-def get_users_data():
+def get_users_data(users):
     rel_url = '/rest/api/2/user'
-    log.info("for {} users".format(len(g_users)))
+    log.info("for {} users".format(len(users)))
     url = g_config['jira_base_url'] + rel_url
-    for user_name in g_users.keys():
-        url_params = {'username': user_name}
+    for user_name in users.keys():
+        url_params = {'includeDeleted': True, 'username': user_name}
         r = g_session.get(url=url, params=url_params)
-        g_users[user_name]['rest_get_user__before_anonymization'] = serialize_response(r)
-        log.debug(g_users[user_name]['rest_get_user__before_anonymization'])
+        users[user_name]['rest_get_user__before_anonymization'] = serialize_response(r)
+        log.debug(users[user_name]['rest_get_user__before_anonymization'])
 
 
-def get_validation_data():
+def get_validation_data(users):
     rel_url = '/rest/api/2/user/anonymization'
     log.info("")
     url = g_config['jira_base_url'] + rel_url
-    for user_name, user_data in g_users.items():
+    for user_name, user_data in users.items():
         if user_data['rest_get_user__before_anonymization']['status_code'] != 200:
             # The user does not exist. A message about this missing user is logged later on
-            # in filter_users()
+            # in filter_users().
             continue
 
         user_key = user_data['rest_get_user__before_anonymization']['json']['key']
@@ -842,33 +842,40 @@ def get_validation_data():
             r.raise_for_status()
 
 
-def filter_users():
+def filter_users(users):
     log.info("by existence and validation-data")
 
-    for user_name, user_data in g_users.items():
+    for user_name, user_data in users.items():
         error_message = ""
 
         #
-        #  Check against data got form GET /rest/api/2/user if the user exists and is inactive
+        # Give anonymize-approval only to users who are inactive or deleted.
+        # A user can be 1. active, 2. inactive, or 3. deleted. So we have to check only if the user
+        # is an active users to skip it.
+        # A user is active, if GET rest/api/2/user responds with status code 200 OK and the
+        # attribute "active" is true.
         #
+
+        # Check if user-data could be retrieved.
         if user_data['rest_get_user__before_anonymization']['status_code'] != 200:
             error_message = '{}'.format(user_data['rest_get_user__before_anonymization']['json']['errorMessages'][0])
         else:
-            # Check if the existing user is an active user:
-            is_active_user = user_data['rest_get_user__before_anonymization']['json']['active']
-            if is_active_user:
+            # Check if the user is an active user:
+            if user_data['rest_get_user__before_anonymization']['json']['active']:
                 error_message = "Is an active user."
 
         #
         #  Check against validation result got from GET rest/api/2/user/anonymization.
         #
         if not error_message:
-            # try/except: user_data['rest_get_anonymization__query_validation'] could be absent in case of an invalid user-name.
+            # try/except: user_data['rest_get_anonymization__query_validation']
+            # could be absent in case of an invalid user-name or -key in the infile.
             try:
                 if user_data['rest_get_anonymization__query_validation']['status_code'] != 200:
                     error_message = "HTTP status-code of the REST validation API is not 200. "
-                # Despite of an status-code of 200 there could be errors (seen in use case "admin tries to
-                # anonymize themself).
+                # Regardless of the status code there could be validation-errors (seen e.g.
+                # in use case "admin tries to anonymize themself": Status code was 400 Bad Request
+                # and the error was "You can't anonymize yourself.").
                 if len(user_data['rest_get_anonymization__query_validation']['json']['errors']) > 0:
                     error_message += "There is at least one validation error message."
             except KeyError:
@@ -883,7 +890,7 @@ def filter_users():
         else:
             user_data['user_filter']['is_anonymize_approval'] = True
 
-    vu = {user_name: user_data for (user_name, user_data) in g_users.items() if
+    vu = {user_name: user_data for (user_name, user_data) in users.items() if
           user_data['user_filter']['is_anonymize_approval'] is True}
     log.info("{} users remain to be anonymized: {}".format(len(vu.keys()), list(vu.keys())))
 
@@ -1010,23 +1017,23 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
     return is_timed_out
 
 
-def delete_or_anonymize_users(valid_users, new_owner_key):
-    rel_url_for_deletion = '/rest/api/2/user'
-    rel_url_for_anonymizing = '/rest/api/2/user/anonymization'
+def delete_or_anonymize_users(users_to_be_anonymized, new_owner_key):
+    rel_url_for_delete = '/rest/api/2/user'
+    rel_url_for_anonymize = '/rest/api/2/user/anonymization'
 
     if g_config['is_try_delete_user']:
         phrase = "delete or "
     else:
         phrase = ""
 
-    log.info("Going to {}anonymize {} users".format(phrase, len(valid_users), rel_url_for_anonymizing))
+    log.info("Going to {}anonymize {} users".format(phrase, len(users_to_be_anonymized), rel_url_for_anonymize))
     if g_config['is_dry_run']:
         log.warning("DRY-RUN IS ENABLED. No user will be deleted nor anonymized.")
 
-    url_for_deletion = g_config['jira_base_url'] + rel_url_for_deletion
-    url_for_anonymizing = g_config['jira_base_url'] + rel_url_for_anonymizing
+    url_for_deletion = g_config['jira_base_url'] + rel_url_for_delete
+    url_for_anonymizing = g_config['jira_base_url'] + rel_url_for_anonymize
     i = 0
-    for user_name, user_data in valid_users.items():
+    for user_name, user_data in users_to_be_anonymized.items():
         i += 1
         user_key = user_data['rest_get_user__before_anonymization']['json']['key']
         log.info("#{} (name/key): {}/{}".format(i, user_name, user_key))
@@ -1368,12 +1375,12 @@ def create_raw_report(overall_report):
 
         try:
             user_filter = user_data['user_filter']
-            if not user_filter['is_anonymize_approval']:
-                number_of_skipped_users += 1
             filter_is_anonymize_approval = user_filter['is_anonymize_approval']
+            if not filter_is_anonymize_approval:
+                number_of_skipped_users += 1
             filter_error_message = user_filter['error_message']
         except KeyError:
-            user_filter = {}
+            # TODO Something went wrong. Let the user know.
             filter_is_anonymize_approval = None
             filter_error_message = None
 
@@ -1734,13 +1741,17 @@ def main():
         atexit.register(at_exit_complete_and_write_details_report)
         atexit.register(at_exit_write_anonymization_reports)
         log.debug("")
-        read_user_names_from_infile()
+        read_users_from_infile()
+
         log.debug("")
-        get_users_data()
+        get_users_data(g_users)
+
         log.debug("")
-        get_validation_data()
+        get_validation_data(g_users)
+
         log.debug("")
-        filter_users()
+        filter_users(g_users)
+
         if args.subparser_name == CMD_ANONYMIZE:
             log.debug("")
             if is_any_anonymization_running():
@@ -1749,16 +1760,16 @@ def main():
                           " Exiting.")
                 sys.exit(2)
             log.debug("")
-            anonymized_users_data = {user_name: user_data for (user_name, user_data) in g_users.items() if
-                                     user_data['user_filter']['is_anonymize_approval'] is True}
+            users_to_be_anonymized = {user_name: user_data for (user_name, user_data) in g_users.items() if
+                                      user_data['user_filter']['is_anonymize_approval'] is True}
             if not g_config['dry_run']:
                 # run_user_anonymization() expects the user-key, not the user-name.
                 new_owner_key = g_execution['rest_get_user__new_owner']['json']['key']
-                delete_or_anonymize_users(anonymized_users_data, new_owner_key)
+                delete_or_anonymize_users(users_to_be_anonymized, new_owner_key)
 
-        # Re-indexing is specific to the "if args.subparser_name == 'anonymize'". But the re-index shall only be
-        # triggered if there is at least one anonymized user. Only the report provides information about the number of
-        # anonymized users, so we have to create the report fist.
+        # Re-indexing is specific to the 'anonymize'-command. The re-index shall only be triggered
+        # if there is at least one anonymized user. Only the report provides information about the
+        # number of anonymized users, so we have to create the report fist.
         raw_report = create_raw_report(g_details)
         if raw_report['overview']['number_of_anonymized_users'] > 0 and args.is_do_background_reindex:
             # Let the user know if a re-index has been triggered.
