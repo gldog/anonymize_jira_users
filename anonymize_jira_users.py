@@ -360,12 +360,9 @@ def write_default_cfg_file(config_template_filename):
         #   to enrich the detailed report. It doesn't affect the anonymization.
         #   The given value is the default.
         #is_expand_validation_with_affected_entities = {is_expand_validation_with_affected_entities}
-        #   Finally do not anonymize. To get familiar with the script and to test it.
+        #   Finally do not anonymize nor delete. To get familiar with the script and to test it.
         #   The given value is the default.
         #is_dry_run = {is_dry_run}
-        #   Try deleting the user. If not possible, do anonymize.
-        #   The given value is the default.
-        #is_try_delete_user = {is_try_delete_user}
         #   Transfer roles to the user with this user-name.
         #   The given value is an example.
         #new_owner = new-owner
@@ -379,6 +376,9 @@ def write_default_cfg_file(config_template_filename):
         #   Time in seconds the anonymization shall wait to be finished.
         #   0 (or any negative value) means: Wait as long as it takes.
         #timeout = {timeout}
+        #   Try deleting the user after anonymized.
+        #   The given value is the default.
+        #is_try_delete_user = {is_try_delete_user}
         #   If at least one user was anonymized, trigger a background re-index.
         #   The given value is the default.
         #is_do_background_reindex = {is_do_background_reindex}
@@ -585,6 +585,9 @@ def parse_parameters():
     #
     # Add arguments special to command "anonymize".
     #
+    sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
+                              help="Finally do not delete nor anonymize."
+                                   " To get familiar with the script and to test it.")
     sp_anonymize.add_argument('-n', '--new-owner',
                               help="Transfer roles of all anonymized users to the user with this user-name.")
     # Combination of "default" and "action":
@@ -595,10 +598,7 @@ def parse_parameters():
     # between the given or the omitted -d.
     sp_anonymize.add_argument('-d', '--try-delete-user', default=None, action='store_true',
                               dest='is_try_delete_user',
-                              help="Try deleting the user. If not possible, do anonymize.")
-    sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
-                              help="Finally do not delete nor anonymize."
-                                   " To get familiar with the script and to test it.")
+                              help="Try deleting the user after anonymized.")
     sp_anonymize.add_argument('-x', '--background-reindex', action='store_true',
                               dest='is_do_background_reindex',
                               help="If at least one user was anonymized, trigger a background re-index.")
@@ -748,7 +748,7 @@ def parse_parameters():
     return args
 
 
-def read_user_names_from_infile():
+def read_users_from_infile():
     """Read the Jira user-names from the infile. Skip lines starting with hash '#'.
 
     :return: None.
@@ -763,7 +763,7 @@ def read_user_names_from_infile():
             if line and not line.startswith('#'):
                 user_name = line
                 g_users[user_name] = {}
-    log.info("  The user-names are ({}): {}".format(len(g_users.keys()), list(g_users.keys())))
+    log.info("The user-names are ({}): {}".format(len(g_users.keys()), list(g_users.keys())))
 
 
 def serialize_response(r, is_include_json_response=True):
@@ -886,13 +886,13 @@ def filter_users(users):
         if error_message:
             user_data['user_filter']['error_message'] = error_message
             user_data['user_filter']['is_anonymize_approval'] = False
-            log.warning("User {}: {}".format(user_name, error_message))
+            log.warning("{}: {}".format(user_name, error_message))
         else:
             user_data['user_filter']['is_anonymize_approval'] = True
 
     vu = {user_name: user_data for (user_name, user_data) in users.items() if
           user_data['user_filter']['is_anonymize_approval'] is True}
-    log.info("{} users remain to be anonymized: {}".format(len(vu.keys()), list(vu.keys())))
+    log.info("{} users remain for anonymization: {}".format(len(vu.keys()), list(vu.keys())))
 
 
 def get_anonymization_progress(user_name=None, full_progress_url=None):
@@ -1017,16 +1017,16 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
     return is_timed_out
 
 
-def delete_or_anonymize_users(users_to_be_anonymized, new_owner_key):
+def anonymize_users(users_to_be_anonymized, new_owner_key):
     rel_url_for_delete = '/rest/api/2/user'
     rel_url_for_anonymize = '/rest/api/2/user/anonymization'
 
     if g_config['is_try_delete_user']:
-        phrase = "delete or "
+        phrase = " and delete"
     else:
         phrase = ""
 
-    log.info("Going to {}anonymize {} users".format(phrase, len(users_to_be_anonymized), rel_url_for_anonymize))
+    log.info("Going to anonymize{} {} users".format(phrase, len(users_to_be_anonymized), rel_url_for_anonymize))
     if g_config['is_dry_run']:
         log.warning("DRY-RUN IS ENABLED. No user will be deleted nor anonymized.")
 
@@ -1039,64 +1039,67 @@ def delete_or_anonymize_users(users_to_be_anonymized, new_owner_key):
         log.info("#{} (name/key): {}/{}".format(i, user_name, user_key))
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
         if not g_config['is_dry_run']:
-            is_user_deleted = False
-            if g_config['is_try_delete_user']:
-                url_params = {'username': user_name}
-                r = g_session.delete(url=url_for_deletion, params=url_params)
-                user_data['rest_delete_user'] = serialize_response(r)
-                log.debug(user_data['rest_delete_user'])
-                if r.status_code == 204:
-                    is_user_deleted = True
-                    user_data['rest_user_delete_time'] = now_to_date_string()
-
-            if not is_user_deleted:
-                r = g_session.post(url=url_for_anonymizing, json=body)
-                user_data['rest_post_anonymization'] = serialize_response(r)
-                log.debug(user_data['rest_post_anonymization'])
-
-                if r.status_code == 202:
-                    log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
-                    time.sleep(g_config['initial_delay'])
-                    is_timed_out = wait_until_anonymization_is_finished_or_timedout(i, user_name)
-                    # Atlassian introduced anonymization in Jira 8.7.
-                    # We query the anonymized user-data from the audit-log.
-                    # Jira supports two auditing REST-APIs:
-                    #   1. GET /rest/api/2/auditing/record, deprecated since 8.12.
-                    #       https://docs.atlassian.com/software/jira/docs/api/REST/8.0.0/#api/2/auditing-getRecords
-                    #   2. "Audit log improvements for developers", introduced in 8.8.
-                    #       https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html
-                    # The following switch delegates calls the audit REST-API depending on the Jira-version:
-                    # For 8.7, the previous API 1) is used. For 8.8 and later, the new API 2) is used.
-                    # For pre-8.7 it doesn't care as that versions do not support anonymization.
-                    #
-                    # Collecting the anonymized user-data is done before handling the timeout to save what still can
-                    # be saved.
-                    #
-                    # Collecting the anonymized user-data could also be done in one go after all users have been
-                    # anonymized. But that is not as easy as it sounds: Both APIs are limited in output. the API 1) is
-                    # limited to 1.000 records, and the API 2) is paged with a default of 200 events/page. That could
-                    # be fiddly. I'm confident there is not really a downside in execution-time if the anonymized
-                    # data is called for each user one by one.
-                    if is_jira_version_8_7():
-                        get_anonymized_user_data_from_audit_records(user_name)
-                    else:
-                        get_anonymized_user_data_from_audit_events(user_name)
-                    if is_timed_out:
-                        log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
-                                  " Abort script.".format(user_name, g_config['timeout']))
-                        break
+            r = g_session.post(url=url_for_anonymizing, json=body)
+            user_data['rest_post_anonymization'] = serialize_response(r)
+            log.debug(user_data['rest_post_anonymization'])
+            if r.status_code == 202:
+                log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
+                time.sleep(g_config['initial_delay'])
+                is_timed_out = wait_until_anonymization_is_finished_or_timedout(i, user_name)
+                # Atlassian introduced anonymization in Jira 8.7.
+                # We query the anonymized user-data from the audit-log.
+                # Jira supports two auditing REST-APIs:
+                #   1. GET /rest/api/2/auditing/record, deprecated since 8.12.
+                #       https://docs.atlassian.com/software/jira/docs/api/REST/8.0.0/#api/2/auditing-getRecords
+                #   2. "Audit log improvements for developers", introduced in 8.8.
+                #       https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html
+                # The following switch delegates calls the audit REST-API depending on the Jira-version:
+                # For 8.7, the previous API 1) is used. For 8.8 and later, the new API 2) is used.
+                # For pre-8.7 it doesn't care as that versions do not support anonymization.
+                #
+                # Collecting the anonymized user-data is done before handling the timeout to save what still can
+                # be saved.
+                #
+                # Collecting the anonymized user-data could also be done in one go after all users have been
+                # anonymized. But that is not as easy as it sounds: Both APIs are limited in output. the API 1) is
+                # limited to 1.000 records, and the API 2) is paged with a default of 200 events/page. That could
+                # be fiddly. I'm confident there is not really a downside in execution-time if the anonymized
+                # data is called for each user one by one.
+                if is_jira_version_8_7():
+                    get_anonymized_user_data_from_audit_records(user_name)
                 else:
-                    # These error-status-codes are documented:
-                    #  - 400 Returned if a mandatory parameter was not provided.
-                    #  - 403 Returned if the logged-in user cannot anonymize users.
-                    #  - 409 Returned if another user anonymization process is already in progress.
-                    if r.status_code == 400 or r.status_code == 403 or r.status_code == 409:
-                        log.error(
-                            "A problem occurred scheduling anonymization user {}. See report {} for details.".format(
-                                user_name, g_config['report_details_filename']))
-                    else:
-                        # For all other, not documented HTTP-problems:
-                        r.raise_for_status()
+                    get_anonymized_user_data_from_audit_events(user_name)
+                if is_timed_out:
+                    log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
+                              " Abort script.".format(user_name, g_config['timeout']))
+                    break
+
+                # A user must be deleted _after_ anonymization. This is because a use might be
+                # part of an issue-history entry. With deletion only (without anonymization),
+                # the user's data would be preserved.
+                if g_config['is_try_delete_user']:
+                    try:
+                        anonymized_user_name = user_data['anonymized_data_from_rest']['user_name']
+                        url_params = {'username': anonymized_user_name}
+                        r = g_session.delete(url=url_for_deletion, params=url_params)
+                        user_data['rest_delete_user'] = serialize_response(r)
+                        log.debug(user_data['rest_delete_user'])
+                        if r.status_code == 204:
+                            user_data['rest_user_delete_time'] = now_to_date_string()
+                    except KeyError:
+                        log.error("Could not get anonymized user-name.")
+            else:
+                # These error-status-codes are documented:
+                #  - 400 Returned if a mandatory parameter was not provided.
+                #  - 403 Returned if the logged-in user cannot anonymize users.
+                #  - 409 Returned if another user anonymization process is already in progress.
+                if r.status_code == 400 or r.status_code == 403 or r.status_code == 409:
+                    log.error(
+                        "A problem occurred scheduling anonymization user {}. See report {} for details.".format(
+                            user_name, g_config['report_details_filename']))
+                else:
+                    # For all other, not documented HTTP-problems:
+                    r.raise_for_status()
 
 
 def is_anonymized_user_data_complete_for_user(user_name, key):
@@ -1385,27 +1388,14 @@ def create_raw_report(overall_report):
             filter_error_message = None
 
         try:
-            time_start = user_data['rest_user_delete_time']
-            time_finish = None
-            is_deleted = user_data['rest_delete_user']['status_code'] == 204
-            if is_deleted:
-                number_of_deleted_users += 1
+            time_start = user_data['rest_get_anonymization_progress']['json']['startTime']
+            time_finish = user_data['rest_get_anonymization_progress']['json']['finishTime']
+            is_anonymized = user_data['rest_get_anonymization_progress']['status_code'] == 200 and \
+                            user_data['rest_get_anonymization_progress']['json']['status'] == 'COMPLETED'
         except KeyError:
             time_start = None
             time_finish = None
-            is_deleted = False
-
-        is_anonymized = False
-        if not is_deleted:
-            try:
-                time_start = user_data['rest_get_anonymization_progress']['json']['startTime']
-                time_finish = user_data['rest_get_anonymization_progress']['json']['finishTime']
-                is_anonymized = user_data['rest_get_anonymization_progress']['status_code'] == 200 and \
-                                user_data['rest_get_anonymization_progress']['json']['status'] == 'COMPLETED'
-            except KeyError:
-                time_start = None
-                time_finish = None
-                is_anonymized = False
+            is_anonymized = False
 
         if is_anonymized:
             number_of_anonymized_users += 1
@@ -1415,6 +1405,13 @@ def create_raw_report(overall_report):
             time_finish = time_finish.split(".")[0]
         else:
             diff = None
+
+        try:
+            is_deleted = user_data['rest_delete_user']['status_code'] == 204
+            if is_deleted:
+                number_of_deleted_users += 1
+        except KeyError:
+            is_deleted = False
 
         user_report = {
             'user_name': user_name,
@@ -1446,12 +1443,14 @@ def create_raw_report(overall_report):
         user_report['anonymized_user_key'] = anonymized_user_key
         user_report['anonymized_user_display_name'] = anonymized_user_display_name
 
+        actions = []
+        if is_anonymized:
+            actions.append('anonymized')
         if is_deleted:
-            user_report['action'] = "deleted"
-        elif is_anonymized:
-            user_report['action'] = "anonymized"
-        else:
-            user_report['action'] = "skipped"
+            actions.append('deleted')
+        if len(actions) == 0:
+            actions = ['skipped']
+        user_report['action'] = ', '.join(actions)
 
         report["users"].append(user_report)
 
@@ -1471,8 +1470,8 @@ def write_result_to_stdout(overview):
     print("Anonymizing Result:")
     print("  Users in infile:   {}".format(overview['number_of_users_in_infile']))
     print("  Skipped users:     {}".format(overview['number_of_skipped_users']))
-    print("  Deleted users:     {}".format(overview['number_of_deleted_users']))
     print("  Anonymized users:  {}".format(overview['number_of_anonymized_users']))
+    print("  Deleted users:     {}".format(overview['number_of_deleted_users']))
     print("  Background re-index triggered:  {}".format(overview['is_background_reindex_triggered']))
     print("")
 
@@ -1765,7 +1764,7 @@ def main():
             if not g_config['dry_run']:
                 # run_user_anonymization() expects the user-key, not the user-name.
                 new_owner_key = g_execution['rest_get_user__new_owner']['json']['key']
-                delete_or_anonymize_users(users_to_be_anonymized, new_owner_key)
+                anonymize_users(users_to_be_anonymized, new_owner_key)
 
         # Re-indexing is specific to the 'anonymize'-command. The re-index shall only be triggered
         # if there is at least one anonymized user. Only the report provides information about the
