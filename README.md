@@ -14,6 +14,7 @@ User Manual
 - [Quick-start](#quick-start)
 - [Command Line Options](#command-line-options)
     * [Overview](#overview)
+    * [Combination of parameters from the conig-file and the command-line](#combination-of-parameters-from-the-conig-file-and-the-command-line)
     * [Details about some options](#details-about-some-options)
         + [--info](#--info)
         + [--infile and --encoding](#--infile-and---encoding)
@@ -22,14 +23,15 @@ User Manual
 - [The reports](#the-reports)
     * [Overview](#overview-1)
     * [The status printed to the command line](#the-status-printed-to-the-command-line)
-    * [anonymizing_report.json](#anonymizing-reportjson)
 - [The commands in detail](#the-commands-in-detail)
     * [Command `validate`](#command--validate-)
         + [Example 1: Validation succeeded, no validation error](#example-1--validation-succeeded--no-validation-error)
         + [Example 2: Validation failed for several reasons](#example-2--validation-failed-for-several-reasons)
     * [Command `anonymize`](#command--anonymize-)
         + [Example 3: Anonymization without errors](#example-3--anonymization-without-errors)
+    * [Command `inactive-users`](#command--inactive-users-)
 - [Known issues](#known-issues)
+    * [Command `inactive-users` might return a max. of 1000 users](#command--inactive-users--might-return-a-max-of-1000-users)
     * [Validation error-messages in unexpected language](#validation-error-messages-in-unexpected-language)
 
 The Anonymizer is a Python3-script to help Jira-admins anonymizing Jira-users in bulk.
@@ -635,7 +637,6 @@ We'll use the following config-file `my-config.cfg`.
     jira_base_url = http://localhost:2990/jira
     jira_auth = Basic admin:admin
     infile = usernames.txt
-    # If possible, get rid of users never left any trace in Jira:
     is_try_delete_user = True
     new_owner = new-owner
     # Speed up things a little bit:
