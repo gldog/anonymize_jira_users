@@ -17,8 +17,7 @@ User Manual
     * [Combination of parameters from the conig-file and the command-line](#combination-of-parameters-from-the-conig-file-and-the-command-line)
     * [Details about some options](#details-about-some-options)
         + [--info](#--info)
-        + [--infile and --encoding](#--infile-and---encoding)
-        + [--try-delete-user](#--try-delete-user)
+        + [--user-list-file and --encoding](#--user-list-file-and---encoding)
 - [How the Anonymizer works](#how-the-anonymizer-works)
 - [The reports](#the-reports)
     * [Overview](#overview-1)
@@ -107,7 +106,7 @@ Parameters for commands `validate` and `anonymize`:
                             doesn't exist, it'll be created. If you'd like the
                             date included, give something like `date
                             +%Y%m%d-%H%M-anonymize-instance1`. Defaults to '.'.
-      -i INFILE, --infile INFILE
+      -i USER_LIST_FILE, --user_list_file USER_LIST_FILE
                             File with user-names to be anonymized or just
                             validated. One user-name per line. Comments are
                             allowed: They must be prefixed by '#' and they must
@@ -115,10 +114,11 @@ Parameters for commands `validate` and `anonymize`:
                             platform dependent Python suggests. If you have
                             trouble with the encoding, try out the parameter '--
                             encoding'.
-      --encoding ENCODING   Force a character-encoding for reading the infile.
-                            Empty means platform dependent Python suggests. If you
-                            run on Win or the infile was created on Win, try out
-                            one of these encodings: utf-8, cp1252, latin1.
+      --encoding ENCODING   Force a character-encoding for reading the user-list-
+                            file. Empty means platform dependent Python suggests.
+                            If you run on Win or the user-list-file was created on
+                            Win, try out one of these encodings: utf-8, cp1252,
+                            latin1.
       --expand-validation-with-affected-entities
                             Include 'affectedEntities' in the validation result.
                             This is only for documentation to enrich the detailed
@@ -134,10 +134,8 @@ parameter-list).
       -n NEW_OWNER, --new-owner NEW_OWNER
                             Transfer roles of all anonymized users to the user
                             with this user-name.
-      -d, --try-delete-user
-                            Try deleting the user after anonymized.
-      -D, --dry-run         Finally do not delete nor anonymize. To get familiar
-                            with the script and to test it.
+      -D, --dry-run         Finally do not anonymize. To get familiar with the
+                            script and to test it.
       -x, --background-reindex
                             If at least one user was anonymized, trigger a
                             background re-index.
@@ -180,11 +178,11 @@ Print the effective config and the character-encoding Python suggests, then exit
 You can combine this parameter with parameters of `validate` and `anonymize`
 If `--info` is given in these cases, these commands won't be executed.
 
-### --infile and --encoding
+### --user-list-file and --encoding
 
-Dependent on how and where the infile is created, you could come into trouble with the
-encoding. You can possibly fix this with an explicit character-encoding. To get an idea
-what Python suggests on your current platform, execute
+Dependent on how and where the user-list-file is created, you could come into trouble with
+the encoding. You can possibly fix this with an explicit character-encoding. To get an
+idea what Python suggests on your current platform, execute
 
 `anonymize_jira_users.py validate --info`.
 
@@ -208,7 +206,7 @@ The Anonymizer executes the following steps for the `validation` and the `anonym
 command:
 
 - Parse and check the command line parameters.
-- Read the user-names from the infile.
+- Read the user-names from the user-list-file.
 - For each user: Get user-data from
   the [Jira user REST-API](https://docs.atlassian.com/software/jira/docs/api/REST/8.13.2/#api/2/user-getUser)
   . This is a check if a user exists.
@@ -222,10 +220,9 @@ If the command `anonymize` is called, additionally to the steps above:
 
 - For each user: Run user-anonymization for each user with an 'anonymization approval'
   with [Jira Anonymization REST API](https://docs.atlassian.com/software/jira/docs/api/REST/8.13.2/#api/2/user/anonymization)
-  . Transfer ownership to the user given in `--new-owner`. if argument `-d`
-  or `--try-delete-user` is set, try to delete the user.
+  . Transfer ownership to the user given in `--new-owner`.
 
-And finally in both cases `validation` and `anonymization`:
+Finally, in both cases `validation` and `anonymization`:
 
 - Create the anonymization-reports.
 - Print out a status.
@@ -234,8 +231,7 @@ The validation is a subset of the anonymization. So validation is done any time 
 anonymization is done. With validation only you can get an impression what would happen in
 case of anonymization.
 
-The filter-criteria to not delete or anonymize (= to skip), and their
-filter-error-messages are:
+The filter-criteria to not anonymize (= to skip), and their filter-error-messages are:
 
 - The user isn't existent: `The user named 'user-1' does not exist`
 - The user is active: `Is an active user.`
@@ -244,11 +240,10 @@ filter-error-messages are:
 - The anonymization validation REST API returned 200 with validation-error-message(s):
   `There is at least one validation error message.`
 
-It seems obvious not-existant users cannot be anonymized. But in fact, anonymization is
-done by user-key, not user-name. And user-keys remain after deletion. So it is possible
-toanonymize deleted users using the anonymizing REST API. But the anonymizer doesn't
-process user-keys yet. If you are interested in anonymizing deleted users, have a look at
-the
+It seems obvious not-existent users cannot be anonymized. But in fact, anonymization is
+done by user-key, not user-name. And user-keys remain after deletion. So it is possible to
+anonymize deleted users using the anonymizing REST API. But the anonymizer doesn't process
+user-keys yet. If you are interested in anonymizing deleted users, have a look at the
 [Jira Anonymization REST API](https://docs.atlassian.com/software/jira/docs/api/REST/8.13.2/#api/2/user/anonymization)
 .
 
@@ -288,10 +283,9 @@ The report-files are discussed later in the examples for `validate` and `anonymi
 
 It consists of
 
-- the number of users found in the infile,
+- the number of users found in the user-list-file,
 - the number of users not considered for anonymization (skipped),
 - the number of anonymized users, and
-- the number of deleted users, and
 - if a background re-indext was triggered.
 
 A user is not considered for anonymization (skipped) if it does not exist, or there is any
@@ -301,26 +295,24 @@ fact a user is connected to a read-only directory.
 The report printed after `validate` looks like:
 
     Anonymizing Result:
-      Users in infile:   11
-      Skipped users:     4
-      Deleted users:     0
-      Anonymized users:  0
+      Users in user-list-file:  11
+      Skipped users:            4
+      Anonymized users:         0
       Background re-index triggered:  False
 
-The number of anonymized or deleted users are always 0, because `validate` only checks if
-the users could be anonymized.
+The number of anonymized users are always 0, because `validate` only checks if the users
+_could_ be anonymized.
 
 The report printed after `anonymize` looks like:
 
     Anonymizing Result:
-      Users in infile:   11
-      Skipped users:     4
-      Anonymized users:  5
-      Deleted users:     3
+      Users in user-list-file:  11
+      Skipped users:            4
+      Anonymized users:         5
       Background re-index triggered:  True
 
-The sum of skipped-, anonymized-, and deleted users could be greater than the number of
-users in the infile. This is because anonymized users could be deleted afterwards.
+The sum of skipped- and anonymized users is always the number of user in the
+user-list-file.
 
 # The commands in detail
 
@@ -347,9 +339,9 @@ We'll use the following config-file `my-config.cfg`.
     [DEFAULT]
     jira_base_url = http://localhost:2990/jira
     jira_auth = Basic admin:admin
-    infile = infile.cfg
+    user_list_file = infile.cfg
 
-Further we use the infile `infile.cfg` with our two users:
+Further we use the user-list-file `infile.cfg` with our two users:
 
     # User create in Jira < 8.4
     user1pre84
@@ -363,18 +355,17 @@ We call:
 
 The output is:
 
-    2021-01-11 20:56:34,870:INFO:read_users_from_infile(): infile.cfg
-    2021-01-11 20:56:34,871:INFO:read_users_from_infile(): The user-names are (2): ['User1Pre84', 'User1Post84']
+    2021-01-11 20:56:34,870:INFO:read_users_from_user_list_file(): infile.cfg
+    2021-01-11 20:56:34,871:INFO:read_users_from_user_list_file(): The user-names are (2): ['User1Pre84', 'User1Post84']
     2021-01-11 20:56:34,871:INFO:get_users_data(): for 2 users
     2021-01-11 20:56:34,916:INFO:get_validation_data(): 
     2021-01-11 20:56:34,962:INFO:filter_users(): by existence and validation-data
     2021-01-11 20:56:34,962:INFO:filter_users(): 2 users remain for anonymization: ['User1Pre84', 'User1Post84']
     
     Anonymizing Result:
-      Users in infile:   2
-      Skipped users:     0
-      Anonymized users:  0
-      Deleted users:     0
+      Users in user-list-file:  2
+      Skipped users:            0
+      Anonymized users:         0
       Background re-index triggered:  False
 
 A file `anonymization_report.json` has been created and is as follows. The interesting
@@ -393,9 +384,8 @@ an `filter_error_message`.
 
     {
         "overview": {
-            "number_of_users_in_infile": 2,
+            "number_of_users_in_user_list_file": 2,
             "number_of_skipped_users": 0,
-            "number_of_deleted_users": 0,
             "number_of_anonymized_users": 0,
             "is_background_reindex_triggered": false
         },
@@ -442,7 +432,7 @@ looks like the following screenshot:
 
 ![](doc/images/example_1.png)
 
-### Example 2.1: Validation failed for several reasons (Jira < 8.10)
+### Example 2: Validation failed for several reasons
 
 The users:
 
@@ -450,7 +440,7 @@ The users:
 - `deleted-user` has been deleted
 - `user-from-ad` is inactive, but still connected to a read-only directory
 
-Again, the filter removes a user from the list in infile if:
+Again, the filter removes a user from the list in user-list-file if:
 
 - the user doesn't exist, or
 - the user is an active user, or
@@ -463,8 +453,8 @@ We call again:
 
 The output is:
 
-    2021-01-11 21:17:44,425:INFO:read_users_from_infile(): infile.cfg
-    2021-01-11 21:17:44,425:INFO:read_users_from_infile(): The user-names are (3): ['User1Pre84', 'deleted-user', 'user-from-ad']
+    2021-01-11 21:17:44,425:INFO:read_users_from_user_list_file(): infile.cfg
+    2021-01-11 21:17:44,425:INFO:read_users_from_user_list_file(): The user-names are (3): ['User1Pre84', 'deleted-user', 'user-from-ad']
     2021-01-11 21:17:44,425:INFO:get_users_data(): for 3 users
     2021-01-11 21:17:44,495:INFO:get_validation_data(): 
     2021-01-11 21:17:44,521:INFO:filter_users(): by existence and validation-data
@@ -475,10 +465,9 @@ The output is:
     
     r.stdout
     Anonymizing Result:
-      Users in infile:   3
-      Skipped users:     3
-      Anonymized users:  0
-      Deleted users:     0
+      Users in user-list-file:  3
+      Skipped users:            3
+      Anonymized users:         0
       Background re-index triggered:  False
 
 Have a look at these attributes in the anonymization_report.json:
@@ -491,9 +480,8 @@ The JSON-report is:
 
     {
         "overview": {
-            "number_of_users_in_infile": 3,
+            "number_of_users_in_user_list_file": 3,
             "number_of_skipped_users": 3,
-            "number_of_deleted_users": 0,
             "number_of_anonymized_users": 0,
             "is_background_reindex_triggered": false
         },
@@ -629,13 +617,13 @@ We use this config-file `my-config.cfg`.
     [DEFAULT]
     jira_base_url = http://localhost:2990/jira
     jira_auth = Basic admin:admin
-    infile = infile.cfg
+    user_list_file = infile.cfg
     new_owner = new-owner
     # Speed up things a little bit (defaults are 10/3):
     initial_delay = 2
     regular_delay = 2
 
-We use this infile `infile.cfg`:
+We use this user-list-file `infile.cfg`:
 
     User1Pre84
     User2Pre84
@@ -653,8 +641,8 @@ We call:
 
 The output is:
 
-    2021-01-11 22:40:36,074:INFO:read_users_from_infile(): infile.cfg
-    2021-01-11 22:40:36,074:INFO:read_users_from_infile(): The user-names are (4): ['User1Pre84', 'User2Pre84', 'User1Post84', 'User2Post84']
+    2021-01-11 22:40:36,074:INFO:read_users_from_user_list_file(): infile.cfg
+    2021-01-11 22:40:36,074:INFO:read_users_from_user_list_file(): The user-names are (4): ['User1Pre84', 'User2Pre84', 'User1Post84', 'User2Post84']
     2021-01-11 22:40:36,074:INFO:get_users_data(): for 4 users
     2021-01-11 22:40:36,174:INFO:get_validation_data(): 
     2021-01-11 22:40:36,332:INFO:filter_users(): by existence and validation-data
@@ -669,19 +657,17 @@ The output is:
     2021-01-11 22:40:42,875:INFO:anonymize_users(): #4 (name/key): User2Post84/JIRAUSER10202
     
     Anonymizing Result:
-      Users in infile:   4
-      Skipped users:     0
-      Anonymized users:  4
-      Deleted users:     0
+      Users in user-list-file:  4
+      Skipped users:            0
+      Anonymized users:         4
       Background re-index triggered:  False
 
 The `anonymization_report.json` is:
 
     {
         "overview": {
-            "number_of_users_in_infile": 4,
+            "number_of_users_in_user_list_file": 4,
             "number_of_skipped_users": 0,
-            "number_of_deleted_users": 0,
             "number_of_anonymized_users": 4,
             "is_background_reindex_triggered": false
         },
@@ -821,6 +807,45 @@ Only the user-name were anonymized:
     ...
     User key is already anonymized (JIRAUSER10202), no need to change it
     Username is not anonymized (User2Post84), should rename to (jirauser10202)
+
+# Example-Workflow
+
+This example comprises of
+
+1. Get a list of users to be anonymized.
+2. Assess and filter this list; create a new user-list with remaining users.
+3. Validate the users in that new user-list.
+4. Anonymize the users in that new user-list.
+
+We'll use a directory-structure as follows:
+
+    anonymization-reports         # The root-dir for all anonymizations
+      <date>-<time>-<instance>    # The dir for the current anonymization
+        1_inactive-use            # Sub-dir for reports of command 'inactive-users'
+        2_validate                # Sub-dir for reports of command 'validate'
+        3_anonymize               # Sub-dir for reports of command 'anonymize'
+
+The commands are:
+
+TODO tee
+
+    # Set report-dir for all steps. Here for the dev-instance 'inst1-d'.
+    export ANONYMIZATION_REPORTS_BASE_DIR="anonymization-reports/`date +%Y%m%d-%H%M%S-inst1-d`"
+    # 1. Get a list of users to be anonymized. This command creates the file 
+    #   'inactive-users.cfg' in the report-dir.
+    python anonymize_jira_users.py inactive-users -c anon_configs/inst1-d-config.cfg \
+         --exclude-groups Technical_Users \
+        -o $ANONYMIZATION_REPORTS_BASE_DIR/1_inactive-users
+    # 2. Assess and filter this list; create a new user-list 'assessed-users.cfg'.
+    # ...
+    # 3. Validate the users in that list.
+    python anonymize_jira_users.py validate -c anon_configs/inst1-d-config.cfg \
+        -o $ANONYMIZATION_REPORTS_BASE_DIR/2_validate \
+        -i $ANONYMIZATION_REPORTS_BASE_DIR/1_inactive-users/assessed-users.cfg
+    # 4. Anonymize the users in that list.
+    python anonymize_jira_users.py anonymize -c anon_configs/inst1-d-config.cfg \
+        -o $ANONYMIZATION_REPORTS_BASE_DIR/3_anonymize \
+        -i $ANONYMIZATION_REPORTS_BASE_DIR/1_inactive-users/assessed-users.cfg
 
 # Known issues
 

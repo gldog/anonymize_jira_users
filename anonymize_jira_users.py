@@ -54,14 +54,13 @@ CMD_INACTIVE_USERS = 'inactive-users'
 DEFAULT_CONFIG = {
     'jira_base_url': '',
     'jira_auth': '',
-    'infile': '',
-    # Force a character-encoding for reading the infile. Empty means platform dependent Python suggests.
+    'user_list_file': '',
+    # Force a character-encoding for reading the user_list_file. Empty means platform dependent Python suggests.
     'encoding': None,
     'report_out_dir': '.',
     'loglevel': 'INFO',
     'is_expand_validation_with_affected_entities': False,
     'is_dry_run': False,
-    'is_try_delete_user': False,
     # The user-name of the new owner.
     'new_owner': '',
     # Delay between a scheduled anonymization and starting querying the progress. Jira's setting is 10s.
@@ -74,8 +73,10 @@ DEFAULT_CONFIG = {
     'is_do_background_reindex': False,
 }
 
-DEFAULT_CONFIG_REPORT_BASENAME = 'anonymizing_report'
-DEFAULT_CONFIG_TEMPLATE_FILENAME = 'my-bare-default-config.cfg'
+REPORT_BASENAME = 'anonymizing_report'
+TEMPLATE_FILENAME = 'my-bare-default-config.cfg'
+INACTIVE_USERS_OUTFILE = 'inactive-users.cfg'
+
 SSL_VERIFY = False
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 PRETTY_PRINT_LOG_LEVELS = "{}".format(LOG_LEVELS).replace('[', '').replace(']', '').replace('\'', '')
@@ -115,8 +116,6 @@ g_execution = {}
 #       - user_filter
 #           - error_message
 #           - is_anonymize_approval
-#       - rest_delete_user
-#       - rest_user_delete_time
 #       - rest_post_anonymization
 #       - rest_get_anonymization_progress
 #       - anonymized_data_from_rest
@@ -132,7 +131,7 @@ g_users = {
 g_details = {
     'effective_config': g_config,
     'execution': g_execution,
-    'users_from_infile': g_users
+    'users_from_user_list_file': g_users
 }
 
 g_session = requests.Session()
@@ -328,7 +327,7 @@ def write_default_cfg_file(config_template_filename):
         #   - These values are false in any notation: {boolean_false}.
         #
         ####
-        
+
         [DEFAULT]
 
         #   Loglevel. Valid levels are {valid_loglevels}.
@@ -348,9 +347,9 @@ def write_default_cfg_file(config_template_filename):
         #   The character-encoding is platform dependent Python suggests.
         #   If you have trouble with the encoding, try out the parameter '--encoding'.
         #   The given value is an example.
-        #infile = usernames.txt
-        #   Force a character-encoding for reading the infile. Empty means platform dependent Python suggests.
-        #   If you run on Win or the infile was created on Win, try out one of these encodings:
+        #user_list_file = usernames.txt
+        #   Force a character-encoding for reading the user_list_file. Empty means platform dependent Python suggests.
+        #   If you run on Win or the user_list_file was created on Win, try out one of these encodings:
         #     utf-8, cp1252, latin1 
         #   The given value is an example.
         #encoding = utf-8
@@ -360,7 +359,7 @@ def write_default_cfg_file(config_template_filename):
         #   to enrich the detailed report. It doesn't affect the anonymization.
         #   The given value is the default.
         #is_expand_validation_with_affected_entities = {is_expand_validation_with_affected_entities}
-        #   Finally do not anonymize nor delete. To get familiar with the script and to test it.
+        #   Finally do not anonymize. To get familiar with the script and to test it.
         #   The given value is the default.
         #is_dry_run = {is_dry_run}
         #   Transfer roles to the user with this user-name.
@@ -376,9 +375,6 @@ def write_default_cfg_file(config_template_filename):
         #   Time in seconds the anonymization shall wait to be finished.
         #   0 (or any negative value) means: Wait as long as it takes.
         #timeout = {timeout}
-        #   Try deleting the user after anonymized.
-        #   The given value is the default.
-        #is_try_delete_user = {is_try_delete_user}
         #   If at least one user was anonymized, trigger a background re-index.
         #   The given value is the default.
         #is_do_background_reindex = {is_do_background_reindex}
@@ -391,7 +387,6 @@ def write_default_cfg_file(config_template_filename):
                    is_expand_validation_with_affected_entities=
                                        g_config['is_expand_validation_with_affected_entities'],
                    is_dry_run=g_config['is_dry_run'],
-                   is_try_delete_user=g_config['is_try_delete_user'],
                    initial_delay=g_config['initial_delay'],
                    regular_delay=g_config['regular_delay'],
                    timeout=g_config['timeout'],
@@ -475,6 +470,11 @@ class PathAction(argparse.Action):
 
 
 def parse_parameters():
+    g_config['report_details_filename'] = REPORT_BASENAME + '_details.json'
+    g_config['report_json_filename'] = REPORT_BASENAME + '.json'
+    g_config['report_text_filename'] = REPORT_BASENAME + '.csv'
+    script_name = os.path.basename(__file__)
+
     #
     # Part 1: Define and parse the arguments.
     #
@@ -483,20 +483,21 @@ def parse_parameters():
     o Create the file usernames.txt with the user-names to be anonymized, one 
       user-name per line.
     o Create a config-file-template:
-          anonymize_jira_users.py misc -g
+          {script_name} misc -g
       The file my-bare-default-config.cfg has been created.
     o Rename the file, e.g. to my-config.cfg.
-    o In that file, set the attributes jira_base_url; jira_auth with
-      format 'Basic admin:admin'; new_owner.
+    o In that file, set the attributes jira_base_url, jira_auth with
+      format 'Basic admin:admin', user_list_file = usernames.txt, new_owner.
     o Call
-          anonymize_jira_users.py validate -c my-config.cfg
+          {script_name} validate -c my-config.cfg
       to see what would happen in case of anonymizing.
     o Call
-          anonymize_jira_users.py anonymize -c my-config.cfg
+          {script_name} anonymize -c my-config.cfg
       to execute anonyization.
-    o Have a look at the report anonymization_report.csv. More details about the
-      users are given in anonymization_report_details.csv.
-    """
+    o Have a look at the report {anonymization_report_csv}. More details about the
+      users are given in {anonymization_report_details_json}.
+    """.format(script_name=script_name, anonymization_report_csv=g_config['report_text_filename'],
+               anonymization_report_details_json=g_config['report_details_filename'])
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description="The Anonymizer is a Python3-script to help Jira-admins"
                                                  " anonymizing Jira-users in bulk.",
@@ -514,7 +515,7 @@ def parse_parameters():
     parent_parser_for_anonymize_and_inactiveusers_and_validate \
         .add_argument('-c', '--config-file',
                       help="Config-file to pre-set command-line-options."
-                           " You can generate a config-file-template with option 'miisc -g'."
+                           " You can generate a config-file-template with option 'misc -g'."
                            " There are parameters in the config-file not present on the command line."
                            " Empty parameters in the config-file are ignored."
                            " Parameters given on the command line overwrite parameters"
@@ -532,7 +533,7 @@ def parse_parameters():
                       help="Output-directory to write the reports into."
                            " If it doesn't exist, it'll be created."
                            " If you'd like the date included,"
-                           " give something like `date +%%Y%%m%%d-%%H%%M-anonymize-instance1`."
+                           " give something like `date +%%Y%%m%%d-%%H%%M%%S-anonymize-instance1`."
                            " Defaults to '{}'.".format(DEFAULT_CONFIG['report_out_dir']))
 
     parent_parser_for_anonymize_and_inactiveusers_and_validate_post = argparse.ArgumentParser(add_help=False)
@@ -545,7 +546,7 @@ def parse_parameters():
     #
     parent_parser_for_anonymize_and_validate = argparse.ArgumentParser(add_help=False)
     parent_parser_for_anonymize_and_validate \
-        .add_argument('-i', '--infile',
+        .add_argument('-i', '--user-list-file',
                       help="File with user-names to be anonymized or just validated."
                            " One user-name per line. Comments are allowed:"
                            " They must be prefixed by '#' and they must appear on their own line."
@@ -553,9 +554,9 @@ def parse_parameters():
                            " If you have trouble with the encoding, try out the parameter '--encoding'.")
     parent_parser_for_anonymize_and_validate \
         .add_argument('--encoding', metavar='ENCODING',
-                      help="Force a character-encoding for reading the infile."
+                      help="Force a character-encoding for reading the user-list-file."
                            " Empty means platform dependent Python suggests."
-                           " If you run on Win or the infile was created on Win, try out one of these encodings:"
+                           " If you run on Win or the user-list-file was created on Win, try out one of these encodings:"
                            " utf-8, cp1252, latin1.")
     parent_parser_for_anonymize_and_validate \
         .add_argument('--expand-validation-with-affected-entities', default=False,
@@ -586,19 +587,10 @@ def parse_parameters():
     # Add arguments special to command "anonymize".
     #
     sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
-                              help="Finally do not delete nor anonymize."
+                              help="Finally do not anonymize."
                                    " To get familiar with the script and to test it.")
     sp_anonymize.add_argument('-n', '--new-owner',
                               help="Transfer roles of all anonymized users to the user with this user-name.")
-    # Combination of "default" and "action":
-    # Imagine default=None is not given, and the user gives parameter -d. Then the arg-parser sets
-    # args.is_try_delete_user to true as expected. But if the user omit -d, the arg-parser sets args.is_try_delete_user
-    # to false implicitly. This would overwrite the setting from the config-file.
-    # Default=None sets args.is_try_delete_user to None if the user omits -d. By this, the script can distinguish
-    # between the given or the omitted -d.
-    sp_anonymize.add_argument('-d', '--try-delete-user', default=None, action='store_true',
-                              dest='is_try_delete_user',
-                              help="Try deleting the user after anonymized.")
     sp_anonymize.add_argument('-x', '--background-reindex', action='store_true',
                               dest='is_do_background_reindex',
                               help="If at least one user was anonymized, trigger a background re-index.")
@@ -607,10 +599,10 @@ def parse_parameters():
     # Add arguments special to command "misc".
     #
     sp_misc.add_argument('-g', '--generate-config-template', metavar='CONFIG_TEMPLATE_FILE',
-                         const=DEFAULT_CONFIG_TEMPLATE_FILENAME, nargs='?',
+                         const=TEMPLATE_FILENAME, nargs='?',
                          dest='config_template_filename',
                          help="Generate a configuration-template. Defaults to {}.".format(
-                             DEFAULT_CONFIG_TEMPLATE_FILENAME))
+                             TEMPLATE_FILENAME))
 
     #
     # Add arguments special to command "inactive-users".
@@ -623,9 +615,6 @@ def parse_parameters():
                                            " These users are candidates for anonymization.")
     sp_inactive_users.add_argument('--exclude-groups', nargs='+',
                                    help="Exclude members of these groups.")
-    sp_inactive_users \
-        .add_argument('-f', '--out-file', help="Output-file to write the users into."
-                                               " If the path doesn't exist, it'll be created.")
 
     parser.parse_args()
     args = parser.parse_args()
@@ -639,10 +628,6 @@ def parse_parameters():
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(0)
-
-    g_config['report_details_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '_details.json'
-    g_config['report_json_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '.json'
-    g_config['report_text_filename'] = DEFAULT_CONFIG_REPORT_BASENAME + '.csv'
 
     if args.subparser_name == CMD_MISC:
         if args.config_template_filename:
@@ -703,14 +688,15 @@ def parse_parameters():
             parent_parser_for_anonymize_and_inactiveusers_and_validate.error('; '.join(errors))
 
     if args.subparser_name in [CMD_ANONYMIZE, CMD_VALIDATE]:
-        # Check if infile is given does exist.
-        if not g_config['infile']:
-            errors.append("Missing infile")
+        # Check if user_list_file does exist.
+        if not g_config['user_list_file']:
+            errors.append("Missing user-list-file")
         else:
             try:
-                open(g_config['infile'])
+                open(g_config['user_list_file'])
             except IOError:
-                errors.append("Infile {} does not exist or is not accessible".format(g_config['infile']))
+                errors.append(
+                    "User-list-file {} does not exist or is not accessible".format(g_config['user_list_file']))
 
     if args.subparser_name == CMD_ANONYMIZE:
         if not g_config['new_owner']:
@@ -724,11 +710,6 @@ def parse_parameters():
                     r.raise_for_status()
 
     if args.subparser_name == CMD_INACTIVE_USERS:
-        try:
-            if not g_config['out_file']:
-                sp_inactive_users.error("Missing parameter outfile.")
-        except KeyError:
-            sp_inactive_users.error("Missing outfile.")
         try:
             # exclude_groups could be absent.
             errors = check_if_groups_exist(g_config['exclude_groups'])
@@ -748,15 +729,15 @@ def parse_parameters():
     return args
 
 
-def read_users_from_infile():
-    """Read the Jira user-names from the infile. Skip lines starting with hash '#'.
+def read_users_from_user_list_file():
+    """Read the Jira user-names from the user-names-file. Skip lines starting with hash '#'.
 
     :return: None.
     """
-    log.info("{}".format(g_config["infile"]))
-    with open(g_config["infile"], 'r', encoding=g_config['encoding']) as f:
-        infile = f.read()
-        lines = re.split('[\n\r]+', infile)
+    log.info("{}".format(g_config["user_list_file"]))
+    with open(g_config["user_list_file"], 'r', encoding=g_config['encoding']) as f:
+        user_list_file = f.read()
+        lines = re.split('[\n\r]+', user_list_file)
         for line in lines:
             line = line.strip()
             # Skip comment lines.
@@ -869,7 +850,7 @@ def filter_users(users):
         #
         if not error_message:
             # try/except: user_data['rest_get_anonymization__query_validation']
-            # could be absent in case of an invalid user-name or -key in the infile.
+            # could be absent in case of an invalid user-name or -key in the user-name-file.
             try:
                 if user_data['rest_get_anonymization__query_validation']['status_code'] != 200:
                     error_message = "HTTP status-code of the REST validation API is not 200. "
@@ -1018,20 +999,13 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
 
 
 def anonymize_users(users_to_be_anonymized, new_owner_key):
-    rel_url_for_delete = '/rest/api/2/user'
-    rel_url_for_anonymize = '/rest/api/2/user/anonymization'
+    rel_url = '/rest/api/2/user/anonymization'
 
-    if g_config['is_try_delete_user']:
-        phrase = " and delete"
-    else:
-        phrase = ""
-
-    log.info("Going to anonymize{} {} users".format(phrase, len(users_to_be_anonymized), rel_url_for_anonymize))
+    log.info("Going to anonymize {} users".format(len(users_to_be_anonymized), rel_url))
     if g_config['is_dry_run']:
-        log.warning("DRY-RUN IS ENABLED. No user will be deleted nor anonymized.")
+        log.warning("DRY-RUN IS ENABLED. No user will be anonymized.")
 
-    url_for_deletion = g_config['jira_base_url'] + rel_url_for_delete
-    url_for_anonymizing = g_config['jira_base_url'] + rel_url_for_anonymize
+    url = g_config['jira_base_url'] + rel_url
     i = 0
     for user_name, user_data in users_to_be_anonymized.items():
         i += 1
@@ -1039,7 +1013,7 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
         log.info("#{} (name/key): {}/{}".format(i, user_name, user_key))
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
         if not g_config['is_dry_run']:
-            r = g_session.post(url=url_for_anonymizing, json=body)
+            r = g_session.post(url=url, json=body)
             user_data['rest_post_anonymization'] = serialize_response(r)
             log.debug(user_data['rest_post_anonymization'])
             if r.status_code == 202:
@@ -1073,21 +1047,6 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
                     log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
                               " Abort script.".format(user_name, g_config['timeout']))
                     break
-
-                # A user must be deleted _after_ anonymization. This is because a use might be
-                # part of an issue-history entry. With deletion only (without anonymization),
-                # the user's data would be preserved.
-                if g_config['is_try_delete_user']:
-                    try:
-                        anonymized_user_name = user_data['anonymized_data_from_rest']['user_name']
-                        url_params = {'username': anonymized_user_name}
-                        r = g_session.delete(url=url_for_deletion, params=url_params)
-                        user_data['rest_delete_user'] = serialize_response(r)
-                        log.debug(user_data['rest_delete_user'])
-                        if r.status_code == 204:
-                            user_data['rest_user_delete_time'] = now_to_date_string()
-                    except KeyError:
-                        log.error("Could not get anonymized user-name.")
             else:
                 # These error-status-codes are documented:
                 #  - 400 Returned if a mandatory parameter was not provided.
@@ -1357,9 +1316,8 @@ def create_raw_report(overall_report):
     }
 
     number_of_skipped_users = 0
-    number_of_deleted_users = 0
     number_of_anonymized_users = 0
-    users_data = overall_report['users_from_infile']
+    users_data = overall_report['users_from_user_list_file']
     for user_name, user_data in users_data.items():
 
         try:
@@ -1406,13 +1364,6 @@ def create_raw_report(overall_report):
         else:
             diff = None
 
-        try:
-            is_deleted = user_data['rest_delete_user']['status_code'] == 204
-            if is_deleted:
-                number_of_deleted_users += 1
-        except KeyError:
-            is_deleted = False
-
         user_report = {
             'user_name': user_name,
             'user_key': user_key,
@@ -1443,21 +1394,16 @@ def create_raw_report(overall_report):
         user_report['anonymized_user_key'] = anonymized_user_key
         user_report['anonymized_user_display_name'] = anonymized_user_display_name
 
-        actions = []
         if is_anonymized:
-            actions.append('anonymized')
-        if is_deleted:
-            actions.append('deleted')
-        if len(actions) == 0:
-            actions = ['skipped']
-        user_report['action'] = ', '.join(actions)
+            user_report['action'] = 'anonymized'
+        else:
+            user_report['action'] = 'skipped'
 
         report["users"].append(user_report)
 
     report['overview'] = {
-        'number_of_users_in_infile': len(users_data),
+        'number_of_users_in_user_list_file': len(users_data),
         'number_of_skipped_users': number_of_skipped_users,
-        'number_of_deleted_users': number_of_deleted_users,
         'number_of_anonymized_users': number_of_anonymized_users,
         # There is one more attribute: is_background_reindex_triggered. This will be set later just before triggering
         # a re-index. But for printing the report, this attribute has to be present. Set it to False as the default.
@@ -1468,10 +1414,9 @@ def create_raw_report(overall_report):
 
 def write_result_to_stdout(overview):
     print("Anonymizing Result:")
-    print("  Users in infile:   {}".format(overview['number_of_users_in_infile']))
-    print("  Skipped users:     {}".format(overview['number_of_skipped_users']))
-    print("  Anonymized users:  {}".format(overview['number_of_anonymized_users']))
-    print("  Deleted users:     {}".format(overview['number_of_deleted_users']))
+    print("  Users in user-list-file:  {}".format(overview['number_of_users_in_user_list_file']))
+    print("  Skipped users:            {}".format(overview['number_of_skipped_users']))
+    print("  Anonymized users:         {}".format(overview['number_of_anonymized_users']))
     print("  Background re-index triggered:  {}".format(overview['is_background_reindex_triggered']))
     print("")
 
@@ -1515,6 +1460,15 @@ def now_to_date_string():
     return to_date_string(datetime.now())
 
 
+def create_report_dir():
+    if g_config['report_out_dir'] == '.':
+        return pathlib.Path(g_config['report_out_dir'])
+    else:
+        report_dirpath = pathlib.Path(g_config['report_out_dir'])
+        report_dirpath.mkdir(parents=True, exist_ok=True)
+        return report_dirpath
+
+
 def at_exit_complete_and_write_details_report():
     log.debug("")
 
@@ -1526,9 +1480,9 @@ def at_exit_complete_and_write_details_report():
         g_details['execution']['is_script_aborted'] = True
         log.warning("Script has been aborted.")
 
-    if g_config['report_out_dir'] != '.':
-        pathlib.Path(g_config['report_out_dir']).mkdir(parents=True, exist_ok=True)
-    file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_details_filename'])
+    report_dirpath = create_report_dir()
+    file_path = report_dirpath.joinpath(g_config['report_details_filename'])
+    log.debug("  file_path for report_details_filename is {}".format(file_path))
     with open(file_path, 'w') as f:
         print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
 
@@ -1550,11 +1504,14 @@ def at_exit_write_anonymization_reports():
             g_details['execution']['script_started'] + '.000',
             g_details['execution']['script_finished'] + '.000'))
 
-    file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_json_filename'])
+    report_dirpath = create_report_dir()
+    file_path = report_dirpath.joinpath(g_config['report_json_filename'])
+    log.debug("  file_path for report_json_filename is {}".format(file_path))
     with open(file_path, 'w') as f:
         print("{}".format(json.dumps(raw_report, indent=4)), file=f)
 
     file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_text_filename'])
+    log.debug("  file_path for report_text_filename is {}".format(file_path))
     with open(file_path, 'w', newline='') as f:
         fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
                       'validation_has_errors',
@@ -1577,7 +1534,7 @@ def get_inactive_users(excluded_users):
     Already anonymized users have the e-mail-address '@jira.invalid'.
 
     The query-possibilities of '/rest/api/2/user/search' are limited:
-    A 'username' must be given, there is no wildcard documented (by Atlassian),
+    A 'username' must be given; no wildcard is documented (by Atlassian),
     and there is no exclude-pattern.
 
     The 'username' is "A query string used to search username, name or e-mail
@@ -1590,19 +1547,17 @@ def get_inactive_users(excluded_users):
         o % (percent)
         o _ (underscore)
 
-    To give a dummy 'username', I the '.' here.
+    To give a dummy 'username', I use '.' here.
 
     The resulting REST-call is something like:
     `/rest/api/2/user/search?username=.&includeInactive=true&includeActive=false&startAt=...`.
 
-    This API pretends to be paged, but in practice it isn't. This is a bug and
-    documented in JRASERVER-29069. This means also I can query maxResults=1000
-    and omit the paging. But for the case the bug could be resoved some time,
-    I implemented the paging though.
+    This function uses the REST API `/rest/api/2/user/search`. There is a open Jira-bug documented
+    in [JRASERVER-29069](https://jira.atlassian.com/browse/JRASERVER-29069) which leads (in some
+    Jira instances) to a max. of 1000 users. I have seen this bug in some instances, but others
+    delivered more than 1000 users as expected.
 
-    If the API returns exact 1.000 users, it is unclear if the result is truly
-    1.000, or the API has limited the result. This functions warns the user in
-    this case of 1.000.
+    If the number or returned users is exact 1000, it is likely you ran into the bug.
 
     :return: Users.
     """
@@ -1614,10 +1569,8 @@ def get_inactive_users(excluded_users):
     log.debug("")
     is_beyond_last_page = False
     url = g_config['jira_base_url'] + rel_url
-    # max_results = 1000
     start_at = 0
     user_count_so_far = 0
-    last_page_size = 0
     users = {}
     # Query the paged API until an empty page.
     while not is_beyond_last_page:
@@ -1717,10 +1670,9 @@ def subcommand_inactive_users():
     remaining_inactive_users = get_inactive_users(excluded_users)
     g_details['remaining_inactive_users'] = remaining_inactive_users
 
-    out_path = os.path.dirname(g_config['out_file'])
-    if out_path:
-        os.makedirs(out_path, exist_ok=True)
-    with open(g_config['out_file'], 'w') as f:
+    report_dirpath = create_report_dir()
+    file_path = report_dirpath.joinpath(INACTIVE_USERS_OUTFILE)
+    with open(file_path, 'w') as f:
         print("# File generated at {}".format(now_to_date_string()), file=f)
         print("# Users: {}".format(len(remaining_inactive_users)), file=f)
         print("# User attributes: User-name; user-key; display-name; email-address\n", file=f)
@@ -1740,7 +1692,7 @@ def main():
         atexit.register(at_exit_complete_and_write_details_report)
         atexit.register(at_exit_write_anonymization_reports)
         log.debug("")
-        read_users_from_infile()
+        read_users_from_user_list_file()
 
         log.debug("")
         get_users_data(g_users)
