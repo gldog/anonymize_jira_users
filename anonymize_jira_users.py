@@ -45,30 +45,27 @@ import urllib3
 # This is not a valid Python-version, but who cares.
 __version__ = '1.0.0-SNAPSHOT'
 
+CMD_INACTIVE_USERS = 'inactive-users'
 CMD_ANONYMIZE = 'anonymize'
 # The validate-command is a subset of the anonymize-command. They share a lot of code and the "anonymization"-reports.
 CMD_VALIDATE = 'validate'
 CMD_MISC = 'misc'
-CMD_INACTIVE_USERS = 'inactive-users'
 
 DEFAULT_CONFIG = {
+    # The subparser-name as a default of None is technically not needed. But it is useful to place this dict-entry at
+    # the top-position at option --info.
+    'subparser_name': None,
     'jira_base_url': '',
     'jira_auth': '',
     'user_list_file': '',
-    # Force a character-encoding for reading the user_list_file. Empty means platform dependent Python suggests.
     'encoding': None,
     'report_out_dir': '.',
     'loglevel': 'INFO',
     'is_expand_validation_with_affected_entities': False,
     'is_dry_run': False,
-    # The user-name of the new owner.
     'new_owner': '',
-    # Delay between a scheduled anonymization and starting querying the progress. Jira's setting is 10s.
     'initial_delay': 10,
-    # Interval between progress-queries. Jira's setting is 3s
     'regular_delay': 3,
-    # Time in seconds the anonymization shall wait to be finished.
-    # 0 (or any negative value) means: Wait as long as it takes.
     'timeout': 0,
     'is_do_background_reindex': False,
 }
@@ -567,18 +564,28 @@ def parse_parameters():
                            " It doesn't affect the anonymization.")
 
     sp = parser.add_subparsers(dest='subparser_name')
-    sp_anonymize = sp.add_parser(CMD_ANONYMIZE,
-                                 parents=[parent_parser,
-                                          parent_parser_for_anonymize_and_inactiveusers_and_validate,
-                                          parent_parser_for_anonymize_and_validate,
-                                          parent_parser_for_anonymize_and_inactiveusers_and_validate_post],
-                                 help="Anonymizes users.")
+
+    sp_inactive_users = sp.add_parser(CMD_INACTIVE_USERS,
+                                      parents=[parent_parser,
+                                               parent_parser_for_anonymize_and_inactiveusers_and_validate,
+                                               parent_parser_for_anonymize_and_inactiveusers_and_validate_post],
+                                      help="Retrieves a list of inactive, not-yet anonymized users."
+                                           " These users are candidates for anonymization.")
+    sp_inactive_users.add_argument('-G', '--exclude-groups', nargs='+',
+                                   help="Exclude members of these groups."
+                                        " Multiple groups must be space-separated.")
     sp_validate = sp.add_parser(CMD_VALIDATE,
                                 parents=[parent_parser,
                                          parent_parser_for_anonymize_and_inactiveusers_and_validate,
                                          parent_parser_for_anonymize_and_validate,
                                          parent_parser_for_anonymize_and_inactiveusers_and_validate_post],
                                 help="Validates user anonymization process.")
+    sp_anonymize = sp.add_parser(CMD_ANONYMIZE,
+                                 parents=[parent_parser,
+                                          parent_parser_for_anonymize_and_inactiveusers_and_validate,
+                                          parent_parser_for_anonymize_and_validate,
+                                          parent_parser_for_anonymize_and_inactiveusers_and_validate_post],
+                                 help="Anonymizes users.")
     sp_misc = sp.add_parser(CMD_MISC, parents=[parent_parser],
                             help="Intended to bundle diverse functions."
                                  " Currently `-g` to generate a template-config-file is the only function.")
@@ -603,18 +610,6 @@ def parse_parameters():
                          dest='config_template_filename',
                          help="Generate a configuration-template. Defaults to {}.".format(
                              TEMPLATE_FILENAME))
-
-    #
-    # Add arguments special to command "inactive-users".
-    #
-    sp_inactive_users = sp.add_parser(CMD_INACTIVE_USERS,
-                                      parents=[parent_parser,
-                                               parent_parser_for_anonymize_and_inactiveusers_and_validate,
-                                               parent_parser_for_anonymize_and_inactiveusers_and_validate_post],
-                                      help="Retrieves a list of inactive, not-yet anonymized users."
-                                           " These users are candidates for anonymization.")
-    sp_inactive_users.add_argument('--exclude-groups', nargs='+',
-                                   help="Exclude members of these groups.")
 
     parser.parse_args()
     args = parser.parse_args()
@@ -991,7 +986,7 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
             is_timed_out = False
             break
         if datetime.now() >= next_progress_print_at:
-            log.info("Progress {}".format(progress_percentage))
+            log.info("Progress {}%".format(progress_percentage))
             next_progress_print_at += timedelta(minutes=1)
         time.sleep(g_config['regular_delay'])
 
