@@ -339,6 +339,12 @@ def write_default_cfg_file(config_template_filename):
         #   The given values are examples.
         #jira_auth = Basic admin:admin
         #jira_auth = Bearer NDcyOTE1ODY4Nzc4Omj+FiGVuLh/vs4WjTS9/3lGaysM
+        #   Exclude members of these groups at command 'inactive-users'.
+        #   Each group must appear on its own line (except the first one), and must be indented.
+        #   The given values are examples.
+        #exclude_groups = group1
+        #  group2
+        #  group with spaces
         #   File with user-names to be anonymized or just validated. One user-name per line. 
         #   Comments are allowed: They must be prefixed by '#' and they must appear on their own line.
         #   The character-encoding is platform dependent Python suggests.
@@ -413,7 +419,10 @@ def read_configfile_and_merge_into_global_config(args):
     defaultz = dict(defaults)
     real_dict = {}
     for k, v in defaultz.items():
-        if v.lower() in BOOLEAN_TRUE_VALUES:
+        if k.lower() == 'exclude_groups':
+            groups = re.split('[\\n\\r]+', v)
+            real_dict[k] = groups
+        elif v.lower() in BOOLEAN_TRUE_VALUES:
             real_dict[k] = True
         elif v.lower() in BOOLEAN_FALSE_VALUES:
             real_dict[k] = False
@@ -573,7 +582,9 @@ def parse_parameters():
                                            " These users are candidates for anonymization.")
     sp_inactive_users.add_argument('-G', '--exclude-groups', nargs='+',
                                    help="Exclude members of these groups."
-                                        " Multiple groups must be space-separated.")
+                                        " Multiple groups must be space-separated."
+                                        " If a group contains spaces, the group must be enclosed"
+                                        " in single or double quotes.")
     sp_validate = sp.add_parser(CMD_VALIDATE,
                                 parents=[parent_parser,
                                          parent_parser_for_anonymize_and_inactiveusers_and_validate,
