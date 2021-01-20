@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
     'subparser_name': None,
     'jira_base_url': '',
     'jira_auth': '',
+    'exclude_groups': [],
     'user_list_file': '',
     'encoding': None,
     'report_out_dir': '.',
@@ -91,6 +92,10 @@ BOOLEAN_TRUE_VALUES = ['yes', 'true', 'on']
 
 log = logging.getLogger()
 
+# The global config is created by:
+#  - the DEFAULT_CONFIG
+#  - the config-file, if given. The parameters in the config-file overwrites the default-config.
+#  - the command-line-arguments. These overwrite the parameters set so far.
 g_config = DEFAULT_CONFIG
 
 # The keys are:
@@ -142,8 +147,7 @@ def get_sanitized_global_details():
     :return: The sanitized details.
     """
     sanitized_details = g_details.copy()
-    if sanitized_details['effective_config']['jira_auth']:
-        sanitized_details['effective_config']['jira_auth'] = '<sanitized>'
+    sanitized_details['effective_config']['jira_auth'] = '<sanitized>'
     return sanitized_details
 
 
@@ -488,6 +492,9 @@ def parse_parameters():
     #
     # Part 1: Define and parse the arguments.
     #
+    # All actions with 'store_true' must have a default=None. This is important for the configuration chaining of
+    # the DEFAULT_CONFIG, the config-file, and the args.
+    #
     epilog = """    How to start
     
     o Create the file usernames.txt with the user-names to be anonymized, one 
@@ -548,7 +555,7 @@ def parse_parameters():
 
     parent_parser_for_anonymize_and_inactiveusers_and_validate_post = argparse.ArgumentParser(add_help=False)
     parent_parser_for_anonymize_and_inactiveusers_and_validate_post \
-        .add_argument('--info', action='store_true',
+        .add_argument('--info', action='store_true', default=None,
                       help="Print the effective config, and the character-encoding Python suggests, then exit.")
 
     #
@@ -566,11 +573,10 @@ def parse_parameters():
         .add_argument('--encoding', metavar='ENCODING',
                       help="Force a character-encoding for reading the user-list-file."
                            " Empty means platform dependent Python suggests."
-                           " If you run on Win or the user-list-file was created on Win, try out one of these encodings:"
-                           " utf-8, cp1252, latin1.")
+                           " If you run on Win or the user-list-file was created on Win,"
+                           " try out one of these encodings: utf-8, cp1252, latin1.")
     parent_parser_for_anonymize_and_validate \
-        .add_argument('--expand-validation-with-affected-entities', default=False,
-                      action='store_true',
+        .add_argument('--expand-validation-with-affected-entities', action='store_true', default=None,
                       dest='is_expand_validation_with_affected_entities',
                       help="Include 'affectedEntities' in the validation result."
                            " This is only for documentation to enrich the detailed report."
@@ -608,12 +614,12 @@ def parse_parameters():
     #
     # Add arguments special to command "anonymize".
     #
-    sp_anonymize.add_argument('-D', '--dry-run', action='store_true',
-                              help="Finally do not anonymize."
-                                   " To get familiar with the script and to test it.")
+    sp_anonymize.add_argument('-D', '--dry-run', action='store_true', default=None,
+                              dest='is_dry_run',
+                              help="Finally do not anonymize. To get familiar with the script and to test it.")
     sp_anonymize.add_argument('-n', '--new-owner',
                               help="Transfer roles of all anonymized users to the user with this user-name.")
-    sp_anonymize.add_argument('-x', '--background-reindex', action='store_true',
+    sp_anonymize.add_argument('-x', '--background-reindex', action='store_true', default=None,
                               dest='is_trigger_background_reindex',
                               help="If at least one user was anonymized, trigger a background re-index.")
 
@@ -658,6 +664,9 @@ def parse_parameters():
     # Merge command line arguments in and over the global config. Non-None-values overwrites the values present so far.
     merge_dicts(g_config, vars(args))
 
+    g_config['locale_getpreferredencoding'] = '{}'.format(locale.getpreferredencoding())
+    g_config['sys_getfilesystemencoding'] = '{}'.format(sys.getfilesystemencoding())
+
     errors = []
     #
     # Checks for 'anonymize', 'inactive-users', and 'validate'.
@@ -665,9 +674,7 @@ def parse_parameters():
     if args.subparser_name in [CMD_ANONYMIZE, CMD_INACTIVE_USERS, CMD_VALIDATE]:
         if args.info:
             gd = get_sanitized_global_details()
-            print("  Effective config: {}".format(json.dumps(gd['effective_config'], indent=4)))
-            print("  getpreferredencoding {}, getfilesystemencoding {}".format(locale.getpreferredencoding(),
-                                                                               sys.getfilesystemencoding()))
+            print("Effective config:\n{}".format(json.dumps(gd['effective_config'], indent=4)))
             print("")
             sys.exit(0)
 
