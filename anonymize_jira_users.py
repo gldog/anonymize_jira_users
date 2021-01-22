@@ -322,12 +322,6 @@ def write_default_cfg_file(config_template_filename):
         # Configuration for {scriptname}
         #
         # General:
-        #
-        #   - This configuration was generated with command line option -g. The parameters
-        #       listed in this file are all the ones you can set and are more than you can
-        #       set by command line options. If parameters have a value, these are the
-        #       Anonymizer's defaults.
-        #   - Parameters without values are ignored, but must have a '='.
         #   - These values are true in any notation: {boolean_true}.
         #   - These values are false in any notation: {boolean_false}.
         #
@@ -358,7 +352,7 @@ def write_default_cfg_file(config_template_filename):
         #   The character-encoding is platform dependent Python suggests.
         #   If you have trouble with the encoding, try out the parameter '--encoding'.
         #   The given value is an example.
-        #user_list_file = usernames.cfg
+        #user_list_file = users.cfg
         #   Force a character-encoding for reading the user_list_file. Empty means platform dependent Python suggests.
         #   If you run on Win or the user_list_file was created on Win, try out one of these encodings:
         #     utf-8, cp1252, latin1 
@@ -368,6 +362,7 @@ def write_default_cfg_file(config_template_filename):
         #report_out_dir = {report_out_dir}
         #   Include 'affectedEntities' in the validation result. This is only for documentation 
         #   to enrich the detailed report. It doesn't affect the anonymization.
+        #   Doing so could increase significantly execution time.
         #   The given value is the default.
         #is_expand_validation_with_affected_entities = {is_expand_validation_with_affected_entities}
         #   Finally do not anonymize. To get familiar with the script and to test it.
@@ -381,10 +376,11 @@ def write_default_cfg_file(config_template_filename):
         #   The default of Jira is {initial_delay} seconds, and this is also the default of the Anonymizer.
         #initial_delay = {initial_delay}
         #   The delay in seconds between calls to get the anonymization-progress.
-        #   The default if Jira is {regular_delay} seconds, and this is also the default of the Anonymizer.
+        #   The default of Jira is {regular_delay} seconds, and this is also the default of the Anonymizer.
         #regular_delay = {regular_delay}
         #   Time in seconds the anonymization shall wait to be finished.
         #   0 (or any negative value) means: Wait as long as it takes.
+        #   The given value is the default.
         #timeout = {timeout}
         #   If at least one user was anonymized, trigger a background re-index.
         #   The given value is the default.
@@ -564,7 +560,7 @@ def parse_parameters():
     parent_parser_for_anonymize_and_validate = argparse.ArgumentParser(add_help=False)
     parent_parser_for_anonymize_and_validate \
         .add_argument('-i', '--user-list-file',
-                      help="File with user-names to be anonymized or just validated."
+                      help="File with user-names to anonymize or just to validate."
                            " One user-name per line. Comments are allowed:"
                            " They must be prefixed by '#' and they must appear on their own line."
                            " The character-encoding is platform dependent Python suggests."
@@ -580,7 +576,8 @@ def parse_parameters():
                       dest='is_expand_validation_with_affected_entities',
                       help="Include 'affectedEntities' in the validation result."
                            " This is only for documentation to enrich the detailed report."
-                           " It doesn't affect the anonymization.")
+                           " It doesn't affect the anonymization."
+                           " Doing so could increase significantly execution time.")
 
     sp = parser.add_subparsers(dest='subparser_name')
 
@@ -719,7 +716,8 @@ def parse_parameters():
         if not g_config['new_owner']:
             sp_anonymize.error("Missing new_owner.")
         else:
-            r = get_user_data(g_config['new_owner'])
+            r = get_user_data_of_existent_user(g_config['new_owner'])
+            # TODO Check if the user is not deleted and is active.
             if r.status_code != 200:
                 if r.status_code == 404:
                     sp_anonymize.error(r.json()['errorMessages'])
@@ -790,7 +788,7 @@ def serialize_response(r, is_include_json_response=True):
     return j
 
 
-def get_user_data(user_name):
+def get_user_data_of_existent_user(user_name):
     rel_url = '/rest/api/2/user'
     log.info("for user {}".format(user_name))
     url = g_config['jira_base_url'] + rel_url

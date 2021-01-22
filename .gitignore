@@ -4,10 +4,8 @@
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
 
-anonymizing_details.json
-anonymizing_report.json
-anonymizing_report.txt
-my-blank-default-config.cfg
+anonymizing_report*
+my-bare-default-config.cfg
 my-config.json
 out.json
 usernames.txt
@@ -15,6 +13,8 @@ usernames-assess*
 dev/
 eval/
 test/
+test/anonymizing_report*
+test/my-bare-default-config.cfg
 tmp/
 reports/
 
