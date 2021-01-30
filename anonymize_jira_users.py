@@ -1449,6 +1449,11 @@ def create_raw_report(overall_report):
             user_key = None
             user_display_name = None
             active = None
+        # 'deleted' was added in Jira 8.10.
+        try:
+            deleted = user_key = user_data['rest_get_user__before_anonymization']['json']['deleted']
+        except KeyError:
+            deleted = None
 
         try:
             validation_has_errors = len(user_data['rest_get_anonymization__query_validation']['errors']) > 0
@@ -1490,6 +1495,7 @@ def create_raw_report(overall_report):
             'user_key': user_key,
             'user_display_name': user_display_name,
             'active': active,
+            'deleted': deleted,
             'validation_has_errors': validation_has_errors,
             'filter_is_anonymize_approval': filter_is_anonymize_approval,
             'filter_error_message': filter_error_message,
@@ -1641,7 +1647,7 @@ def at_exit_write_anonymization_reports():
     file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_text_filename'])
     log.debug("  file_path for report_text_filename is {}".format(file_path))
     with open(file_path, 'w', newline='') as f:
-        fieldnames = ['user_name', 'user_key', 'user_display_name', 'active',
+        fieldnames = ['user_name', 'user_key', 'user_display_name', 'active', 'deleted',
                       'validation_has_errors',
                       'filter_is_anonymize_approval', 'filter_error_message',
                       'action',
