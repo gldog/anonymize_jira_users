@@ -1119,7 +1119,6 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
         r.raise_for_status()
         audit_entry_count = r.json()['pagingInfo']['size']
         message = "Got audit log entries after {} seconds: {}. The intervals are: {}." \
-                  "Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s." \
                   "Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort." \
             .format(interval, audit_entry_count, intervals)
         log.info(message + " TODO: This will become a DEBUG level message.")
@@ -1613,7 +1612,7 @@ def at_exit_complete_and_write_details_report():
     file_path = report_dirpath.joinpath(g_config['report_details_filename'])
     log.debug("  file_path for report_details_filename is {}".format(file_path))
     with open(file_path, 'w') as f:
-        print("{}".format(json.dumps(get_sanitized_global_details(), indent=4)), file=f)
+        print("{}".format(json.dumps(get_sanitized_global_details(), indent=4, ensure_ascii=False)), file=f)
 
 
 def at_exit_write_anonymization_reports():
