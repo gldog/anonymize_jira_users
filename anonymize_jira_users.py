@@ -103,7 +103,7 @@ g_config = DEFAULT_CONFIG
 #   - rest_get_mypermissions
 #   - rest_get_	user__new_owner
 #   - rest_get_anonymization_progress__before_anonymization
-#   - rest_auditing_events
+#   - rest_auditing
 #   - rest_post_reindex
 #   - script_finished
 #   - is_script_aborted
@@ -1038,9 +1038,6 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
                 log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
                 time.sleep(g_config['initial_delay'])
                 is_timed_out = wait_until_anonymization_is_finished_or_timedout(i, user_name)
-                # Give Jira some time to write to the audit log. Don't know how long this takes, but without
-                # this sleep sometimes the event-log wasn't written at this time.
-                time.sleep(2)
                 # Collecting the anonymized user-data is done before handling the timeout to save what still can
                 # be saved.
                 get_anonymized_user_data_from_audit_log(user_name)
@@ -1062,12 +1059,12 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
                     r.raise_for_status()
 
 
-def is_anonymized_user_data_complete_for_user(user_name, key):
+def is_anonymized_user_data_complete_for_user(user_name):
     """Check if all three items user-name, -key, and display-name are collected so far.
      If so, we're done with this user.
      """
 
-    anonymized_data = g_users[user_name][key]
+    anonymized_data = g_users[user_name]['anonymized_data_from_rest']
     log.debug("anonymized_data so far for user {} is {}".format(user_name, anonymized_data))
     return anonymized_data['user_name'] \
            and anonymized_data['user_key'] \
@@ -1103,22 +1100,52 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
     # and to limit the amount of response-data. The date must be given in UTC with format "2020-12-30T13:53:17.996Z".
     # The response-JSON is sorted by date descending.
     url_params = {'from': anonymization_start_date_utc}
-    r = g_session.get(url=url, params=url_params)
-    user_data['rest_auditing_events'] = {'doc': "The date in the URL-param is UTC."}
-    user_data['rest_auditing_events'].update(serialize_response(r))
-    # Expect 200 OK here.
-    r.raise_for_status()
-    auditing_events = r.json()
 
-    anonymized_data_key = 'anonymized_data_from_rest'
+    user_data['rest_auditing'] = {'doc': "The date in the URL-param is UTC."}
+    user_data['rest_auditing'].update({'entries_after_seconds_msg': ''})
 
-    user_data[anonymized_data_key] = {
+    # Jira writes the audit log entries asynchronously. It is unclear how long this takes. Try immediately after
+    # the anonymization to read team. If the count of audit logs is 0, wait the seconds goven as list in the
+    # following for-loop.
+    overall_interval = 0
+    intervals = [1, 2, 3, 5]
+    # To suppress: Local variable 'r' might be referenced before assignment.
+    r = {}
+    audit_entry_count = 0
+    for interval in intervals:
+        time.sleep(interval)
+        overall_interval += interval
+        r = g_session.get(url=url, params=url_params)
+        r.raise_for_status()
+        audit_entry_count = r.json()['pagingInfo']['size']
+        message = "Got audit log entries after {} seconds: {}. The intervals are: {}." \
+                  "Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s." \
+                  "Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort." \
+            .format(interval, audit_entry_count, intervals)
+        log.info(message + " TODO: This will become a DEBUG level message.")
+        user_data['rest_auditing']['entries_after_seconds_msg'] = message
+        if audit_entry_count > 0:
+            break
+
+    if audit_entry_count > 0:
+        user_data['rest_auditing'].update({'request': serialize_response(r)})
+        auditing_events = r.json()
+    else:
+        error_message = "{}: The GET {} didn't return any audit log entry within {} seconds." \
+                        " No anonymized user-name/key/display-name could be retrieved." \
+            .format(user_name_to_search_for, r.request.url, overall_interval)
+        log.error(error_message)
+        g_execution['errors'].append(error_message)
+        return
+
+    user_data['anonymized_data_from_rest'] = {
         'user_name': None,
         'user_key': None,
         'display_name': None,
         # The description is more for development and documentation, not to extract data in advance.
         'description': None
     }
+    anonymized_data = user_data['anonymized_data_from_rest']
 
     for entity in auditing_events['entities']:
 
@@ -1126,7 +1153,7 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
         # Similar to get_anonymized_user_data_from_audit_records()
         #
 
-        if is_anonymized_user_data_complete_for_user(user_name_to_search_for, anonymized_data_key):
+        if is_anonymized_user_data_complete_for_user(user_name_to_search_for):
             break
 
         try:
@@ -1142,14 +1169,14 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
                     # of interest.
                     key = extra_attribute['nameI18nKey']
                     if key in ['description', 'jira.auditing.extra.parameters.event.description']:
-                        user_data[anonymized_data_key]['description'] = extra_attribute['value']
+                        anonymized_data['description'] = extra_attribute['value']
                         # The 'value' is something like:
                         #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
                         # The parts of interest are 'jirauser10104', 'user4pre84', 'JIRAUSER10104', 'user4pre84'.
                         # All given in single quotes.
                         parts = re.findall(r"'(.*?)'", extra_attribute['value'])
-                        user_data[anonymized_data_key]['user_name'] = parts[0]
-                        user_data[anonymized_data_key]['user_key'] = parts[2]
+                        anonymized_data['user_name'] = parts[0]
+                        anonymized_data['user_key'] = parts[2]
                         if user_data['rest_get_user__before_anonymization']['json']['emailAddress'] == '?':
                             # This is a deleted user. There is no display-name to look for in subsequent logs.
                             break
@@ -1172,7 +1199,7 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
             if changed_value['from'] == display_name_to_search_for:
                 # Found the tuple with the user-display-name. This could be equal to the user-name. And in
                 # Jira < 8.4, the user-name could also be equal to the user-key.
-                user_data[anonymized_data_key]['display_name'] = changed_value['to']
+                anonymized_data['display_name'] = changed_value['to']
 
 
 def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
@@ -1189,21 +1216,51 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
     # and to limit the amount of response-data. The date must be given in UTC with format "2020-12-30T13:53:17.996Z".
     # The response-JSON is sorted by date descending.
     url_params = {'from': anonymization_start_date_utc}
-    r = g_session.get(url=url, params=url_params)
-    user_data['rest_auditing_records'] = {'doc': "The date in the URL-param is UTC."}
-    user_data['rest_auditing_records'].update(serialize_response(r))
-    # Expect 200 OK here.
-    r.raise_for_status()
-    auditing_records = r.json()
 
-    anonymized_data_key = 'anonymized_data_from_rest'
-    user_data[anonymized_data_key] = {
+    user_data['rest_auditing'] = {'doc': "The date in the URL-param is UTC."}
+    user_data['rest_auditing'].update({'entries_after_seconds_msg': ''})
+
+    # Jira writes the audit log entries asynchronously. It is unclear how long this takes. Try immediately after
+    # the anonymization to read team. If the count of audit logs is 0, wait the seconds goven as list in the
+    # following for-loop.
+    overall_interval = 0
+    intervals = [1, 2, 3, 5]
+    # To suppress: Local variable 'r' might be referenced before assignment.
+    r = {}
+    audit_entry_count = 0
+    for interval in intervals:
+        time.sleep(interval)
+        overall_interval += interval
+        r = g_session.get(url=url, params=url_params)
+        r.raise_for_status()
+        audit_entry_count = len(r.json()['records'])
+        message = "Got audit log entries after {} seconds: {}. The intervals are: {}." \
+                  "Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort." \
+            .format(interval, audit_entry_count, intervals)
+        log.info(message + " TODO: This will become a DEBUG level message.")
+        user_data['rest_auditing']['entries_after_seconds_msg'] = message
+        if audit_entry_count > 0:
+            break
+
+    if audit_entry_count > 0:
+        user_data['rest_auditing'].update({'request': serialize_response(r)})
+        auditing_records = r.json()
+    else:
+        error_message = "{}: The GET {} didn't return any audit log entry within {} seconds." \
+                        " No anonymized user-name/key/display-name could be retrieved." \
+            .format(user_name_to_search_for, r.request.url, overall_interval)
+        log.error(error_message)
+        g_execution['errors'].append(error_message)
+        return
+
+    user_data['anonymized_data_from_rest'] = {
         'user_name': None,
         'user_key': None,
         'display_name': None,
         # The description is more for development and documentation, not to extract data in advance.
         'description': None
     }
+    anonymized_data = user_data['anonymized_data_from_rest']
 
     for record in auditing_records['records']:
         #
@@ -1225,7 +1282,7 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
         # have to look in to the changedValues directly.
         #
 
-        if is_anonymized_user_data_complete_for_user(user_name_to_search_for, anonymized_data_key):
+        if is_anonymized_user_data_complete_for_user(user_name_to_search_for):
             break
 
         try:
@@ -1233,14 +1290,14 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
             # summary language depends on the system default language. E. g. in DE it is 'Benutzer anonymisiert'.
             # But this API '/rest/api/2/auditing/record' is used by the Anonymizer only for Jira-version before 8.10,
             if record['summary'] == 'User anonymized':
-                user_data[anonymized_data_key]['description'] = record['description']
+                anonymized_data['description'] = record['description']
                 # The 'description' is something like:
                 #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
                 # The parts of interest are 'jirauser10104', 'user4pre84', 'JIRAUSER10104', 'user4pre84'.
                 # All given in single quotes.
                 parts = re.findall(r"'(.*?)'", record['description'])
-                user_data[anonymized_data_key]['user_name'] = parts[1]
-                user_data[anonymized_data_key]['user_key'] = parts[3]
+                anonymized_data['user_name'] = parts[1]
+                anonymized_data['user_key'] = parts[3]
                 if user_data['rest_get_user__before_anonymization']['json']['emailAddress'] == '?':
                     # This is a deleted user. There is no display-name to look for in subsequent logs.
                     break
@@ -1263,7 +1320,7 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
             if changed_value['changedFrom'] == display_name_to_search_for:
                 # Found the tuple with the user-display-name. This could be equal to the user-name. And in
                 # Jira < 8.4, the user-name could also be equal to the user-key.
-                user_data[anonymized_data_key]['display_name'] = changed_value['changedTo']
+                anonymized_data['display_name'] = changed_value['changedTo']
 
 
 def get_anonymized_user_data_from_audit_log(user_name_to_search_for):
@@ -1755,6 +1812,10 @@ def subcommand_inactive_users():
             print("{}\n".format(user_data['name']), file=f)
 
 
+def cleanup():
+    g_session.close()
+
+
 def main():
     g_details['execution']['script_started'] = now_to_date_string()
     g_execution['errors'] = []
@@ -1762,6 +1823,7 @@ def main():
 
     if args.subparser_name in [CMD_ANONYMIZE, CMD_VALIDATE]:
         # => Let at_exit_...() write the reports.
+        atexit.register(cleanup)
         atexit.register(at_exit_complete_and_write_details_report)
         atexit.register(at_exit_write_anonymization_reports)
         log.debug("")
