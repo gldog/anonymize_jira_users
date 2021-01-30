@@ -1038,29 +1038,12 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
                 log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
                 time.sleep(g_config['initial_delay'])
                 is_timed_out = wait_until_anonymization_is_finished_or_timedout(i, user_name)
-                # Atlassian introduced anonymization in Jira 8.7.
-                # The Anonymizer queries the anonymized user-data from the audit-log.
-                # Jira supports two auditing REST-APIs:
-                #   1. GET /rest/api/2/auditing/record, deprecated since 8.12.
-                #       https://docs.atlassian.com/software/jira/docs/api/REST/8.12.0/#api/2/auditing-getRecords
-                #   2. "Audit log improvements for developers", introduced in 8.8.
-                #       https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html
-                # The following switch delegates calls to the audit REST-APIs depending on the Jira-version:
-                # Until 8.13.x, the previous API 1) is used. For 8.14 and later, the new API 2) is used.
-                # For pre-8.7 it doesn't care as that versions do not support anonymization.
-                #
+                # Give Jira some time to write to the audit log. Don't know how long this takes, but without
+                # this sleep sometimes the event-log wasn't written at this time.
+                time.sleep(2)
                 # Collecting the anonymized user-data is done before handling the timeout to save what still can
                 # be saved.
-                #
-                # Collecting the anonymized user-data could also be done in one go after all users have been
-                # anonymized. But that is not as easy as it sounds: Both APIs are limited in output. the API 1) is
-                # limited to 1.000 records, and the API 2) is paged with a default of 200 events/page. That could
-                # be fiddly. I'm confident there is not really a downside in execution-time if the anonymized
-                # data is called for each user one by one.
-                if is_jira_version_less_then(8, 8):
-                    get_anonymized_user_data_from_audit_records(user_name)
-                else:
-                    get_anonymized_user_data_from_audit_events(user_name)
+                get_anonymized_user_data_from_audit_log(user_name)
                 if is_timed_out:
                     log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
                               " Abort script.".format(user_name, g_config['timeout']))
@@ -1085,6 +1068,7 @@ def is_anonymized_user_data_complete_for_user(user_name, key):
      """
 
     anonymized_data = g_users[user_name][key]
+    log.debug("anonymized_data so far for user {} is {}".format(user_name, anonymized_data))
     return anonymized_data['user_name'] \
            and anonymized_data['user_key'] \
            and anonymized_data['display_name']
@@ -1131,7 +1115,9 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
     user_data[anonymized_data_key] = {
         'user_name': None,
         'user_key': None,
-        'display_name': None
+        'display_name': None,
+        # The description is more for development and documentation, not to extract data in advance.
+        'description': None
     }
 
     for entity in auditing_events['entities']:
@@ -1143,6 +1129,35 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
         if is_anonymized_user_data_complete_for_user(user_name_to_search_for, anonymized_data_key):
             break
 
+        try:
+            # actionI18nKey was added in Jira 8.10.
+            if entity['type']['actionI18nKey'] == 'jira.auditing.user.anonymized':
+                for extra_attribute in entity['extraAttributes']:
+                    # In Jira 8.10 the 'nameI18nKey' was added.
+                    # In Jira 8.10, 8.11, and 8.12 the key to look for is 'description'.
+                    # Starting with Jira 8.13, it is 'jira.auditing.extra.parameters.event.description'
+                    # Note, this keys 'description' and 'jira.auditing.extra.parameters.event.description' are
+                    # also used in the event with key 'jira.auditing.user.anonymization.started', so that key is
+                    # not unique. Therefore the path 'event/type/actionI18nKey' is used to identify the event
+                    # of interest.
+                    key = extra_attribute['nameI18nKey']
+                    if key in ['description', 'jira.auditing.extra.parameters.event.description']:
+                        user_data[anonymized_data_key]['description'] = extra_attribute['value']
+                        # The 'value' is something like:
+                        #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
+                        # The parts of interest are 'jirauser10104', 'user4pre84', 'JIRAUSER10104', 'user4pre84'.
+                        # All given in single quotes.
+                        parts = re.findall(r"'(.*?)'", extra_attribute['value'])
+                        user_data[anonymized_data_key]['user_name'] = parts[0]
+                        user_data[anonymized_data_key]['user_key'] = parts[2]
+                        if user_data['rest_get_user__before_anonymization']['json']['emailAddress'] == '?':
+                            # This is a deleted user. There is no display-name to look for in subsequent logs.
+                            break
+                        else:
+                            continue
+        except KeyError:
+            pass
+
         # Not every record has the changesValues, so use try/except.
         try:
             changed_values = entity['changedValues']
@@ -1151,33 +1166,13 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
 
         display_name_to_search_for = user_data['rest_get_user__before_anonymization']['json']['displayName']
         for changed_value in changed_values:
-            # if changed_value['from'] == user_name_to_search_for:
-            #     # The user-name and the user-key can be identical, if the user was created in a Jira-version
-            #     # before 8.4. In this case, the outer if() is true two times. But processing the following
-            #     # code is sufficient to get the anonymized user-name and -key.
-            #     if not g_users[user_name_to_search_for][anonymized_data_key]['user_name']:
-            #         changed_to = str(changed_value['to']).lower()
-            #         if changed_to.startswith('jirauser'):
-            #             # Found the data-set for the user-name or the user-key. Which of both doesn't matter, as only
-            #             # the id '12345' is of interest.
-            #             id_ = changed_to.replace('jirauser', '')
-            #             g_users[user_name_to_search_for][anonymized_data_key]['user_name'] = 'jirauser{}'.format(id_)
-            #             g_users[user_name_to_search_for][anonymized_data_key]['user_key'] = 'JIRAUSER{}'.format(id_)
-            # elif changed_value['from'] == display_name_to_search_for:
-            #     g_users[user_name_to_search_for][anonymized_data_key]['display_name'] = changed_value['to']
-
-            if changed_value['from'] in [user_name_to_search_for, display_name_to_search_for]:
-                changed_to = str(changed_value['to']).lower()
-                if changed_to.startswith('jirauser'):
-                    # Found the tuple with either the user-name or the user-key. Which of both doesn't matter, as only
-                    # the id '12345' is of interest.
-                    id_ = changed_to.replace('jirauser', '')
-                    g_users[user_name_to_search_for][anonymized_data_key]['user_name'] = 'jirauser{}'.format(id_)
-                    g_users[user_name_to_search_for][anonymized_data_key]['user_key'] = 'JIRAUSER{}'.format(id_)
-                else:
-                    # Found the tuple with the user-display-name. This could be equal to the user-name. And in
-                    # Jira < 8.4, the user-name could also be equal to the user-key.
-                    g_users[user_name_to_search_for][anonymized_data_key]['display_name'] = changed_value['to']
+            if str(changed_value['to']).lower().startswith('jirauser'):
+                # This is the tuple either for the user-name (jirauser12345) or the user-key (JIRAUSER12345).
+                continue
+            if changed_value['from'] == display_name_to_search_for:
+                # Found the tuple with the user-display-name. This could be equal to the user-name. And in
+                # Jira < 8.4, the user-name could also be equal to the user-key.
+                user_data[anonymized_data_key]['display_name'] = changed_value['to']
 
 
 def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
@@ -1205,7 +1200,9 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
     user_data[anonymized_data_key] = {
         'user_name': None,
         'user_key': None,
-        'display_name': None
+        'display_name': None,
+        # The description is more for development and documentation, not to extract data in advance.
+        'description': None
     }
 
     for record in auditing_records['records']:
@@ -1231,6 +1228,27 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
         if is_anonymized_user_data_complete_for_user(user_name_to_search_for, anonymized_data_key):
             break
 
+        try:
+            # Until Jira 8.9.x the summary is always EN and 'User anonymized'. Starting with Jira 8.10, the
+            # summary language depends on the system default language. E. g. in DE it is 'Benutzer anonymisiert'.
+            # But this API '/rest/api/2/auditing/record' is used by the Anonymizer only for Jira-version before 8.10,
+            if record['summary'] == 'User anonymized':
+                user_data[anonymized_data_key]['description'] = record['description']
+                # The 'description' is something like:
+                #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
+                # The parts of interest are 'jirauser10104', 'user4pre84', 'JIRAUSER10104', 'user4pre84'.
+                # All given in single quotes.
+                parts = re.findall(r"'(.*?)'", record['description'])
+                user_data[anonymized_data_key]['user_name'] = parts[1]
+                user_data[anonymized_data_key]['user_key'] = parts[3]
+                if user_data['rest_get_user__before_anonymization']['json']['emailAddress'] == '?':
+                    # This is a deleted user. There is no display-name to look for in subsequent logs.
+                    break
+                else:
+                    continue
+        except KeyError:
+            pass
+
         # Not every record has the changesValues, so use try/except.
         try:
             changed_values = record['changedValues']
@@ -1239,33 +1257,57 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
 
         display_name_to_search_for = user_data['rest_get_user__before_anonymization']['json']['displayName']
         for changed_value in changed_values:
-            # if changed_value['changedFrom'] == user_name_to_search_for:
-            #     # The user-name and the user-key can be identical, if the user was created in a Jira-version
-            #     # before 8.4. In this case, the outer if() is true two times. But processing the following
-            #     # code is sufficient to get the anonymized user-name and -key.
-            #     if not g_users[user_name_to_search_for][anonymized_data_key]['user_name']:
-            #         changed_to = str(changed_value['changedTo']).lower()
-            #         if changed_to.startswith('jirauser'):
-            #             # Found the data-set for the user-name or the user-key. Which of both doesn't matter, as only
-            #             # the id '12345' is of interest.
-            #             id = changed_to.replace('jirauser', '')
-            #             g_users[user_name_to_search_for][anonymized_data_key]['user_name'] = 'jirauser{}'.format(id)
-            #             g_users[user_name_to_search_for][anonymized_data_key]['user_key'] = 'JIRAUSER{}'.format(id)
-            # elif changed_value['changedFrom'] == display_name_to_search_for:
-            #     g_users[user_name_to_search_for][anonymized_data_key]['display_name'] = changed_value['changedTo']
+            if str(changed_value['changedTo']).lower().startswith('jirauser'):
+                # This is the tuple either for the user-name (jirauser12345) or the user-key (JIRAUSER12345).
+                continue
+            if changed_value['changedFrom'] == display_name_to_search_for:
+                # Found the tuple with the user-display-name. This could be equal to the user-name. And in
+                # Jira < 8.4, the user-name could also be equal to the user-key.
+                user_data[anonymized_data_key]['display_name'] = changed_value['changedTo']
 
-            if changed_value['changedFrom'] in [user_name_to_search_for, display_name_to_search_for]:
-                changed_to = str(changed_value['changedTo']).lower()
-                if changed_to.startswith('jirauser'):
-                    # Found the tuple with either the user-name or the user-key. Which of both doesn't matter, as only
-                    # the id '12345' is of interest.
-                    id_ = changed_to.replace('jirauser', '')
-                    g_users[user_name_to_search_for][anonymized_data_key]['user_name'] = 'jirauser{}'.format(id_)
-                    g_users[user_name_to_search_for][anonymized_data_key]['user_key'] = 'JIRAUSER{}'.format(id_)
-                else:
-                    # Found the tuple with the user-display-name. This could be equal to the user-name. And in
-                    # Jira < 8.4, the user-name could also be equal to the user-key.
-                    g_users[user_name_to_search_for][anonymized_data_key]['display_name'] = changed_value['changedTo']
+
+def get_anonymized_user_data_from_audit_log(user_name_to_search_for):
+    """
+    Get the anonymized user-data from the audit-log.
+
+    Use either the audit-records API or the newer audit-events API, depending on the Jira-version.
+
+    :param user_name_to_search_for: The user-name to search for in the audit-log
+    :return: None.
+    """
+
+    # Atlassian introduced anonymization in Jira 8.7.
+    # The Anonymizer queries the anonymized user-data from the audit-log.
+    #
+    # Jira supports two auditing REST-APIs:
+    #
+    #   1. GET /rest/api/2/auditing/record, deprecated since 8.12.
+    #       https://docs.atlassian.com/software/jira/docs/api/REST/8.12.0/#api/2/auditing-getRecords
+    #   2. "Audit log improvements for developers", introduced in 8.8.
+    #       https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html
+    #
+    # A switch in this function delegates calls to the audit REST-APIs depending on the Jira-version:
+    # Until 8.9.x, the API 1) is used. For 8.10 and later, the new API 2) is used.
+    #
+    # Why is Jira 8.10 the border?
+    # The language used in parts of the audit-logs depends on the system default language. This affects
+    # attributes. Attributes are an easy way to identify the content the Analyzer shall read. But if
+    # attributes occur in different languages, this isn't possible.
+    # API 1): Until Jira 8.9.x the summary is always EN and 'User anonymized'. Starting with Jira 8.10, the
+    # summary language depends on the system default language. E.g. in DE it is 'Benutzer anonymisiert'.
+    # API 2) has i18n-keys. These keys are not consistent across the Jira-versions. But starting with Jira 8.10,
+    # they can be used. See get_anonymized_user_data_from_audit_events() for more details.
+    #
+    # Reading the audit-log user by user, or for all users in one go?
+    # Collecting the anonymized user-data could also be done in one go after all users have been
+    # anonymized. But that is not as easy as it sounds: Both APIs are limited in output. the API 1) is
+    # limited to 1.000 records, and the API 2) is paged with a default of 200 events/page. That could
+    # be fiddly. I'm confident there is not really a downside in execution-time if the anonymized
+    # data is called for each user one by one.
+    if is_jira_version_less_then(8, 10):
+        get_anonymized_user_data_from_audit_records(user_name_to_search_for)
+    else:
+        get_anonymized_user_data_from_audit_events(user_name_to_search_for)
 
 
 def is_any_anonymization_running():
@@ -1410,7 +1452,10 @@ def create_raw_report(overall_report):
                 anonymized_user_display_name = user_data['anonymized_data_from_rest']['display_name']
             except KeyError:
                 pass
-            if not anonymized_user_name or not anonymized_user_key or not anonymized_user_display_name:
+            # The anonymized_user_display_name is not checked here: For deleted users, there is no display-name,
+            # the anonymized_user_display_name is None, it is likely this is a deleted user rather than a
+            # tool-error.
+            if not anonymized_user_name or not anonymized_user_key:
                 # This function create_raw_report() is called twice. Put each error only once into the error-list.
                 error = "Anonymization data for user {} is incomplete".format(user_name)
                 if error not in g_execution['errors']:
@@ -1741,7 +1786,7 @@ def main():
             log.debug("")
             users_to_be_anonymized = {user_name: user_data for (user_name, user_data) in g_users.items() if
                                       user_data['user_filter']['is_anonymize_approval'] is True}
-            if not g_config['dry_run']:
+            if not g_config['is_dry_run']:
                 # run_user_anonymization() expects the user-key, not the user-name.
                 new_owner_key = g_execution['rest_get_user__new_owner']['json']['key']
                 anonymize_users(users_to_be_anonymized, new_owner_key)
