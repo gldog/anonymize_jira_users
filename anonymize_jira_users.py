@@ -953,7 +953,7 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
     else:
         rel_url = '/rest/api/2/user/anonymization/progress'
         url = g_config['jira_base_url'] + rel_url
-        log.info("Checking if any anonymization is running")
+        log.debug("Checking if any anonymization is running")
     r = g_session.get(url=url)
     # If this call is for a specific user/anonymization-task, store the response in the user's data.
     if user_name:
@@ -1367,14 +1367,13 @@ def get_anonymized_user_data_from_audit_log(user_name_to_search_for):
 
 
 def is_any_anonymization_running():
-    log.info("?")
     progress_percentage = get_anonymization_progress()
     # Any value <0 means "not in progress".
     if progress_percentage < 0:
-        log.info("No")
+        log.info("? No")
         return False
     else:
-        log.info("Yes")
+        log.info("? Yes")
         return True
 
 
