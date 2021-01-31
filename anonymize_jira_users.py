@@ -1451,7 +1451,7 @@ def create_raw_report(overall_report):
             active = None
         # 'deleted' was added in Jira 8.10.
         try:
-            deleted = user_key = user_data['rest_get_user__before_anonymization']['json']['deleted']
+            deleted = user_data['rest_get_user__before_anonymization']['json']['deleted']
         except KeyError:
             deleted = None
 
