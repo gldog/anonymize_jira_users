@@ -13,38 +13,39 @@ User Manual
 
 - [Quick-start](#quick-start)
 - [Command Line Options](#command-line-options)
-  * [Overview](#overview)
-  * [Parameter without command](#parameter-without-command)
-  * [Parameters for command "inactive-users"](#parameters-for-command--inactive-users-)
-  * [Parameters for command "validate"](#parameters-for-command--validate-)
-  * [Parameters for command "anonymize"](#parameters-for-command--anonymize-)
-  * [Parameters for command "misc"](#parameters-for-command--misc-)
-  * [The config-file](#the-config-file)
-  * [Combination of parameters from the config-file and the command-line](#combination-of-parameters-from-the-config-file-and-the-command-line)
-  * [Details about some options](#details-about-some-options)
-    + [--info](#--info)
-    + [--user-list-file and --encoding](#--user-list-file-and---encoding)
+    * [Overview](#overview)
+    * [Parameter without command](#parameter-without-command)
+    * [Parameters for command "inactive-users"](#parameters-for-command--inactive-users-)
+    * [Parameters for command "validate"](#parameters-for-command--validate-)
+    * [Parameters for command "anonymize"](#parameters-for-command--anonymize-)
+    * [Parameters for command "misc"](#parameters-for-command--misc-)
+    * [The config-file](#the-config-file)
+    * [Combination of parameters from the config-file and the command-line](#combination-of-parameters-from-the-config-file-and-the-command-line)
+    * [Details about some options](#details-about-some-options)
+        + [--info](#--info)
+        + [--user-list-file and --encoding](#--user-list-file-and---encoding)
 - [How the Anonymizer works](#how-the-anonymizer-works)
 - [The reports](#the-reports)
-  * [Overview](#overview-1)
-  * [The status printed to the command line](#the-status-printed-to-the-command-line)
+    * [Overview](#overview-1)
+    * [The status printed to the command line](#the-status-printed-to-the-command-line)
 - [The commands in detail](#the-commands-in-detail)
-  * [Command "inactive-users"](#command--inactive-users-)
-  * [Command "validate"](#command--validate-)
-    + [Example 1: Validation succeeded, no validation error](#example-1--validation-succeeded--no-validation-error)
-    + [Example 2: Validation failed for several reasons](#example-2--validation-failed-for-several-reasons)
-  * [Command "anonymize"](#command--anonymize-)
-    + [About](#about)
-    + [Example 1: Anonymization without errors](#example-1--anonymization-without-errors)
+    * [Command "inactive-users"](#command--inactive-users-)
+    * [Command "validate"](#command--validate-)
+        + [Example 1: Validation succeeded, no validation error](#example-1--validation-succeeded--no-validation-error)
+        + [Example 2: Validation failed for several reasons](#example-2--validation-failed-for-several-reasons)
+    * [Command "anonymize"](#command--anonymize-)
+        + [About](#about)
+        + [Example 1: Anonymization without errors](#example-1--anonymization-without-errors)
 - [Example-Workflow](#example-workflow)
+- [History of anonymization and related functions](#history-of-anonymization-and-related-functions)
 - [Known issues](#known-issues)
-  * [Validation error-messages in unexpected language](#validation-error-messages-in-unexpected-language)
-  * [Anonymization slow in case Jira is connected to a Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-a-oracle-db)
-  * [Anonymized user-/key-/display-name is null](#anonymized-user--key--display-name-is-null)
-  * [Tickets at Atlassian](#tickets-at-atlassian)
+    * [Validation error-messages in unexpected language](#validation-error-messages-in-unexpected-language)
+    * [Anonymization slow in case Jira is connected to a Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-a-oracle-db)
+    * [Anonymized user-/key-/display-name is null](#anonymized-user--key--display-name-is-null)
+    * [Tickets at Atlassian](#tickets-at-atlassian)
 
-<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents generated with markdown-toc</a></i></small>
-
+<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents
+generated with markdown-toc</a></i></small>
 
 The Anonymizer is a Python3-script to help Jira-admins anonymizing Jira-users in bulk.
 
@@ -53,6 +54,8 @@ versions equal or greater than 8.7.
 
 All information stated here is about Jira Server and Jira Data Center. Jira Cloud is not
 considered.
+
+---
 
 # Quick-start
 
@@ -69,6 +72,8 @@ considered.
 - Have a look at the report `anonymization_report.csv`. More details about the users are
   given in `anonymization_report_details.json`
 - Make a re-index.
+
+---
 
 # Command Line Options
 
@@ -229,7 +234,6 @@ The above commands have different parameter-lists.
                             Generate a configuration-template. Defaults to my-
                             bare-default-config.cfg.
 
-
 ## The config-file
 
 Most of the command-line-options can be set in a config-file. This file can be generated
@@ -380,6 +384,8 @@ try e.g.:
 
 or play around with other encodings.
 
+---
+
 # How the Anonymizer works
 
 The Anonymizer executes the following steps for the `validation` and the `anonymization`
@@ -424,22 +430,23 @@ The filter-criteria to not anonymize (= to skip), and their filter-error-message
    `There is at least one validation error message.`
    Please have a look at the `anonymization_report_details.json`.
 
-About 1) "The user isn't existent":
+**About 1) "The user isn't existent":**
 
 This is the case if
-the [REST API](https://docs.atlassian.com/software/jira/docs/api/REST/8.14.1/#api/2/user-getUser)
-can't find the user. Users can't be found if they have never existed. In case of deleted
-users this is as follows: The REST API is capable to find deleted users starting with Jira
-8.10. If a user was deleted (regardless in what Jira version), Jira 8.10 and later will
-find it.
+the [REST API GET /rest/api/2/user](https://docs.atlassian.com/software/jira/docs/api/REST/8.14.1/#api/2/user-getUser)
+can't find the user. Users can't be found for the following reasons:
 
-About 2) "The user is active":
+- The user never existed.
+- The user was deleted and Jira < 8.10 is used. In that case, the REST API isn't capable
+  to find deleted users.
+
+**About 2) "The user is active":**
 
 Active users can also be anonymized by
 [Jira Anonymization REST API](https://docs.atlassian.com/software/jira/docs/api/REST/8.14.1/#api/2/user/anonymization)
 . But the Anonymizer doesn't do this either.
 
-About 4) Validation-error-messages:
+**About 4) Validation-error-messages:**
 
 In case of validation-errors, _Jira_ prevents anonymization (this is not an implementation
 of the Anonymizer).
@@ -452,21 +459,28 @@ think also on the DB-type. E.g. (in Jira 8.13.1):
 - MySQL, license 250 users, 25.000 issues: 6 seconds/user
 - Oracle, license 2.000 users, 200.000 issues: 12 minutes/user
 
+---
+
 # The reports
 
 ## Overview
 
 The Anonymizer prints out a status to the command line, and creates these files:
 
-- anonymizing_report_details.json: Some kind of 'internal log' the Anonymizer writes
-  during its work.
-- anonymizing_report.json: Information about the anonymized or just validated users. It is
-  generated from anonymizing_report_details.json.
+- anonymizing_report_details.json: Some kind of internal log the Anonymizer writes during
+  its work.
+- anonymizing_report.json: Information about the processed users. It is generated from the
+  anonymizing_report_details.json.
 - anonymizing_report.csv: Content is as anonymizing_report.json, but in comma-separated
-  format. The content is generated from and is equal to anonymizing_report.json.
+  format.
 
 The reports contain more information in case of command `anonymize` than in case of
 just `validate`.
+
+**About the column 'deleted'**
+
+Starting with Jira 8.10, the REST API is capable to find deleted users. In that case, the
+column contains false or true. In case of Jira < 8.10 the column is empty.
 
 The report-files are discussed later in the examples for command `validate`
 and `anonymize`.
@@ -491,8 +505,8 @@ The report printed after `validate` looks like:
       Anonymized users:         0
       Background re-index triggered:  False
 
-The number of anonymized users are always 0, because `validate` only checks if the users
-_could_ be anonymized. Be we can see here that 11 - 4 = 7 users would be anonymized.
+The number of anonymized users is always 0, because `validate` only checks if the users
+_could_ be anonymized. We can see here that 11 - 4 = 7 users would be anonymized.
 
 The report printed after `anonymize` looks like:
 
@@ -505,6 +519,8 @@ The report printed after `anonymize` looks like:
 The sum of skipped- and anonymized users is the number of users in the user-list-file
 (if no script-error occurred).
 
+---
+
 # The commands in detail
 
 ## Command "inactive-users"
@@ -515,6 +531,8 @@ Anonymizer, you retrieved this list somehow.
 You can proceed doing so, but the command `inactive-users` could ease this. It retrieves a
 list of inactive, not-yet anonymized users. You can give groups with user to exclude by
 parameter `--exclude-groups`.
+
+This command cannot retrieve deleted users.
 
 Call:
 
@@ -580,7 +598,7 @@ The output is:
     2021-01-11 20:56:34,870:INFO:read_users_from_user_list_file(): users.cfg
     2021-01-11 20:56:34,871:INFO:read_users_from_user_list_file(): The user-names are (2): ['User1Pre84', 'User1Post84']
     2021-01-11 20:56:34,871:INFO:get_users_data(): for 2 users
-    2021-01-11 20:56:34,916:INFO:get_validation_data(): 
+    2021-01-11 20:56:34,916:INFO:get_anonymization_validation_data(): 
     2021-01-11 20:56:34,962:INFO:filter_users(): by existence and validation-data
     2021-01-11 20:56:34,962:INFO:filter_users(): 2 users remain for anonymization: ['User1Pre84', 'User1Post84']
     
@@ -617,6 +635,7 @@ an `filter_error_message`.
                 "user_key": "user1pre84",
                 "user_display_name": "User 1 Pre 84",
                 "active": false,
+                "deleted": false,
                 "validation_has_errors": false,
                 "filter_is_anonymize_approval": true,
                 "filter_error_message": "",
@@ -633,6 +652,7 @@ an `filter_error_message`.
                 "user_key": "JIRAUSER10200",
                 "user_display_name": "User 1 Post 84",
                 "active": false,
+                "deleted": false,
                 "validation_has_errors": false,
                 "filter_is_anonymize_approval": true,
                 "filter_error_message": "",
@@ -679,7 +699,7 @@ The output is:
     2021-01-11 21:17:44,425:INFO:read_users_from_user_list_file(): users.cfg
     2021-01-11 21:17:44,425:INFO:read_users_from_user_list_file(): The user-names are (3): ['User1Pre84', 'missplled-user', 'user-from-ad']
     2021-01-11 21:17:44,425:INFO:get_users_data(): for 3 users
-    2021-01-11 21:17:44,495:INFO:get_validation_data(): 
+    2021-01-11 21:17:44,495:INFO:get_anonymization_validation_data(): 
     2021-01-11 21:17:44,521:INFO:filter_users(): by existence and validation-data
     2021-01-11 21:17:44,521:WARNING:filter_users(): User1Pre84: Is an active user.
     2021-01-11 21:17:44,521:WARNING:filter_users(): missplled-user: The user named 'misspelled-user' does not exist
@@ -713,6 +733,7 @@ The JSON-report is:
                 "user_key": "user1pre84",
                 "user_display_name": "User 1 Pre 84",
                 "active": true,
+                "deleted": false,
                 "validation_has_errors": false,
                 "filter_is_anonymize_approval": false,
                 "filter_error_message": "Is an active user.",
@@ -729,6 +750,7 @@ The JSON-report is:
                 "user_key": null,
                 "user_display_name": null,
                 "active": null,
+                "deleted": null,
                 "validation_has_errors": false,
                 "filter_is_anonymize_approval": false,
                 "filter_error_message": "The user named 'missplled-user' does not exist",
@@ -745,6 +767,7 @@ The JSON-report is:
                 "user_key": "JIRAUSER10400",
                 "user_display_name": "User From AD",
                 "active": false,
+                "deleted": false,
                 "validation_has_errors": false,
                 "filter_is_anonymize_approval": false,
                 "filter_error_message": "There is at least one validation error message.",
@@ -875,12 +898,10 @@ The output is:
     2021-01-11 22:40:36,074:INFO:read_users_from_user_list_file(): users.cfg
     2021-01-11 22:40:36,074:INFO:read_users_from_user_list_file(): The user-names are (4): ['User1Pre84', 'User2Pre84', 'User1Post84', 'User2Post84']
     2021-01-11 22:40:36,074:INFO:get_users_data(): for 4 users
-    2021-01-11 22:40:36,174:INFO:get_validation_data(): 
+    2021-01-11 22:40:36,174:INFO:get_anonymization_validation_data(): 
     2021-01-11 22:40:36,332:INFO:filter_users(): by existence and validation-data
     2021-01-11 22:40:36,332:INFO:filter_users(): 4 users remain for anonymization: ['User1Pre84', 'User2Pre84', 'User1Post84', 'User2Post84']
-    2021-01-11 22:40:36,332:INFO:is_any_anonymization_running(): ?
-    2021-01-11 22:40:36,332:INFO:get_anonymization_progress(): Checking if any anonymization is running
-    2021-01-11 22:40:36,375:INFO:is_any_anonymization_running(): No
+    2021-01-11 22:40:36,332:INFO:is_any_anonymization_running(): ? No
     2021-01-11 22:40:36,375:INFO:anonymize_users(): Going to anonymize 4 users
     2021-01-11 22:40:36,375:INFO:anonymize_users(): #1 (name/key): User1Pre84/user1pre84
     2021-01-11 22:40:38,618:INFO:anonymize_users(): #2 (name/key): User2Pre84/user2pre84
@@ -908,6 +929,7 @@ The `anonymization_report.json` is:
                 "user_key": "user1pre84",
                 "user_display_name": "User 1 Pre 84",
                 "active": false,
+                "deleted": false,
                 "validation_has_errors": false,
                 "filter_is_anonymize_approval": true,
                 "filter_error_message": "",
@@ -924,6 +946,7 @@ The `anonymization_report.json` is:
                 "user_key": "user2pre84",
                 "user_display_name": "User 2 Pre 84",
                 "active": false,
+                "deleted": false,
                 "validation_has_errors": false,
                 "filter_is_anonymize_approval": true,
                 "filter_error_message": "",
@@ -940,6 +963,7 @@ The `anonymization_report.json` is:
                 "user_key": "JIRAUSER10201",
                 "user_display_name": "User 1 Post 84",
                 "active": false,
+                "deleted": false,
                 "validation_has_errors": false,
                 "filter_is_anonymize_approval": true,
                 "filter_error_message": "",
@@ -956,6 +980,7 @@ The `anonymization_report.json` is:
                 "user_key": "JIRAUSER10202",
                 "user_display_name": "User 2 Post 84",
                 "active": false,
+                "deleted": false,
                 "validation_has_errors": false,
                 "filter_is_anonymize_approval": true,
                 "filter_error_message": "",
@@ -1039,6 +1064,8 @@ Only the user-name were anonymized:
     User key is already anonymized (JIRAUSER10202), no need to change it
     Username is not anonymized (User2Post84), should rename to (jirauser10202)
 
+---
+
 # Example-Workflow
 
 This example comprises of
@@ -1082,6 +1109,55 @@ The commands are:
         -i $ANONYMIZATION_REPORTS_BASE_DIR/1_inactive-users/assessed-inactive-users.cfg
     
     # 5. Make a re-index. You could let the Anonymizer do this by setting the option '-x'.
+
+---
+
+# History of anonymization and related functions
+
+**Jira 8.7, released 3 February 2020:**
+
+- Described by JRASERVER-70501 "Anonymize use activity news"
+- Anonymization in UI and REST API.
+- Allows anonymization of present as well as deleted users:
+  "You can anonymize users in two ways — the choice here depends on whether the user is
+  still active, or has been deleted." [1]
+- Limitations: "Personal data might still appear in the issue history, which shows all
+  past activity on an issue." [2]
+
+**Jira 8.8, released 19 March 2020**
+
+- Audit log improvements for developers [2]
+- Support of a new auditing REST-API
+
+**Jira 8.10, released 23 June 2020**
+
+- [3]: Extended the scope of anonymization to include the following items. If you have
+  already anonymized some users, you can anonymize them again, in which case we’ll take
+  care of the newly supported items and make your users disappear in a puff of GDPR. The
+  items are:
+    - Reporters and creators of issue collectors
+    - Full name in the issue history (Assignee, Reporter, Single- and Multi-user picker
+      fields)
+    - Ability to anonymize users that have already been deleted
+
+**Jira 8.12, released 26 August 2020**
+
+-
+
+Fixed: [JRASERVER-71153 Usernames not fully anonymized in issue history](https://jira.atlassian.com/browse/JRASERVER-71153)
+
+- REST-API GET /rest/api/2/user supports includeDeleted.
+- REST-API deprecated: GET /rest/api/2/auditing/record [5]
+
+**References:**
+
+- [1] [Preparing for Jira 8.7 | GDPR: Anonymizing users](https://confluence.atlassian.com/jiracore/gdpr-anonymizing-users-983503046.html)
+- [2] [Audit log improvements for developers](https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html)
+- [3] [Jira Software 8.10.x release notes | User anonymization (GDPR) improvements](https://confluence.atlassian.com/jirasoftware/jira-software-8-10-x-release-notes-1004948108.html#JiraSoftware8.10.xreleasenotes-gdpr)
+- [4] [REST API GET /rest/api/2/auditing/record](https://docs.atlassian.com/software/jira/docs/api/REST/8.10.0/#api/2/user-getUser)
+- [5] [GET /rest/api/2/auditing/record deprecated](https://docs.atlassian.com/software/jira/docs/api/REST/8.12.0/#api/2/auditing-getRecords)
+
+---
 
 # Known issues
 
