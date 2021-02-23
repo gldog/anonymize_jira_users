@@ -1087,26 +1087,26 @@ We'll use a directory-structure as follows:
 The commands are:
 
     # Set a report-dir for all steps. Here for the dev-instance 'inst1-d'.
-    export ANONYMIZATION_REPORTS_BASE_DIR="anonymization-reports/`date +%Y%m%d-%H%M%S-inst1-d`"
+    export REPORTS_BASE_DIR="anonymization-reports/`date +%Y%m%d-%H%M%S-inst1-d`"
 
     # 1. Get a list of users to be anonymized. This command creates the file 
     #   'inactive-users.cfg' in the report-dir.
     python anonymize_jira_users.py inactive-users -c anon_configs/inst1-d.cfg \
          --exclude-groups technical_users do_not_anonymize\
-        -o $ANONYMIZATION_REPORTS_BASE_DIR/1_inactive-users
+        -o $REPORTS_BASE_DIR/1_inactive-users
 
     # 2. Assess and filter this list; create a new user-list 'assessed-inactive-users.cfg'.
     # ...
 
     # 3. Validate the users in that list. Have a look at anonymizing_report.csv afterwards.
     python anonymize_jira_users.py validate -c anon_configs/inst1-d.cfg \
-        -o $ANONYMIZATION_REPORTS_BASE_DIR/2_validate \
-        -i $ANONYMIZATION_REPORTS_BASE_DIR/1_inactive-users/assessed-inactive-users.cfg
+        -o $REPORTS_BASE_DIR/2_validate \
+        -i $REPORTS_BASE_DIR/1_inactive-users/assessed-inactive-users.cfg
 
     # 4. Anonymize the users in that list.
     python anonymize_jira_users.py anonymize -c anon_configs/inst1-d-config.cfg \
-        -o $ANONYMIZATION_REPORTS_BASE_DIR/3_anonymize \
-        -i $ANONYMIZATION_REPORTS_BASE_DIR/1_inactive-users/assessed-inactive-users.cfg
+        -o $REPORTS_BASE_DIR/3_anonymize \
+        -i $REPORTS_BASE_DIR/1_inactive-users/assessed-inactive-users.cfg
     
     # 5. Make a re-index. You could let the Anonymizer do this by setting the option '-x'.
 
@@ -1120,14 +1120,14 @@ The commands are:
 - Anonymization in UI and REST API.
 - Allows anonymization of present as well as deleted users:
   "You can anonymize users in two ways — the choice here depends on whether the user is
-  still active, or has been deleted." [1]
+  still active, or has been deleted." [1].
 - Limitations: "Personal data might still appear in the issue history, which shows all
-  past activity on an issue." [2]
+  past activity on an issue." [1].
 
 **Jira 8.8, released 19 March 2020**
 
-- Audit log improvements for developers [2]
-- Support of a new auditing REST-API
+- Audit log improvements for developers [2].
+- Support of a new auditing REST-API.
 
 **Jira 8.10, released 23 June 2020**
 
@@ -1142,11 +1142,8 @@ The commands are:
 
 **Jira 8.12, released 26 August 2020**
 
--
-
-Fixed: [JRASERVER-71153 Usernames not fully anonymized in issue history](https://jira.atlassian.com/browse/JRASERVER-71153)
-
-- REST-API GET /rest/api/2/user supports includeDeleted.
+- Fixed: [JRASERVER-71153 Usernames not fully anonymized in issue history](https://jira.atlassian.com/browse/JRASERVER-71153)
+- REST-API GET /rest/api/2/user supports 'includeDeleted'.
 - REST-API deprecated: GET /rest/api/2/auditing/record [5]
 
 **References:**
