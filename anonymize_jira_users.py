@@ -27,6 +27,7 @@ import re
 import sys
 import textwrap
 import time
+from collections import namedtuple
 from datetime import datetime, timedelta
 from json.decoder import JSONDecodeError
 from urllib import parse
@@ -169,7 +170,7 @@ def validate_auth_parameter(auth):
     """Check parameter 'auth' for valid auth-type 'Basic' or 'Bearer, extract the auth-data, and return them.
     :param auth: Expected is either something like 'Basic user:pass', or
                 'Bearer NDcyOTE1ODY4Nzc4Omj+FiGVuLh/vs4WjTS9/3lGaysM'
-    :return:
+    :return: AuthValidationResult-tuple.
         1 - Error-message in case the auth couldn't be parsed properly. None otherwise.
         2 - The auth-type 'basic' or 'bearer' (lower case).
         3 - In case of 'basic': The user-name. In case of 'bearer': The token.
@@ -179,12 +180,15 @@ def validate_auth_parameter(auth):
     # Split 'Basic' or 'Bearer' from the rest.
     auth_parts = re.split(r'\s+', auth, 1)
 
+    AuthValidationResult = namedtuple('AuthValidationResult', ['error_message', 'auth_type', 'user_name', 'password'])
+
     if len(auth_parts) < 2:
-        return "Invalid format in authentication parameter.", None, None, None
+        return AuthValidationResult("Invalid format in authentication parameter.", None, None, None)
 
     auth_type = auth_parts[0].lower()
     if not auth_type.lower() in ['basic', 'bearer']:
-        return "Invalid authentication type '{}'. Expect 'Basic' or 'Bearer'.".format(auth_type), None, None, None
+        return AuthValidationResult("Invalid authentication type '{}'. Expect 'Basic' or 'Bearer'.".format(auth_type),
+                                    None, None, None)
 
     username = None
     password = None
@@ -192,7 +196,7 @@ def validate_auth_parameter(auth):
         # Split only at the first colon, as a colon could be part of the password.
         name_and_password = re.split(r':', auth_parts[1], 1)
         if len(name_and_password) != 2:
-            return "Invalid format for 'Basic' in authentication argument.", None, None, None
+            return AuthValidationResult("Invalid format for 'Basic' in authentication argument.", None, None, None)
         else:
             username = name_and_password[0]
             password = name_and_password[1]
@@ -200,15 +204,15 @@ def validate_auth_parameter(auth):
     token = None
     if auth_type == 'bearer':
         if len(auth_parts) != 2:
-            return "Invalid format for 'Bearer' in authentication argument.", None, None, None
+            return AuthValidationResult("Invalid format for 'Bearer' in authentication argument.", None, None, None)
         else:
             token = auth_parts[1]
 
-    return \
-        None, \
-        auth_type, \
-        username if auth_type == 'basic' else token, \
-        password if auth_type == 'basic' else None
+    return AuthValidationResult(
+        None,
+        auth_type,
+        username if auth_type == 'basic' else token,
+        password if auth_type == 'basic' else None)
 
 
 def setup_http_session(auth_type, user_or_bearer, passwd):
@@ -308,30 +312,30 @@ def get_jira_serverinfo():
 
 
 def is_jira_version_less_then(major, minor):
-    version_numbers = g_execution['rest_get_serverInfo']['json']['versionNumbers']
     # versionNumbers is e.g. [8,14,0]
+    version_numbers = g_execution['rest_get_serverInfo']['json']['versionNumbers']
     is_less_then = version_numbers[0] < major or (version_numbers[0] == major and version_numbers[1] < minor)
-    log.debug("{}.{}: {}".format(major, minor, is_less_then))
+    log.debug("f{major}.{minor}: {is_less_then}")
     return is_less_then
 
 
 def write_default_cfg_file(config_template_filename):
     with open(config_template_filename, 'w') as f:
-        help_text = """        ####
+        help_text = f"""        ####
         #
-        # Configuration for {scriptname}
+        # Configuration for {os.path.basename(__file__)}
         #
         # General:
-        #   - These values are true in any notation: {boolean_true}.
-        #   - These values are false in any notation: {boolean_false}.
+        #   - These values are true in any notation: {BOOLEAN_TRUE_VALUES}.
+        #   - These values are false in any notation: {BOOLEAN_FALSE_VALUES}.
         #
         ####
 
         [DEFAULT]
 
-        #   Loglevel. Valid levels are {valid_loglevels}.
+        #   Loglevel. Valid levels are {PRETTY_PRINT_LOG_LEVELS}.
         #   The given value is the default.
-        #loglevel = {loglevel}
+        #loglevel = {g_config['loglevel']}
         #   Jira base-URL.
         #   The given value is an example.
         #jira_base_url = http://localhost:2990/jira
@@ -359,45 +363,33 @@ def write_default_cfg_file(config_template_filename):
         #   The given value is an example.
         #encoding = utf-8
         #   Output-directory to write the reports into.
-        #report_out_dir = {report_out_dir}
+        #report_out_dir = {g_config['report_out_dir']}
         #   Include 'affectedEntities' in the validation result. This is only for documentation 
         #   to enrich the detailed report. It doesn't affect the anonymization.
         #   Doing so could increase significantly execution time.
         #   The given value is the default.
-        #is_expand_validation_with_affected_entities = {is_expand_validation_with_affected_entities}
+        #is_expand_validation_with_affected_entities = {g_config['is_expand_validation_with_affected_entities']}
         #   Finally do not anonymize. To get familiar with the script and to test it.
         #   The given value is the default.
-        #is_dry_run = {is_dry_run}
+        #is_dry_run = {g_config['is_dry_run']}
         #   Transfer roles to the user with this user-name.
         #   The given value is an example.
         #new_owner = new-owner
         #   Initial delay in seconds the Anonymizer waits after the anonymization is
         #   triggered and the first call to get the anonymization-progress.
-        #   The default of Jira is {initial_delay} seconds, and this is also the default of the Anonymizer.
-        #initial_delay = {initial_delay}
+        #   The default of Jira is {g_config['initial_delay']} seconds, and this is also the default of the Anonymizer.
+        #initial_delay = {g_config['initial_delay']}
         #   The delay in seconds between calls to get the anonymization-progress.
-        #   The default of Jira is {regular_delay} seconds, and this is also the default of the Anonymizer.
-        #regular_delay = {regular_delay}
+        #   The default of Jira is {g_config['regular_delay']} seconds, and this is also the default of the Anonymizer.
+        #regular_delay = {g_config['regular_delay']}
         #   Time in seconds the anonymization shall wait to be finished.
         #   0 (or any negative value) means: Wait as long as it takes.
         #   The given value is the default.
-        #timeout = {timeout}
+        #timeout = {g_config['timeout']}
         #   If at least one user was anonymized, trigger a background re-index.
         #   The given value is the default.
-        #is_trigger_background_reindex = {is_trigger_background_reindex}
-        """.format(scriptname=os.path.basename(__file__),
-                   boolean_true=BOOLEAN_TRUE_VALUES,
-                   boolean_false=BOOLEAN_FALSE_VALUES,
-                   valid_loglevels=PRETTY_PRINT_LOG_LEVELS,
-                   loglevel=g_config['loglevel'],
-                   report_out_dir=g_config['report_out_dir'],
-                   is_expand_validation_with_affected_entities=
-                                       g_config['is_expand_validation_with_affected_entities'],
-                   is_dry_run=g_config['is_dry_run'],
-                   initial_delay=g_config['initial_delay'],
-                   regular_delay=g_config['regular_delay'],
-                   timeout=g_config['timeout'],
-                   is_trigger_background_reindex=g_config['is_trigger_background_reindex'])
+        #is_trigger_background_reindex = {g_config['is_trigger_background_reindex']}
+        """
         f.write(textwrap.dedent(help_text))
 
 
@@ -462,7 +454,7 @@ def set_logging():
     log.setLevel(numeric_level)
 
     # Adjust logging-level of module "urllib3". If our logging is set to DEBUG, that also logs in that level.
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 
 class PathAction(argparse.Action):
@@ -491,7 +483,7 @@ def parse_parameters():
     # All actions with 'store_true' must have a default=None. This is important for the configuration chaining of
     # the DEFAULT_CONFIG, the config-file, and the args.
     #
-    epilog = """    How to start
+    epilog = f"""    How to start
     
     o Create the file usernames.txt with the user-names to be anonymized, one 
       user-name per line.
@@ -507,10 +499,9 @@ def parse_parameters():
     o Call
           {script_name} anonymize -c my-config.cfg
       to execute anonyization.
-    o Have a look at the report {anonymization_report_csv}. More details about the
-      users are given in {anonymization_report_details_json}.
-    """.format(script_name=script_name, anonymization_report_csv=g_config['report_text_filename'],
-               anonymization_report_details_json=g_config['report_details_filename'])
+    o Have a look at the report {g_config['report_text_filename']}. More details about the
+      users are given in {g_config['report_details_filename']}.
+    """
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description="The Anonymizer is a Python3-script to help Jira-admins"
                                                  " anonymizing Jira-users in bulk.",
@@ -661,8 +652,8 @@ def parse_parameters():
     # Merge command line arguments in and over the global config. Non-None-values overwrites the values present so far.
     merge_dicts(g_config, vars(args))
 
-    g_config['locale_getpreferredencoding'] = '{}'.format(locale.getpreferredencoding())
-    g_config['sys_getfilesystemencoding'] = '{}'.format(sys.getfilesystemencoding())
+    g_config['locale_getpreferredencoding'] = f'{locale.getpreferredencoding()}'
+    g_config['sys_getfilesystemencoding'] = f'{sys.getfilesystemencoding()}'
 
     errors = []
     #
@@ -684,7 +675,7 @@ def parse_parameters():
         if not g_config['jira_auth']:
             errors.append("Missing authentication")
 
-        auth_error, auth_type, user_or_bearer, password = validate_auth_parameter(g_config["jira_auth"])
+        auth_error, auth_type, user_or_bearer, password = validate_auth_parameter(g_config['jira_auth'])
         if auth_error:
             errors.append(auth_error)
         else:
@@ -731,15 +722,15 @@ def parse_parameters():
         except KeyError:
             pass
         if len(errors) > 0:
-            print("{}".format(errors))
+            print(f"{errors}")
             sp_inactive_users.error(', '.join(errors))
 
     set_logging()
 
     gd = get_sanitized_global_details()
-    log.debug("Effective config: {}".format(gd['effective_config']))
-    log.debug(("getpreferredencoding {}, getfilesystemencoding {}".format(locale.getpreferredencoding(),
-                                                                          sys.getfilesystemencoding())))
+    log.debug(f"Effective config: {gd['effective_config']}")
+    log.debug(
+        f"getpreferredencoding {locale.getpreferredencoding()}, getfilesystemencoding {sys.getfilesystemencoding()}")
 
     return args
 
@@ -759,7 +750,7 @@ def read_users_from_user_list_file():
             if line and not line.startswith('#'):
                 user_name = line
                 g_users[user_name] = {}
-    log.info("The user-names are ({}): {}".format(len(g_users.keys()), list(g_users.keys())))
+    log.info(f"The user-names are ({len(g_users.keys())}): {list(g_users.keys())}")
 
 
 def serialize_response(r, is_include_json_response=True):
@@ -790,7 +781,7 @@ def serialize_response(r, is_include_json_response=True):
 
 def get_user_data_of_existent_user(user_name):
     rel_url = '/rest/api/2/user'
-    log.info("for user {}".format(user_name))
+    log.info(f"for user {user_name}")
     url = g_config['jira_base_url'] + rel_url
     url_params = {'username': user_name}
     r = g_session.get(url=url, params=url_params)
@@ -801,7 +792,7 @@ def get_user_data_of_existent_user(user_name):
 
 def get_users_data(users):
     rel_url = '/rest/api/2/user'
-    log.info("for {} users".format(len(users)))
+    log.info(f"for {len(users)} users")
     url = g_config['jira_base_url'] + rel_url
     for user_name in users.keys():
         url_params = {'includeDeleted': True, 'username': user_name}
@@ -854,7 +845,7 @@ def filter_users(users):
 
         # Check if user-data could be retrieved.
         if user_data['rest_get_user__before_anonymization']['status_code'] != 200:
-            error_message = '{}'.format(user_data['rest_get_user__before_anonymization']['json']['errorMessages'][0])
+            error_message = f"{user_data['rest_get_user__before_anonymization']['json']['errorMessages'][0]}"
         else:
             # Check if the user is an active user:
             if user_data['rest_get_user__before_anonymization']['json']['active']:
@@ -868,12 +859,12 @@ def filter_users(users):
             # could be absent in case of an invalid user-name or -key in the user-name-file.
             try:
                 if user_data['rest_get_anonymization__query_validation']['status_code'] != 200:
-                    error_message = "HTTP status-code of the REST validation API is not 200. "
+                    error_message = "HTTP status-code of the REST validation API is not 200."
                 # Regardless of the status code there could be validation-errors (seen e.g.
                 # in use case "admin tries to anonymize themself": Status code was 400 Bad Request
                 # and the error was "You can't anonymize yourself.").
                 if len(user_data['rest_get_anonymization__query_validation']['json']['errors']) > 0:
-                    error_message += "There is at least one validation error message."
+                    error_message += " There is at least one validation error message."
             except KeyError:
                 pass
 
@@ -888,7 +879,7 @@ def filter_users(users):
 
     vu = {user_name: user_data for (user_name, user_data) in users.items() if
           user_data['user_filter']['is_anonymize_approval'] is True}
-    log.info("{} users remain for anonymization: {}".format(len(vu.keys()), list(vu.keys())))
+    log.info(f"{len(vu.keys())} users remain for anonymization: {list(vu.keys())}")
 
 
 def get_anonymization_progress(user_name=None, full_progress_url=None):
@@ -943,13 +934,13 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
         o -2: if the "status" is "COMPLETED". I assume a "currentProgress" of 100.
         o -3: Other "status" than "IN_PROGRESS" and "COMPLETED". Means "not in progress".
     """
-    log.debug("user_name {}, full_progress_url {}".format(user_name, full_progress_url))
+    log.debug(f"user_name {user_name}, full_progress_url {full_progress_url}")
     assert not (bool(user_name) ^ bool(full_progress_url))
 
     if full_progress_url:
         url = full_progress_url
         # Only DEBUG, because this could be called a lot.
-        log.debug("Checking if specific anonymization for user '{}' is running".format(user_name))
+        log.debug(f"Checking if specific anonymization for user '{user_name}' is running")
     else:
         rel_url = '/rest/api/2/user/anonymization/progress'
         url = g_config['jira_base_url'] + rel_url
@@ -977,7 +968,7 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
             progress_percentage = -3
 
     if progress_percentage >= 0:
-        log.debug("progress_percentage {}%".format(progress_percentage))
+        log.debug(f"progress_percentage {progress_percentage}%")
     else:
         d = {-1: 'No user anonymization task found', -2: 'COMPLETED', -3: 'Not in progress'}
         log.debug("{}".format(d[progress_percentage]))
@@ -994,7 +985,7 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
     :param user_name: The user-anonymization to wait for.
     :return: False if anonymization finished within the timeout. True otherwise (= timed out).
     """
-    log.debug("for user {}: {}".format(i, user_name))
+    log.debug(f"for user {i}: {user_name}")
     user_data = g_users[user_name]
     url = g_config['jira_base_url'] + user_data['rest_post_anonymization']['json']['progressUrl']
     is_timed_out = True
@@ -1009,7 +1000,7 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
             is_timed_out = False
             break
         if datetime.now() >= next_progress_print_at:
-            log.info("Progress {}%".format(progress_percentage))
+            log.info(f"Progress {progress_percentage}%")
             next_progress_print_at += timedelta(minutes=1)
         time.sleep(g_config['regular_delay'])
 
@@ -1019,7 +1010,7 @@ def wait_until_anonymization_is_finished_or_timedout(i, user_name):
 def anonymize_users(users_to_be_anonymized, new_owner_key):
     rel_url = '/rest/api/2/user/anonymization'
 
-    log.info("Going to anonymize {} users".format(len(users_to_be_anonymized), rel_url))
+    log.info(f"Going to anonymize {len(users_to_be_anonymized)} users")
     if g_config['is_dry_run']:
         log.warning("DRY-RUN IS ENABLED. No user will be anonymized.")
 
@@ -1028,22 +1019,22 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
     for user_name, user_data in users_to_be_anonymized.items():
         i += 1
         user_key = user_data['rest_get_user__before_anonymization']['json']['key']
-        log.info("#{} (name/key): {}/{}".format(i, user_name, user_key))
+        log.info(f"#{i} (name/key): {user_name}/{user_key}")
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
         if not g_config['is_dry_run']:
             r = g_session.post(url=url, json=body)
             user_data['rest_post_anonymization'] = serialize_response(r)
             log.debug(user_data['rest_post_anonymization'])
             if r.status_code == 202:
-                log.debug("Waiting the initial delay of {}s".format(g_config["initial_delay"]))
+                log.debug(f"Waiting the initial delay of {g_config['initial_delay']}s")
                 time.sleep(g_config['initial_delay'])
                 is_timed_out = wait_until_anonymization_is_finished_or_timedout(i, user_name)
                 # Collecting the anonymized user-data is done before handling the timeout to save what still can
                 # be saved.
                 get_anonymized_user_data_from_audit_log(user_name)
                 if is_timed_out:
-                    log.error("Anonymizing of user '{}' took longer than the configured timeout of {} seconds."
-                              " Abort script.".format(user_name, g_config['timeout']))
+                    log.error(f"Anonymizing of user '{user_name}' took longer than"
+                              f" the configured timeout of {g_config['timeout']} seconds. Abort script.")
                     break
             else:
                 # These error-status-codes are documented:
@@ -1052,8 +1043,8 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
                 #  - 409 Returned if another user anonymization process is already in progress.
                 if r.status_code == 400 or r.status_code == 403 or r.status_code == 409:
                     log.error(
-                        "A problem occurred scheduling anonymization user {}. See report {} for details.".format(
-                            user_name, g_config['report_details_filename']))
+                        f"A problem occurred scheduling anonymization user {user_name}."
+                        f" See report {g_config['report_details_filename']} for details.")
                 else:
                     # For all other, not documented HTTP-problems:
                     r.raise_for_status()
@@ -1065,7 +1056,7 @@ def is_anonymized_user_data_complete_for_user(user_name):
      """
 
     anonymized_data = g_users[user_name]['anonymized_data_from_rest']
-    log.debug("anonymized_data so far for user {} is {}".format(user_name, anonymized_data))
+    log.debug(f"anonymized_data so far for user {user_name} is {anonymized_data}")
     return anonymized_data['user_name'] \
            and anonymized_data['user_key'] \
            and anonymized_data['display_name']
@@ -1082,7 +1073,7 @@ def date_str_to_utc_str(date_str):
     # Convert to UTC. The conversion respects DST.
     date_utc = time.strftime("%Y-%m-%dT%H:%M:%S",
                              time.gmtime(time.mktime(time.strptime(date_parts[0], '%Y-%m-%dT%H:%M:%S'))))
-    date_utc += '.{}Z'.format(date_parts[1][:3])
+    date_utc += f'.{date_parts[1][:3]}Z'
     return date_utc
 
 
@@ -1090,8 +1081,7 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
     user_data = g_users[user_name_to_search_for]
     anonymization_start_date = user_data['rest_post_anonymization']['json']['submittedTime']
     anonymization_start_date_utc = date_str_to_utc_str(anonymization_start_date)
-    log.debug("anonymization_start_date: local {}, UTC {}".format(anonymization_start_date,
-                                                                  anonymization_start_date_utc))
+    log.debug(f"anonymization_start_date: local {anonymization_start_date}, UTC {anonymization_start_date_utc}")
 
     rel_url = '/rest/auditing/1.0/events'
     url = g_config['jira_base_url'] + rel_url
@@ -1118,9 +1108,9 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
         r = g_session.get(url=url, params=url_params)
         r.raise_for_status()
         audit_entry_count = r.json()['pagingInfo']['size']
-        message = "Got audit log entries after {} seconds: {}. The intervals are: {}." \
-                  " Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort." \
-            .format(interval, audit_entry_count, intervals)
+        message = f"Got audit log entries after {interval} seconds: {audit_entry_count}." \
+                  f" The intervals are: {intervals}." \
+                  " Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort."
         log.info(message + " TODO: This will become a DEBUG level message.")
         user_data['rest_auditing']['entries_after_seconds_msg'] = message
         if audit_entry_count > 0:
@@ -1130,9 +1120,9 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
         user_data['rest_auditing'].update({'request': serialize_response(r)})
         auditing_events = r.json()
     else:
-        error_message = "{}: The GET {} didn't return any audit log entry within {} seconds." \
-                        " No anonymized user-name/key/display-name could be retrieved." \
-            .format(user_name_to_search_for, r.request.url, overall_interval)
+        error_message = f"{user_name_to_search_for}: The GET {r.request.url} didn't return any audit log entry" \
+                        f" within {overall_interval} seconds." \
+                        " No anonymized user-name/key/display-name could be retrieved."
         log.error(error_message)
         g_execution['errors'].append(error_message)
         return
@@ -1205,8 +1195,7 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
     user_data = g_users[user_name_to_search_for]
     anonymization_start_date = user_data['rest_post_anonymization']['json']['submittedTime']
     anonymization_start_date_utc = date_str_to_utc_str(anonymization_start_date)
-    log.debug("anonymization_start_date: local {}, UTC {}".format(anonymization_start_date,
-                                                                  anonymization_start_date_utc))
+    log.debug(f"anonymization_start_date: local {anonymization_start_date}, UTC {anonymization_start_date_utc}")
 
     rel_url = '/rest/api/2/auditing/record'
     url = g_config['jira_base_url'] + rel_url
@@ -1234,7 +1223,7 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
         r.raise_for_status()
         audit_entry_count = len(r.json()['records'])
         message = f"Got {audit_entry_count} audit log entries after {interval} seconds." \
-                  "The intervals are: {intervals}." \
+                  f" The intervals are: {intervals}." \
                   " Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort."
         log.debug(message)
         user_data['rest_auditing']['entries_after_seconds_msg'] = message
@@ -1245,9 +1234,9 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
         user_data['rest_auditing'].update({'request': serialize_response(r)})
         auditing_records = r.json()
     else:
-        error_message = "{}: The GET {} didn't return any audit log entry within {} seconds." \
-                        " No anonymized user-name/key/display-name could be retrieved." \
-            .format(user_name_to_search_for, r.request.url, overall_interval)
+        error_message = f"{user_name_to_search_for}: The GET {r.request.url} didn't return any audit log entry" \
+                        f" within {overall_interval} seconds." \
+                        " No anonymized user-name/key/display-name could be retrieved."
         log.error(error_message)
         g_execution['errors'].append(error_message)
         return
@@ -1400,7 +1389,7 @@ def get_formatted_timediff_mmss(time_diff):
         s = 1
     minutes = s // 60
     seconds = s % 60
-    formatted_diff = "{:02d}:{:02d}".format(minutes, seconds)
+    formatted_diff = f'{minutes:02d}:{seconds:02d}'
 
     return formatted_diff
 
@@ -1422,7 +1411,7 @@ def get_formatted_timediff_hhmmss(time_diff):
 
     hours, remainder = divmod(s, 3600)
     minutes, seconds = divmod(remainder, 60)
-    formatted_diff = '{:02d}:{:02d}:{:02d}'.format(hours, minutes, seconds)
+    formatted_diff = f'{hours:02d}:{minutes:02d}:{seconds:02d}'
 
     return formatted_diff
 
@@ -1518,9 +1507,9 @@ def create_raw_report(overall_report):
             # tool-error.
             if not anonymized_user_name or not anonymized_user_key:
                 # This function create_raw_report() is called twice. Put each error only once into the error-list.
-                error = "Anonymization data for user {} is incomplete".format(user_name)
+                error = f"Anonymization data for user {user_name} is incomplete"
                 if error not in g_execution['errors']:
-                    g_execution['errors'].append("Anonymization data for user {} is incomplete".format(user_name))
+                    g_execution['errors'].append(f"Anonymization data for user {user_name} is incomplete")
 
         user_report['anonymized_user_name'] = anonymized_user_name
         user_report['anonymized_user_key'] = anonymized_user_key
@@ -1544,10 +1533,10 @@ def create_raw_report(overall_report):
 
 def write_result_to_console(overview):
     print("Anonymizing Result:")
-    print("  Users in user-list-file:  {}".format(overview['number_of_users_in_user_list_file']))
-    print("  Skipped users:            {}".format(overview['number_of_skipped_users']))
-    print("  Anonymized users:         {}".format(overview['number_of_anonymized_users']))
-    print("  Background re-index triggered:  {}".format(overview['is_background_reindex_triggered']))
+    print(f"  Users in user-list-file:  {overview['number_of_users_in_user_list_file']}")
+    print(f"  Skipped users:            {overview['number_of_skipped_users']}")
+    print(f"  Anonymized users:         {overview['number_of_anonymized_users']}")
+    print(f"  Background re-index triggered:  {overview['is_background_reindex_triggered']}")
     print("")
 
     if len(g_execution['errors']) > 0:
@@ -1648,7 +1637,7 @@ def at_exit_write_anonymization_reports():
         print("{}".format(json.dumps(raw_report, indent=4, ensure_ascii=False)), file=f)
 
     file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_text_filename'])
-    log.debug("  file_path for report_text_filename is {}".format(file_path))
+    log.debug(f"  file_path for report_text_filename is {file_path}")
     with open(file_path, 'w', newline='') as f:
         fieldnames = ['user_name', 'user_key', 'user_display_name', 'active', 'deleted',
                       'validation_has_errors',
@@ -1726,9 +1715,9 @@ def get_inactive_users(excluded_users):
             # Warning about JRASERVER-29069.
             if user_count_so_far == 1000:
                 log.warning(
-                    "The REST API '{}' returned exact 1000 users."
+                    f"The REST API '{rel_url}' returned exact 1000 users."
                     " This could mean you ran into JRASERVER-29069."
-                    " In that case there could be more inactive users".format(rel_url))
+                    " In that case there could be more inactive users.")
             continue
         start_at += len(r.json())
 
@@ -1810,14 +1799,14 @@ def subcommand_inactive_users():
     report_dirpath = create_report_dir()
     file_path = report_dirpath.joinpath(INACTIVE_USERS_OUTFILE)
     with open(file_path, 'w') as f:
-        print("# File generated at {}".format(now_to_date_string()), file=f)
-        print("# Users: {}".format(len(remaining_inactive_users)), file=f)
+        print(f"# File generated at {now_to_date_string()}", file=f)
+        print(f"# Users: {len(remaining_inactive_users)}", file=f)
         print("# User attributes: User-name; user-key; display-name; email-address\n", file=f)
         for user_name, user_data in remaining_inactive_users.items():
-            print("# {}; {}; {}; {}"
-                  .format(user_data['name'], user_data['key'], user_data['display_name'], user_data['email_address']),
-                  file=f)
-            print("{}\n".format(user_data['name']), file=f)
+            print(
+                f"# {user_data['name']}; {user_data['key']}; {user_data['display_name']}; {user_data['email_address']}",
+                file=f)
+            print(f"{user_data['name']}\n", file=f)
 
 
 def cleanup():
