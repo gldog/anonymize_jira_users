@@ -1119,7 +1119,7 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
         r.raise_for_status()
         audit_entry_count = r.json()['pagingInfo']['size']
         message = "Got audit log entries after {} seconds: {}. The intervals are: {}." \
-                  "Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort." \
+                  " Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort." \
             .format(interval, audit_entry_count, intervals)
         log.info(message + " TODO: This will become a DEBUG level message.")
         user_data['rest_auditing']['entries_after_seconds_msg'] = message
@@ -1233,10 +1233,10 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
         r = g_session.get(url=url, params=url_params)
         r.raise_for_status()
         audit_entry_count = len(r.json()['records'])
-        message = "Got audit log entries after {} seconds: {}. The intervals are: {}." \
-                  "Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort." \
-            .format(interval, audit_entry_count, intervals)
-        log.info(message + " TODO: This will become a DEBUG level message.")
+        message = f"Got {audit_entry_count} audit log entries after {interval} seconds." \
+                  "The intervals are: {intervals}." \
+                  " Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort."
+        log.debug(message)
         user_data['rest_auditing']['entries_after_seconds_msg'] = message
         if audit_entry_count > 0:
             break
@@ -1295,8 +1295,8 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
                 # The parts of interest are 'jirauser10104', 'user4pre84', 'JIRAUSER10104', 'user4pre84'.
                 # All given in single quotes.
                 parts = re.findall(r"'(.*?)'", record['description'])
-                anonymized_data['user_name'] = parts[1]
-                anonymized_data['user_key'] = parts[3]
+                anonymized_data['user_name'] = parts[0]
+                anonymized_data['user_key'] = parts[2]
                 if user_data['rest_get_user__before_anonymization']['json']['emailAddress'] == '?':
                     # This is a deleted user. There is no display-name to look for in subsequent logs.
                     break
@@ -1617,6 +1617,8 @@ def at_exit_complete_and_write_details_report():
     file_path = report_dirpath.joinpath(g_config['report_details_filename'])
     log.debug("  file_path for report_details_filename is {}".format(file_path))
     with open(file_path, 'w') as f:
+        # ensure_ascii=False: Write as chars, not as codes. With True, dump() would output
+        # something like \u00c3 in case of a non-ASCII char.
         print("{}".format(json.dumps(get_sanitized_global_details(), indent=4, ensure_ascii=False)), file=f)
 
 
@@ -1641,7 +1643,9 @@ def at_exit_write_anonymization_reports():
     file_path = report_dirpath.joinpath(g_config['report_json_filename'])
     log.debug("  file_path for report_json_filename is {}".format(file_path))
     with open(file_path, 'w') as f:
-        print("{}".format(json.dumps(raw_report, indent=4)), file=f)
+        # ensure_ascii=False: Write as chars, not as codes. With True, dump() would output
+        # something like \u00c3 in case of a non-ASCII char.
+        print("{}".format(json.dumps(raw_report, indent=4, ensure_ascii=False)), file=f)
 
     file_path = pathlib.Path(g_config['report_out_dir']).joinpath(g_config['report_text_filename'])
     log.debug("  file_path for report_text_filename is {}".format(file_path))
