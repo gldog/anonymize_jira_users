@@ -1529,9 +1529,10 @@ def create_raw_report(overall_report):
                 if error not in g_execution['errors']:
                     g_execution['errors'].append(f"Anonymization data for user {user_name} is incomplete")
 
-        user_report['anonymized_user_name'] = anonymized_user_name
-        user_report['anonymized_user_key'] = anonymized_user_key
-        user_report['anonymized_user_display_name'] = anonymized_user_display_name
+        user_report['anonymized_user_name'] = anonymized_user_name if anonymized_user_name else ''
+        user_report['anonymized_user_key'] = anonymized_user_key if anonymized_user_key else ''
+        user_report['anonymized_user_display_name'] \
+            = anonymized_user_display_name if anonymized_user_display_name else ''
 
         if is_anonymized:
             user_report['action'] = 'anonymized'
