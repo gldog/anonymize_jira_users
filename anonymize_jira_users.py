@@ -1097,20 +1097,18 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
     # Jira writes the audit log entries asynchronously. It is unclear how long this takes. Try immediately after
     # the anonymization to read team. If the count of audit logs is 0, wait the seconds goven as list in the
     # following for-loop.
-    overall_interval = 0
-    intervals = [1, 2, 3, 5]
+    waited_seconds_so_far = 0
+    intervals_seconds = [1, 2, 2, 5, 5]
     # To suppress: Local variable 'r' might be referenced before assignment.
     r = {}
     audit_entry_count = 0
-    for interval in intervals:
+    for interval in intervals_seconds:
         time.sleep(interval)
-        overall_interval += interval
+        waited_seconds_so_far += interval
         r = g_session.get(url=url, params=url_params)
         r.raise_for_status()
         audit_entry_count = r.json()['pagingInfo']['size']
-        message = f"Got audit log entries after {interval} seconds: {audit_entry_count}." \
-                  f" The intervals are: {intervals}." \
-                  " Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort."
+        message = f"Got audit log entries after {waited_seconds_so_far} seconds: {audit_entry_count}."
         log.info(message + " TODO: This will become a DEBUG level message.")
         user_data['rest_auditing']['entries_after_seconds_msg'] = message
         if audit_entry_count > 0:
@@ -1121,7 +1119,7 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
         auditing_events = r.json()
     else:
         error_message = f"{user_name_to_search_for}: The GET {r.request.url} didn't return any audit log entry" \
-                        f" within {overall_interval} seconds." \
+                        f" within {waited_seconds_so_far} seconds." \
                         " No anonymized user-name/key/display-name could be retrieved."
         log.error(error_message)
         g_execution['errors'].append(error_message)
@@ -1211,21 +1209,20 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
     # Jira writes the audit log entries asynchronously. It is unclear how long this takes. Try immediately after
     # the anonymization to read team. If the count of audit logs is 0, wait the seconds goven as list in the
     # following for-loop.
-    overall_interval = 0
-    intervals = [1, 2, 3, 5]
+    waited_seconds_so_far = 0
+    intervals_seconds = [1, 2, 2, 5, 5]
     # To suppress: Local variable 'r' might be referenced before assignment.
     r = {}
     audit_entry_count = 0
-    for interval in intervals:
+    for interval in intervals_seconds:
         time.sleep(interval)
-        overall_interval += interval
+        waited_seconds_so_far = 0
+        waited_seconds_so_far += interval
         r = g_session.get(url=url, params=url_params)
         r.raise_for_status()
         audit_entry_count = len(r.json()['records'])
-        message = f"Got {audit_entry_count} audit log entries after {interval} seconds." \
-                  f" The intervals are: {intervals}." \
-                  " Means: Wait 1s and then check for entries. if 0, wait 2s, then 3s, then 5s, then abort."
-        log.debug(message)
+        message = f"Got audit log entries after {waited_seconds_so_far} seconds: {audit_entry_count}."
+        log.info(message + " TODO: This will become a DEBUG level message.")
         user_data['rest_auditing']['entries_after_seconds_msg'] = message
         if audit_entry_count > 0:
             break
@@ -1235,7 +1232,7 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
         auditing_records = r.json()
     else:
         error_message = f"{user_name_to_search_for}: The GET {r.request.url} didn't return any audit log entry" \
-                        f" within {overall_interval} seconds." \
+                        f" within {waited_seconds_so_far} seconds." \
                         " No anonymized user-name/key/display-name could be retrieved."
         log.error(error_message)
         g_execution['errors'].append(error_message)
