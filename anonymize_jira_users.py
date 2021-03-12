@@ -980,12 +980,11 @@ def get_anonymization_progress(user_name=None, full_progress_url=None):
     return progress_percentage
 
 
-def wait_until_anonymization_is_finished_or_timedout(i, user_name):
+def wait_until_anonymization_is_finished_or_timedout(user_num, user_name):
     """Wait until the anonymization for the given user has been finished.
-    :param user_name: The user-anonymization to wait for.
     :return: False if anonymization finished within the timeout. True otherwise (= timed out).
     """
-    log.debug(f"for user {i}: {user_name}")
+    log.debug(f"for user {user_num}: {user_name}")
     user_data = g_users[user_name]
     url = g_config['jira_base_url'] + user_data['rest_post_anonymization']['json']['progressUrl']
     is_timed_out = True
@@ -1015,11 +1014,11 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
         log.warning("DRY-RUN IS ENABLED. No user will be anonymized.")
 
     url = g_config['jira_base_url'] + rel_url
-    i = 0
+    user_num = 0
     for user_name, user_data in users_to_be_anonymized.items():
-        i += 1
+        user_num += 1
         user_key = user_data['rest_get_user__before_anonymization']['json']['key']
-        log.info(f"#{i} (name/key): {user_name}/{user_key}")
+        log.info(f"#{user_num} (name/key): {user_name}/{user_key}")
         body = {"userKey": user_key, "newOwnerKey": new_owner_key}
         if not g_config['is_dry_run']:
             r = g_session.post(url=url, json=body)
@@ -1028,13 +1027,17 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
             if r.status_code == 202:
                 log.debug(f"Waiting the initial delay of {g_config['initial_delay']}s")
                 time.sleep(g_config['initial_delay'])
-                is_timed_out = wait_until_anonymization_is_finished_or_timedout(i, user_name)
+                is_timed_out = wait_until_anonymization_is_finished_or_timedout(user_num, user_name)
                 # Collecting the anonymized user-data is done before handling the timeout to save what still can
                 # be saved.
                 get_anonymized_user_data_from_audit_log(user_name)
+                # TODO check for completeness. This is at least the anonymized user-name and user-key. If the user
+                # was not deleted, this is also the user-display-name.
                 if is_timed_out:
-                    log.error(f"Anonymizing of user '{user_name}' took longer than"
-                              f" the configured timeout of {g_config['timeout']} seconds. Abort script.")
+                    error_message = f"Anonymizing of user '{user_name}' took longer than" \
+                                    f" the configured timeout of {g_config['timeout']} seconds. Abort script."
+                    g_execution['errors'].append(error_message)
+                    log.error(error_message)
                     break
             else:
                 # These error-status-codes are documented:
