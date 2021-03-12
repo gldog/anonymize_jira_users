@@ -1150,12 +1150,20 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
                     # In Jira 8.10 the 'nameI18nKey' was added.
                     # In Jira 8.10, 8.11, and 8.12 the key to look for is 'description'.
                     # Starting with Jira 8.13, it is 'jira.auditing.extra.parameters.event.description'
-                    # Note, this keys 'description' and 'jira.auditing.extra.parameters.event.description' are
+                    # Note, these keys 'description' and 'jira.auditing.extra.parameters.event.description' are
                     # also used in the event with key 'jira.auditing.user.anonymization.started', so that key is
                     # not unique. Therefore the path 'event/type/actionI18nKey' is used to identify the event
                     # of interest.
+                    # The jira.auditing.extra.parameters.event.long.description rarely came up in my tests, but
+                    # is also possible. See Jira-code
+                    #   jira-project/jira-components/jira-core/src/main/java/com/atlassian/jira/auditing/spis/
+                    #       migration/mapping/AuditExtraAttributesConverter.java:
+                    #   String EVENT_DESCRIPTION_I18N_KEY = "jira.auditing.extra.parameters.event.description"
+                    #   String EVENT_LONG_DESCRIPTION_I18N_KEY = "jira.auditing.extra.parameters.event.long.description"
                     key = extra_attribute['nameI18nKey']
-                    if key in ['description', 'jira.auditing.extra.parameters.event.description']:
+                    if key in ['description',
+                               'jira.auditing.extra.parameters.event.description',
+                               'jira.auditing.extra.parameters.event.long.description']:
                         anonymized_data['description'] = extra_attribute['value']
                         # The 'value' is something like:
                         #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
@@ -1172,7 +1180,7 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
         except KeyError:
             pass
 
-        # Not every record has the changesValues, so use try/except.
+        # Not every record has the changedValues, so use try/except.
         try:
             changed_values = entity['changedValues']
         except KeyError:
@@ -1180,13 +1188,19 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
 
         display_name_to_search_for = user_data['rest_get_user__before_anonymization']['json']['displayName']
         for changed_value in changed_values:
-            if str(changed_value['to']).lower().startswith('jirauser'):
-                # This is the tuple either for the user-name (jirauser12345) or the user-key (JIRAUSER12345).
+            # Not all changedValues-entries have a 'from' and a 'to' key.
+            try:
+                if str(changed_value['to']).lower().startswith('jirauser'):
+                    # This is the changedValues-entry either for the user-name (jirauser12345) or
+                    # the user-key (JIRAUSER12345).
+                    continue
+                if changed_value['from'] == display_name_to_search_for:
+                    # Found the changedValues-entry with the user-display-name.
+                    # Note, this could be equal to the user-name. And in Jira < 8.4, the user-name could also be equal
+                    # to the user-key.
+                    anonymized_data['display_name'] = changed_value['to']
+            except KeyError:
                 continue
-            if changed_value['from'] == display_name_to_search_for:
-                # Found the tuple with the user-display-name. This could be equal to the user-name. And in
-                # Jira < 8.4, the user-name could also be equal to the user-key.
-                anonymized_data['display_name'] = changed_value['to']
 
 
 def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
@@ -1299,13 +1313,17 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
 
         display_name_to_search_for = user_data['rest_get_user__before_anonymization']['json']['displayName']
         for changed_value in changed_values:
-            if str(changed_value['changedTo']).lower().startswith('jirauser'):
-                # This is the tuple either for the user-name (jirauser12345) or the user-key (JIRAUSER12345).
+            # Not all changedValues-entries have a 'changedFrom' and a 'changedTo' key.
+            try:
+                if str(changed_value['changedTo']).lower().startswith('jirauser'):
+                    # This is the tuple either for the user-name (jirauser12345) or the user-key (JIRAUSER12345).
+                    continue
+                if changed_value['changedFrom'] == display_name_to_search_for:
+                    # Found the tuple with the user-display-name. This could be equal to the user-name. And in
+                    # Jira < 8.4, the user-name could also be equal to the user-key.
+                    anonymized_data['display_name'] = changed_value['changedTo']
+            except KeyError:
                 continue
-            if changed_value['changedFrom'] == display_name_to_search_for:
-                # Found the tuple with the user-display-name. This could be equal to the user-name. And in
-                # Jira < 8.4, the user-name could also be equal to the user-key.
-                anonymized_data['display_name'] = changed_value['changedTo']
 
 
 def get_anonymized_user_data_from_audit_log(user_name_to_search_for):
