@@ -12,9 +12,10 @@ usernames.txt
 usernames-assess*
 dev/
 eval/
-test/
-test/anonymizing_report*
 test/my-bare-default-config.cfg
+test/LDAP_Users
+test/old
+test/runs
 tmp/
 reports/
 
