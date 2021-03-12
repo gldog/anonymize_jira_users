@@ -44,15 +44,17 @@ class BaseTestClass(unittest.TestCase):
         self.jira_admin_session.close()
         pass
 
-    def execute_anonymizer(self, cmd):
-        cmd = f'{self.PYTHON_BINARY} ../anonymize_jira_users.py {cmd}'
+    @classmethod
+    def execute_anonymizer(cls, cmd):
+        cmd = f'{cls.PYTHON_BINARY} ../anonymize_jira_users.py {cmd}'
         log.info(f"execute: {cmd}")
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # result contains: result.returncode, result.stderr, result.stdout.
         return result
 
-    def execute_anonymizer_and_log_output(self, cmd, out_filepath):
-        r = self.execute_anonymizer(cmd)
+    @classmethod
+    def execute_anonymizer_and_log_output(cls, cmd, out_filepath):
+        r = cls.execute_anonymizer(cmd)
         # result r contains: r.returncode, r.stderr, r.stdout.
         decoded_stdout = r.stdout.decode()
         decoded_stderr = r.stderr.decode()
@@ -65,7 +67,8 @@ class BaseTestClass(unittest.TestCase):
             f.write(f"r.stdout:\n{decoded_stdout}")
         return r
 
-    def write_usernames_to_user_list_file(self, usernames, filepath='./users.cfg'):
+    @classmethod
+    def write_usernames_to_user_list_file(cls, usernames, filepath='./users.cfg'):
         with open(filepath, 'w') as f:
             for username in usernames:
                 f.write(f"{username}\n")
@@ -123,10 +126,6 @@ class BaseTestClass(unittest.TestCase):
         r = self.jira_admin_session.get('/rest/anonhelper/latest/applicationuser', params=params,
                                         headers=self.jira_admin_session.default_headers)
         return r
-
-    #
-    # Class- and static-methods.
-    #
 
     @classmethod
     def get_password_for_jira_user(cls, user_name):
