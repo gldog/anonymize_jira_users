@@ -80,7 +80,7 @@ SSL_VERIFY = False
 LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
 PRETTY_PRINT_LOG_LEVELS = "{}".format(LOG_LEVELS).replace('[', '').replace(']', '').replace('\'', '')
 # These values for false and true are taken from the docs of Python
-# configParser.getboolean().
+# configParser.getboolean(). They are also given in configparser.py
 # But in configParser, there are also values 0 for false and 1 for true described.
 # But the Anonymizer allows integers as values, which shall not be interpreted as
 # booleans. Therefore 0 and 1 are ignored as booleans here.
@@ -393,8 +393,9 @@ def write_default_cfg_file(config_template_filename):
         f.write(textwrap.dedent(help_text))
 
 
-def read_configfile_and_merge_into_global_config(args):
-    """Read the config-file and merge it into the global defaults-dict.
+def make_effective_config(args):
+    """Make the effective config from a) the default-config, b) the config-file if given, and c) the
+    command-line-parameters.
 
     The values within a ConfigParser are always strings. After a merge with a Python dict, the expected types could
     be gone. E.g. if a boolean is expected, but the ConfigParser delivers the string "false", this string is
@@ -403,43 +404,58 @@ def read_configfile_and_merge_into_global_config(args):
     :param args: The arguments got from the command-line.
     :return: Nothing.
     """
-    parser = configparser.ConfigParser()
-    # The parser could read the file by itself by calling parser.read(args.config_file). But if the file doesn't exist,
-    # the parser uses an empty dict silently. The open() is to throw an error in case the file can't be opened.
-    with open(args.config_file) as f:
-        parser.read_file(f)
-    defaults = parser.defaults()
 
-    # parser.defaults() is documented as dict, but it is something weird without an .items()-function.
-    # A copy of the defaults solve this problem.
-    defaultz = dict(defaults)
-    real_dict = {}
-    for k, v in defaultz.items():
-        if k.lower() == 'exclude_groups':
-            groups = re.split('[\\n\\r]+', v)
-            real_dict[k] = groups
-        elif v.lower() in BOOLEAN_TRUE_VALUES:
-            real_dict[k] = True
-        elif v.lower() in BOOLEAN_FALSE_VALUES:
-            real_dict[k] = False
-        else:
-            try:
-                real_dict[k] = int(v)
-            except ValueError:
-                # This value must be a string-value, because other types are processed so far.
-                # Take it only if not empty. This is important because merge_dicts() ignores only None-values, but
-                # takes into account empty strings. The ConfigParser delivers empty strings for not-set values,
-                # e. g.
-                #   loglevel =
-                # is equal to
-                #   loglevel = ''
-                # But because loglevel is not None, the value '' would overwrite the default-value INFO. As as result,
-                # the loglevel wouldn't be set at all and would lead to an error in set_loglevel().
-                # The loglevel is only an example. This would become a problem for several attributes.
-                if v:
-                    real_dict[k] = v
+    # If a config-file is given, merge it into the global config. No-None-values overwrites the values present so far.
+    #
+    # A config-file can only be present for the sub-parsers CMD_ANONYMIZE, CMD_INACTIVE_USERS, CMD_VALIDATE,
+    # but not for CMD_MISC. But to not make the CMD_MISC an exception, always note the config_file. Doing this,
+    # we have to check if the config_file attribute is giben in the namespace (it is absent in case of CMD_MISC).
+    if hasattr(args, 'config_file') and args.config_file:
+        parser = configparser.ConfigParser()
+        # The parser could read the file by itself by calling parser.read(args.config_file). But if the file doesn't
+        # exist, the parser uses an empty dict silently. The open() is to throw an error in case the file can't be
+        # opened.
+        with open(args.config_file) as f:
+            parser.read_file(f)
+        # Values from the [DEFAULTS] section. Only this section is used by the Anonymizer.
+        defaults_section = parser.defaults()
 
-    merge_dicts(g_config, real_dict)
+        configfile_and_commandline_merge = {}
+        # parser.defaults() is documented as dict, but it is something weird without an .items()-function.
+        # Wrapping it by a dict() function solves this.
+        for k, v in dict(defaults_section).items():
+            if k.lower() == 'exclude_groups':
+                groups = re.split('[\\n\\r]+', v)
+                configfile_and_commandline_merge[k] = groups
+            elif v.lower() in BOOLEAN_TRUE_VALUES:
+                configfile_and_commandline_merge[k] = True
+            elif v.lower() in BOOLEAN_FALSE_VALUES:
+                configfile_and_commandline_merge[k] = False
+            else:
+                try:
+                    configfile_and_commandline_merge[k] = int(v)
+                except ValueError:
+                    # This value must be a string-value, because other types are processed so far.
+                    # Take it only if not empty. This is important because merge_dicts() ignores only None-values, but
+                    # takes into account empty strings. The ConfigParser delivers empty strings for not-set values,
+                    # e. g.
+                    #   loglevel =
+                    # is equal to
+                    #   loglevel = ''
+                    # But because loglevel is not None, the value '' would overwrite the default-value INFO. As as
+                    # result, the loglevel wouldn't be set at all and would lead to an error in set_loglevel().
+                    # The loglevel is only an example. This would become a problem for several attributes.
+                    if v:
+                        configfile_and_commandline_merge[k] = v
+
+        merge_dicts(g_config, configfile_and_commandline_merge)
+
+    # Merge the config-file-parameters and the command-line-arguments in and over the global config. No-None-values
+    # overwrites the values present so far.
+    merge_dicts(g_config, vars(args))
+
+    g_config['locale_getpreferredencoding'] = f'{locale.getpreferredencoding()}'
+    g_config['sys_getfilesystemencoding'] = f'{sys.getfilesystemencoding()}'
 
 
 def set_logging():
@@ -471,19 +487,20 @@ class PathAction(argparse.Action):
         setattr(namespace, self.dest, values)
 
 
-def parse_parameters():
+def init_parser_and_parse_parameters():
     g_config['report_details_filename'] = REPORT_BASENAME + '_details.json'
     g_config['report_json_filename'] = REPORT_BASENAME + '.json'
     g_config['report_text_filename'] = REPORT_BASENAME + '.csv'
     script_name = os.path.basename(__file__)
 
     #
-    # Part 1: Define and parse the arguments.
+    # Part 1: Define the arguments.
     #
     # All actions with 'store_true' must have a default=None. This is important for the configuration chaining of
     # the DEFAULT_CONFIG, the config-file, and the args.
     #
-    epilog = f"""    How to start
+    epilog = textwrap.dedent(f"""\
+    How to start
     
     o Create the file usernames.txt with the user-names to be anonymized, one 
       user-name per line.
@@ -501,11 +518,11 @@ def parse_parameters():
       to execute anonyization.
     o Have a look at the report {g_config['report_text_filename']}. More details about the
       users are given in {g_config['report_details_filename']}.
-    """
+    """)
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description="The Anonymizer is a Python3-script to help Jira-admins"
                                                  " anonymizing Jira-users in bulk.",
-                                     epilog=textwrap.dedent(epilog))
+                                     epilog=epilog)
     parser.add_argument('--version', action='version', version='%(prog)s {}'.format(__version__))
 
     parent_parser = argparse.ArgumentParser(add_help=False)
@@ -620,11 +637,19 @@ def parse_parameters():
                          help="Generate a configuration-template. Defaults to {}.".format(
                              TEMPLATE_FILENAME))
 
+    #
+    # Part 2: Parse the arguments and return them.
+    #
     parser.parse_args()
     args = parser.parse_args()
 
+    # Make the effective config from a) the default-config, b) the config-file if given, and c) the
+    # command-line-parameters. This is not needed for command CMD_MISC. But to not make an exception here, always
+    # make it.
+    make_effective_config(args)
+
     #
-    # Part 2: Check arguments, print help or error-message if needed, and exit in case of errors.
+    # Part 3: Validate the arguments, print help or error-message if needed, and exit in case of errors.
     #
 
     # Print help if no argument is given.
@@ -634,26 +659,15 @@ def parse_parameters():
         sys.exit(0)
 
     if args.subparser_name == CMD_MISC:
-        if args.config_template_filename:
-            write_default_cfg_file(args.config_template_filename)
-            sys.exit(0)
-        # elif args.recreate_report:
-        #     recreate_reports()
-        #     sys.exit(0)
-        else:
-            # sp_misc.error("Command 'misc' needs '-g' or '--recreate-report'")
+        # 1. Validate.
+        if not args.config_template_filename:
+            # This call exits the script.
             sp_misc.error("Command '{}' needs '-g'".format(CMD_MISC))
 
-    # In a config-file is given, merge it into the global config. Non-None-values overwrites the values present so far.
-    # Note, a config-file can only be present for the sub-parsers.
-    if (args.subparser_name in [CMD_ANONYMIZE, CMD_INACTIVE_USERS, CMD_VALIDATE]) and args.config_file:
-        read_configfile_and_merge_into_global_config(args)
-
-    # Merge command line arguments in and over the global config. Non-None-values overwrites the values present so far.
-    merge_dicts(g_config, vars(args))
-
-    g_config['locale_getpreferredencoding'] = f'{locale.getpreferredencoding()}'
-    g_config['sys_getfilesystemencoding'] = f'{sys.getfilesystemencoding()}'
+        # 2. Execute
+        write_default_cfg_file(args.config_template_filename)
+        print(f"Wrote {args.config_template_filename}")
+        sys.exit(0)
 
     errors = []
     #
@@ -661,8 +675,8 @@ def parse_parameters():
     #
     if args.subparser_name in [CMD_ANONYMIZE, CMD_INACTIVE_USERS, CMD_VALIDATE]:
         if args.info:
-            gd = get_sanitized_global_details()
-            print("Effective config:\n{}".format(json.dumps(gd['effective_config'], indent=4)))
+            sanitized_global_details = get_sanitized_global_details()
+            print("Effective config:\n{}".format(json.dumps(sanitized_global_details['effective_config'], indent=4)))
             print("")
             sys.exit(0)
 
@@ -727,8 +741,8 @@ def parse_parameters():
 
     set_logging()
 
-    gd = get_sanitized_global_details()
-    log.debug(f"Effective config: {gd['effective_config']}")
+    sanitized_global_details = get_sanitized_global_details()
+    log.debug(f"Effective config: {sanitized_global_details['effective_config']}")
     log.debug(
         f"getpreferredencoding {locale.getpreferredencoding()}, getfilesystemencoding {sys.getfilesystemencoding()}")
 
@@ -1053,7 +1067,7 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
                     r.raise_for_status()
 
 
-def is_anonymized_user_data_complete_for_user(user_name):
+def is_anonymized_userdata_complete_for_user(user_name):
     """Check if all three items user-name, -key, and display-name are collected so far.
      If so, we're done with this user.
      """
@@ -1080,7 +1094,7 @@ def date_str_to_utc_str(date_str):
     return date_utc
 
 
-def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
+def get_anonymized_userdata_from_audit_events(user_name_to_search_for):
     user_data = g_users[user_name_to_search_for]
     anonymization_start_date = user_data['rest_post_anonymization']['json']['submittedTime']
     anonymization_start_date_utc = date_str_to_utc_str(anonymization_start_date)
@@ -1143,7 +1157,7 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
         # Similar to get_anonymized_user_data_from_audit_records()
         #
 
-        if is_anonymized_user_data_complete_for_user(user_name_to_search_for):
+        if is_anonymized_userdata_complete_for_user(user_name_to_search_for):
             break
 
         try:
@@ -1206,7 +1220,7 @@ def get_anonymized_user_data_from_audit_events(user_name_to_search_for):
                 continue
 
 
-def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
+def get_anonymized_userdata_from_audit_records(user_name_to_search_for):
     user_data = g_users[user_name_to_search_for]
     anonymization_start_date = user_data['rest_post_anonymization']['json']['submittedTime']
     anonymization_start_date_utc = date_str_to_utc_str(anonymization_start_date)
@@ -1284,7 +1298,7 @@ def get_anonymized_user_data_from_audit_records(user_name_to_search_for):
         # have to look in to the changedValues directly.
         #
 
-        if is_anonymized_user_data_complete_for_user(user_name_to_search_for):
+        if is_anonymized_userdata_complete_for_user(user_name_to_search_for):
             break
 
         try:
@@ -1368,9 +1382,9 @@ def get_anonymized_user_data_from_audit_log(user_name_to_search_for):
     # be fiddly. I'm confident there is not really a downside in execution-time if the anonymized
     # data is called for each user one by one.
     if is_jira_version_less_then(8, 10):
-        get_anonymized_user_data_from_audit_records(user_name_to_search_for)
+        get_anonymized_userdata_from_audit_records(user_name_to_search_for)
     else:
-        get_anonymized_user_data_from_audit_events(user_name_to_search_for)
+        get_anonymized_userdata_from_audit_events(user_name_to_search_for)
 
 
 def is_any_anonymization_running():
@@ -1835,7 +1849,7 @@ def cleanup():
 def main():
     g_details['execution']['script_started'] = now_to_date_string()
     g_execution['errors'] = []
-    args = parse_parameters()
+    args = init_parser_and_parse_parameters()
 
     if args.subparser_name in [CMD_ANONYMIZE, CMD_VALIDATE]:
         # => Let at_exit_...() write the reports.
