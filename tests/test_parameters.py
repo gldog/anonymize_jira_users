@@ -5,7 +5,6 @@ import sys
 import tempfile
 import textwrap
 
-# from base_test_class_1 import BaseTestClass, execute_anonymizer
 from base_test_class import BaseTestClass
 
 log = logging.getLogger(__name__)
@@ -27,7 +26,7 @@ class Test01(BaseTestClass):
         ...
     }
 
-    The test-groups:
+    The tests-groups:
 
     test_1x: Command 'inactive-users'. Here, only arguments specific to this command are tested.
     test_2x: Command 'anoynmize'. Includes tests of arguments of command 'validate', as 'validate' is
@@ -70,6 +69,7 @@ class Test01(BaseTestClass):
 
         r = self.execute_anonymizer('inactive-users --info')
         std_out = r.stdout.decode('utf-8')
+        self.assertEqual(0, r.returncode, r)
 
         expected_config_as_sorted_json = json.dumps(expected_config, sort_keys=True)
         got_config_as_sorted_json = json.dumps(json.loads(std_out.replace('Effective config:\n', '')), sort_keys=True)
@@ -104,7 +104,7 @@ class Test01(BaseTestClass):
             'report_text_filename': 'anonymizing_report.csv',
         }
 
-        config_file = tempfile.NamedTemporaryFile(mode='w', prefix='test-config')
+        config_file = tempfile.NamedTemporaryFile(mode='w', prefix='tests-config')
         config_file.write(textwrap.dedent("""\
             [DEFAULT]
             jira_base_url = _jira_base_url_
@@ -195,7 +195,7 @@ class Test01(BaseTestClass):
             'report_text_filename': 'anonymizing_report.csv',
         }
 
-        config_file = tempfile.NamedTemporaryFile(mode='w', prefix='test-config')
+        config_file = tempfile.NamedTemporaryFile(mode='w', prefix='tests-config')
         config_file.write(textwrap.dedent("""\
             [DEFAULT]
             jira_base_url = _jira_base_url_
@@ -268,7 +268,7 @@ class Test01(BaseTestClass):
             'user_list_file': '_user_list_file_',
             'encoding': '_encoding_',
             'report_out_dir': '_report_out_dir_',
-            'loglevel': '_loglevel_',
+            'loglevel': 'INFO',
             'is_expand_validation_with_affected_entities': True,
             'is_dry_run': True,
             'new_owner': '_new_owner_',
@@ -285,10 +285,10 @@ class Test01(BaseTestClass):
             'report_text_filename': 'anonymizing_report.csv',
         }
 
-        config_file = tempfile.NamedTemporaryFile(mode='w', prefix='test-config')
+        config_file = tempfile.NamedTemporaryFile(mode='w', prefix='tests-config')
         config_file.write(textwrap.dedent("""\
             [DEFAULT]
-            loglevel = _loglevel_
+            loglevel = INFO
             jira_base_url = _jira_base_url_
             jira_auth = _jira_auth_
             user_list_file = _user_list_file_
@@ -308,10 +308,9 @@ class Test01(BaseTestClass):
 
         r = self.execute_anonymizer('anonymize -c {} --info'.format(config_file.name))
         std_out = r.stdout.decode('utf-8')
-        # decoded_stderr = r.stderr.decode('utf-8')
-        # print("r.returncode {}".format(r.returncode))
-        # print("r.stderr {}".format(decoded_stderr))
-        # print("r.stdout {}".format(decoded_stdout))
+        print("r.returncode {}".format(r.returncode))
+        print("r.stderr {}".format(r.stderr.decode('utf-8')))
+        print("r.stdout {}".format(std_out))
 
         expected_config_as_sorted_json = json.dumps(expected_config, sort_keys=True)
         got_config_as_sorted_json = json.dumps(
@@ -395,7 +394,7 @@ class Test01(BaseTestClass):
             'report_text_filename': 'anonymizing_report.csv',
         }
 
-        config_file = tempfile.NamedTemporaryFile(mode='w', prefix='test-config')
+        config_file = tempfile.NamedTemporaryFile(mode='w', prefix='tests-config')
         # print("config_file {}".format(config_file.name))
         config_file.write(textwrap.dedent("""\
             [DEFAULT]

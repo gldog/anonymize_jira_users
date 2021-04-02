@@ -369,7 +369,7 @@ def write_default_cfg_file(config_template_filename):
         #   Doing so could increase significantly execution time.
         #   The given value is the default.
         #is_expand_validation_with_affected_entities = {g_config['is_expand_validation_with_affected_entities']}
-        #   Finally do not anonymize. To get familiar with the script and to test it.
+        #   Finally do not anonymize. To get familiar with the script and to tests it.
         #   The given value is the default.
         #is_dry_run = {g_config['is_dry_run']}
         #   Transfer roles to the user with this user-name.
@@ -621,7 +621,7 @@ def init_parser_and_parse_parameters():
     #
     sp_anonymize.add_argument('-D', '--dry-run', action='store_true', default=None,
                               dest='is_dry_run',
-                              help="Finally do not anonymize. To get familiar with the script and to test it.")
+                              help="Finally do not anonymize. To get familiar with the script and to tests it.")
     sp_anonymize.add_argument('-n', '--new-owner',
                               help="Transfer roles of all anonymized users to the user with this user-name.")
     sp_anonymize.add_argument('-x', '--background-reindex', action='store_true', default=None,
@@ -853,7 +853,7 @@ def filter_users(users):
         # Give anonymize-approval only to users who are inactive or deleted.
         # A user can be 1. active, 2. inactive, or 3. deleted. So we have to check only if the user
         # is an active users to skip it.
-        # A user is active, if GET rest/api/2/user responds with status code 200 OK and the
+        # A user is active, if GET rest/api/2/user responded with status code 200 OK and the
         # attribute "active" is true.
         #
 
@@ -869,8 +869,8 @@ def filter_users(users):
         #  Check against validation result got from GET rest/api/2/user/anonymization.
         #
         if not error_message:
-            # try/except: user_data['rest_get_anonymization__query_validation']
-            # could be absent in case of an invalid user-name or -key in the user-name-file.
+            # try/except: user_data['rest_get_anonymization__query_validation'] could
+            # be absent in case of an invalid user in the user_list_file.
             try:
                 if user_data['rest_get_anonymization__query_validation']['status_code'] != 200:
                     error_message = "HTTP status-code of the REST validation API is not 200."
@@ -1045,7 +1045,8 @@ def anonymize_users(users_to_be_anonymized, new_owner_key):
                 # Collecting the anonymized user-data is done before handling the timeout to save what still can
                 # be saved.
                 get_anonymized_user_data_from_audit_log(user_name)
-                # TODO check for completeness. This is at least the anonymized user-name and user-key. If the user
+                # TODO check for completeness. This is at least the anonymized user-name
+                #  and user-key. If the user
                 # was not deleted, this is also the user-display-name.
                 if is_timed_out:
                     error_message = f"Anonymizing of user '{user_name}' took longer than" \

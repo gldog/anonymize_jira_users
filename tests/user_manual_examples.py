@@ -4,7 +4,6 @@ import textwrap
 
 import urllib3
 
-# from base_test_class_1 import BaseTestClass, write_usernames_to_user_list_file, execute_anonymizer
 from base_test_class import BaseTestClass
 
 log = logging.getLogger(__name__)

@@ -62,7 +62,7 @@ considered.
 - Create the file `users.cfg` with the user-names to be anonymized, one user-name per
   line.
 - Create a config-file-template: `anonymize_jira_users.py misc -g`. The
-  file `my-bare-default-config.cfg` has been created.
+  file `my_bare_default_config.cfg` has been created.
 - Rename the file, e.g. to `my-config.cfg`.
 - In that file, set the attributes `jira_base_url`,
   `jira_auth`, `new_owner`.
@@ -85,7 +85,7 @@ Documentation is also available by the command line help `-h`.
 
 The Anonymizer has the following commands:
 
-- `inactive-users`: Retrieves a list of inactive, not-yet anonymized users. These users
+- `inactive-users`: Retrieves a list of inactive, not yet anonymized users. These users
   are candidates for anonymization.
 - `validate`:            Validates user anonymization process.
 - `anonymize`:           Anonymizes users.
@@ -525,12 +525,13 @@ The sum of skipped- and anonymized users is the number of users in the user-list
 
 ## Command "inactive-users"
 
-If you like to anonymize users in bulk, you need a list of these users. Without the
+If you like to anonymize users in bulk you need a list of users. Without the
 Anonymizer, you retrieved this list somehow.
 
-You can proceed doing so, but the command `inactive-users` could ease this. It retrieves a
-list of inactive, not-yet anonymized users. You can give groups with user to exclude by
-parameter `--exclude-groups`.
+The command `inactive-users` could ease this. It retrieves a
+list of inactive, not yet anonymized users. 
+
+You can give groups with users to exclude by parameter `--exclude-groups`.
 
 This command cannot retrieve deleted users.
 
@@ -538,7 +539,7 @@ Call:
 
 `anonymize_jira_users.py inactive-users -c my-config.cfg --exclude-groups technical_users do_not_anonymize`
 
-This creates the file inactive-users.cfg in the report-out-dir. The content is e.g.:
+This creates the file inactive_users.cfg in the report-out-dir. The content is e.g.:
 
     # File generated at 2021-01-14T21:36:05
     # Users: 4
@@ -582,7 +583,7 @@ We'll use the following config-file `my-config.cfg`.
     [DEFAULT]
     jira_base_url = http://localhost:2990/jira
     jira_auth = Basic admin:admin
-    user_list_file = assessed-inactive-users.cfg
+    user_list_file = assessed_inactive_users.cfg
 
 Further we use the user-list-file `users.cfg` with our two users:
 
@@ -1090,23 +1091,23 @@ The commands are:
     export REPORTS_BASE_DIR="anonymization-reports/`date +%Y%m%d-%H%M%S-inst1-d`"
 
     # 1. Get a list of users to be anonymized. This command creates the file 
-    #   'inactive-users.cfg' in the report-dir.
+    #   'inactive_users.cfg' in the report-dir.
     python anonymize_jira_users.py inactive-users -c anon_configs/inst1-d.cfg \
          --exclude-groups technical_users do_not_anonymize\
         -o $REPORTS_BASE_DIR/1_inactive-users
 
-    # 2. Assess and filter this list; create a new user-list 'assessed-inactive-users.cfg'.
+    # 2. Assess and filter this list; create a new user-list 'assessed_inactive_users.cfg'.
     # ...
 
     # 3. Validate the users in that list. Have a look at anonymizing_report.csv afterwards.
     python anonymize_jira_users.py validate -c anon_configs/inst1-d.cfg \
         -o $REPORTS_BASE_DIR/2_validate \
-        -i $REPORTS_BASE_DIR/1_inactive-users/assessed-inactive-users.cfg
+        -i $REPORTS_BASE_DIR/1_inactive-users/assessed-inactive_users.cfg
 
     # 4. Anonymize the users in that list.
     python anonymize_jira_users.py anonymize -c anon_configs/inst1-d-config.cfg \
         -o $REPORTS_BASE_DIR/3_anonymize \
-        -i $REPORTS_BASE_DIR/1_inactive-users/assessed-inactive-users.cfg
+        -i $REPORTS_BASE_DIR/1_inactive-users/assessed-inactive_users.cfg
     
     # 5. Make a re-index. You could let the Anonymizer do this by setting the option '-x'.
 
