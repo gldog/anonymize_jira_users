@@ -34,19 +34,11 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
 
     # Override
     def execute(self):
-        atexit.register(self.report_generator.write_anonymization_reports)
+        atexit.register(self.report_generator.write_anonymization_report)
 
-        # => Let at_exit_...() write the reports.
-        # atexit.register(cleanup)
-        # atexit.register(at_exit_complete_and_write_details_report)
-        # atexit.register(at_exit_write_anonymization_reports)
-        self.log.debug("")
         self.read_users_from_user_list_file()
-        self.log.debug("")
-        self.get_users_data()
-        self.log.debug("")
+        self.get_user_data()
         self.get_anonymization_validation_data()
-        self.log.debug("")
         self.filter_users()
 
     def read_users_from_user_list_file(self):
@@ -66,35 +58,50 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
                     user_name = line
                     self.users.append(JiraUser(name=user_name))
 
-        self.log.info(f"The user-names are ({len(self.users)}): {[user.name for user in self.users]}")
+        self.log.info(f"found ({len(self.users)}) users: {[user.name for user in self.users]}")
 
-    def get_users_data(self):
+    def get_user_data(self):
         """Get each user's data before anonymization."""
 
         self.log.debug(f"for {len(self.users)} users:")
         for user in self.users:
+            self.log.info(f"for '{user.name}'")
             r = self.jira.get_user_data(user_name=user.name, is_include_deleted=True)
             r_serialized = Jira.serialize_response(r)
-            self.log.debug(f"User '{user.name}': {r_serialized}")
+            self.log.debug(f"for '{user.name}' returned {r_serialized}")
             user.logs['rest_get_user__before_anonymization'] = r_serialized
             if user.logs['rest_get_user__before_anonymization']['status_code'] == 200:
-                user.set_from_json(r_serialized['json'])
+                user.reset_from_json(r_serialized['json'])
+            else:
+                # This is the case for not-existing users:
+                json_ = r_serialized['json']
+                if 'errorMessages' in json_ and json_['errorMessages']:
+                    errors = r_serialized['json']['errorMessages']
+                    self.log.warning(f"for '{user.name}' returned the error {errors}")
+                # Don't know if this could happen, but technically the 'error' is in the response.
+                if 'errors' in json_ and json_['errors']:
+                    errors = r_serialized['json']['errors']
+                    self.log.warning(f"for '{user.name}' returned the error {errors}")
 
     def get_anonymization_validation_data(self):
         # TODO The function name get_anonymization_validation_data exists twice. One time here and one time
         # in Jira-class. This will result in logging this name twice.
         # Is logged by Jira-object.
-        self.log.debug(f"for {len(self.users)}:")
-        for user in self.users:
-            if user.logs['rest_get_user__before_anonymization']['status_code'] != 200:
-                # The user does not exist. A message about this missing user is logged later on
-                # in filter_users().
-                continue
 
+        existing_users = [user for user in self.users if
+                          user.logs['rest_get_user__before_anonymization']['status_code'] == 200]
+        if len(self.users) == len(existing_users):
+            self.log.info(f"for {len(existing_users)} users:")
+        else:
+            self.log.info(f"for {len(existing_users)} of {len(self.users)} users"
+                          f" ({len(self.users) - len(existing_users)} users do not exist):")
+
+        for user in existing_users:
+            self.log.info(f"for '{user.name}'")
             r = self.jira.get_anonymization_validation_data(user)
             r_serialized = Jira.serialize_response(r)
             user.logs['rest_get_anonymization__query_validation'] = r_serialized
-            self.log.debug(f"for user '{user}': {r_serialized}")
+            self.log.debug(f"for '{user.name}' returned {r_serialized}")
 
             # These status-codes are documented:
             #  - 200 Returned when validation succeeded.
@@ -156,7 +163,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
                 user_filter['is_anonymize_approval'] = False
                 user.filter_error_message = filter_error_message
                 user.filter_is_anonymize_approval = False
-                self.log.warning(f"{user.name}: {filter_error_message}")
+                self.log.warning(f"blocks '{user.name}': {filter_error_message}")
             else:
                 user_filter['is_anonymize_approval'] = True
                 user.filter_error_message = ""
@@ -165,8 +172,8 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
 
         approved_users = self.get_approved_users()
 
-        self.log.info(f"{len(approved_users)} users approved for anonymization:"
-                      f" {[user.name for user in approved_users]}")
+        self.log.info(f"has approved {len(approved_users)} of {len(self.users)} users for"
+                      f" anonymization: {[user.name for user in approved_users]}")
 
     def get_approved_users(self):
         return [user for user in self.users if user.filter_is_anonymize_approval]

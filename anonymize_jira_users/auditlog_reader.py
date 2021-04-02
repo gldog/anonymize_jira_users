@@ -62,8 +62,8 @@ class AuditlogReader:
     def get_anonymized_userdata_from_audit_events_for_user(self, user: JiraUser):
         anonymization_start_date = user.logs['rest_post_anonymization']['json']['submittedTime']
         anonymization_start_date_utc = self.date_str_to_utc_str(anonymization_start_date)
-        self.log.debug(
-            f"anonymization_start_date: local {anonymization_start_date}, UTC {anonymization_start_date_utc}")
+        self.log.debug(f"'{user.name}': anonymization_start_date: local {anonymization_start_date}"
+                       f", UTC {anonymization_start_date_utc}")
 
         user.logs['rest_auditing'] = {'doc': "The date in the URL-param is UTC."}
         user.logs['rest_auditing'].update({'entries_after_seconds_msg': ''})
@@ -84,7 +84,7 @@ class AuditlogReader:
             r = self.jira.get_audit_events_since(anonymization_start_date_utc)
             r.raise_for_status()
             audit_entry_count = r.json()['pagingInfo']['size']
-            message = f"Got audit log entries after {waited_seconds_so_far} seconds: {audit_entry_count}."
+            message = f"returned audit log entries after {waited_seconds_so_far} seconds: {audit_entry_count}."
             self.log.info(message + " TODO: This will become a DEBUG level message.")
             user.logs['rest_auditing']['entries_after_seconds_msg'] = message
             if audit_entry_count > 0:
@@ -94,7 +94,7 @@ class AuditlogReader:
             user.logs['rest_auditing'].update({'request': Jira.serialize_response(r)})
             auditing_events = r.json()
         else:
-            error_message = f"{user.name}: The GET {r.request.url} didn't return any audit log entry" \
+            error_message = f"'{user.name}': The GET {r.request.url} didn't return any audit log entry" \
                             f" within {waited_seconds_so_far} seconds." \
                             " No anonymized user-name/key/display-name could be retrieved."
             self.log.error(error_message)
@@ -186,8 +186,8 @@ class AuditlogReader:
 
         anonymization_start_date = user.logs['rest_post_anonymization']['json']['submittedTime']
         anonymization_start_date_utc = self.date_str_to_utc_str(anonymization_start_date)
-        self.log.debug(
-            f"anonymization_start_date: local {anonymization_start_date}, UTC {anonymization_start_date_utc}")
+        self.log.debug(f"'{user.name}': anonymization_start_date: local {anonymization_start_date}"
+                       f", UTC {anonymization_start_date_utc}")
 
         user.logs['rest_auditing'] = {'doc': "The date in the URL-param is UTC."}
         user.logs['rest_auditing'].update({'entries_after_seconds_msg': ''})
@@ -211,7 +211,7 @@ class AuditlogReader:
             r = self.jira.get_audit_records_since(anonymization_start_date_utc)
             r.raise_for_status()
             audit_entry_count = len(r.json()['records'])
-            message = f"Got audit log entries after {waited_seconds_so_far} seconds: {audit_entry_count}."
+            message = f"returned audit log entries after {waited_seconds_so_far} seconds: {audit_entry_count}."
             self.log.info(message + " TODO: This will become a DEBUG level message.")
             user.logs['rest_auditing']['entries_after_seconds_msg'] = message
             if audit_entry_count > 0:
@@ -221,7 +221,7 @@ class AuditlogReader:
             user.logs['rest_auditing'].update({'request': Jira.serialize_response(r)})
             auditing_records = r.json()
         else:
-            error_message = f"{user.name}: The GET {r.request.url} didn't return any audit log entry" \
+            error_message = f"'{user.name}': The GET {r.request.url} didn't return any audit log entry" \
                             f" within {waited_seconds_so_far} seconds." \
                             " No anonymized user-name/key/display-name could be retrieved."
             self.log.error(error_message)

@@ -37,13 +37,11 @@ class ReportGenerator:
                     self.execution_logger.logs['script_finished'] + '.000'))
 
     def write_details_report(self):
-        self.log.debug("")
-
         self.set_script_finished_date_and_execution_time()
 
         report_dirpath = self.config.create_report_dir()
         file_path = report_dirpath.joinpath(self.config.effective_config['report_details_filename'])
-        self.log.debug("  file_path for report_details_filename is {}".format(file_path))
+        self.log.debug(f"to {file_path}")
         with open(file_path, 'w') as f:
             report_details_data = {
                 'effective_config': self.config.sanitized_effective_config,
@@ -54,25 +52,22 @@ class ReportGenerator:
             # something like \u00c3 in case of a non-ASCII char.
             print(json.dumps(report_details_data, indent=4, ensure_ascii=False), file=f)
 
-    def write_anonymization_reports(self):
-        self.log.debug("")
-
+    def write_anonymization_report(self):
         self.set_script_finished_date_and_execution_time()
 
         report_dirpath = self.config.create_report_dir()
         file_path = report_dirpath.joinpath(self.config.effective_config['report_json_filename'])
-        self.log.debug("  file_path for report_json_filename is {}".format(file_path))
+        self.log.debug(f"as JSON to {file_path}")
 
         raw_report = self.create_raw_report()
 
         with open(file_path, 'w') as f:
             # ensure_ascii=False: Write as chars, not as codes. With True, dump() would output
             # something like \u00c3 in case of a non-ASCII char.
-            print("{}".format(json.dumps(raw_report, indent=4, ensure_ascii=False)), file=f)
+            print(json.dumps(raw_report, indent=4, ensure_ascii=False), file=f)
 
         file_path = report_dirpath.joinpath(self.config.effective_config['report_text_filename'])
-
-        self.log.debug(f"  file_path for report_text_filename is {file_path}")
+        self.log.debug(f"as CSV to {file_path}")
         with open(file_path, 'w', newline='') as f:
             fieldnames = ['name', 'key', 'display_name', 'active', 'deleted',
                           'validation_has_errors',

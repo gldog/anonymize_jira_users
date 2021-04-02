@@ -64,7 +64,6 @@ class Config:
         'report_out_dir': '.',
         'loglevel': 'INFO',
         'is_expand_validation_with_affected_entities': False,
-        'is_dry_run': False,
         'new_owner': '',
         'initial_delay': 10,
         'regular_delay': 3,
@@ -255,12 +254,6 @@ class Config:
         #
         # Add arguments special to command "anonymize".
         #
-        self.anonymize_subparser.add_argument('-D', '--dry-run',
-                                              action='store_true',
-                                              default=None,
-                                              dest='is_dry_run',
-                                              help="Finally do not anonymize. To get familiar with"
-                                                   "  the script and to test it.")
         self.anonymize_subparser.add_argument('-n', '--new-owner',
                                               help="Transfer roles of all anonymized users to the"
                                                    " user with this user-name.")
@@ -439,9 +432,6 @@ class Config:
             #   Doing so could increase significantly execution time.
             #   The given value is the default.
             #is_expand_validation_with_affected_entities = {self.DEFAULT_CONFIG}
-            #   Finally do not anonymize. To get familiar with the script and to test it.
-            #   The given value is the default.
-            #is_dry_run = {self.DEFAULT_CONFIG}
             #   Transfer roles to the user with this user-name.
             #   The given value is an example.
             #new_owner = new-owner

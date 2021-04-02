@@ -1,4 +1,5 @@
 import re
+import warnings
 from collections import namedtuple
 from dataclasses import dataclass
 from json.decoder import JSONDecodeError
@@ -13,6 +14,12 @@ from config import Config
 from execution_logger import ExecutionLogger
 from jira_user import JiraUser
 
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+# warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 @dataclass()
 class Jira:
@@ -84,7 +91,7 @@ class Jira:
         auth_type = auth_parts[0].lower()
         if not auth_type.lower() in ['basic', 'bearer']:
             return AuthValidationResult(
-                "Invalid authentication type '{}'. Expect 'Basic' or 'Bearer'.".format(auth_type),
+                f"Invalid authentication type '{auth_type}'. Expect 'Basic' or 'Bearer'.",
                 None, None, None)
 
         username = None
@@ -122,7 +129,7 @@ class Jira:
             # Expect 200 OK here.
             r = self.session.get(url=url)
             if r.status_code != 200:
-                error_message = "Auth-check returned {}".format(r.status_code)
+                error_message = "Auth-check returned {r.status_code}"
                 if r.status_code == 403:
                     error_message += ". This could mean there is a CAPCHA."
                 return error_message
@@ -191,9 +198,8 @@ class Jira:
             #   - 400 Returned if the project or issue id is invalid.
             #   - 401 Returned if request is on behalf of anonymous user.
             #   - 404 Returned if the project or issue id or key is not found.
-            error_message = "Permisson-check GET /rest/api/2/mypermissions returned {} with message {}.".format(
-                r.status_code,
-                r.text)
+            error_message = "Permisson-check GET /rest/api/2/mypermissions returned" \
+                            f"{r.status_code} with message {r.text}."
         return error_message
 
     def get_anonymization_progress(self, user: JiraUser = None, rel_progress_url: str = None):
@@ -248,7 +254,7 @@ class Jira:
             o -2: if the "status" is "COMPLETED". I assume a "currentProgress" of 100.
             o -3: Other "status" than "IN_PROGRESS" and "COMPLETED". Means "not in progress".
         """
-        self.log.debug(f"user_name {user.name if user else None}, rel_progress_url {rel_progress_url}")
+        self.log.debug(f"for user_name {user.name if user else None} and rel_progress_url {rel_progress_url}")
         assert not (bool(user) ^ bool(rel_progress_url))
 
         if rel_progress_url:
@@ -258,13 +264,13 @@ class Jira:
         else:
             rel_url = '/rest/api/2/user/anonymization/progress'
             url = self.base_url + rel_url
-            self.log.debug("Checking if any anonymization is running")
+            self.log.debug(": Checking if any anonymization is running")
         r = self.session.get(url=url)
         # If this call is for a specific user/anonymization-task, store the response in the user's data.
         r_serialized = self.serialize_response(r)
         if user:
             user.logs['rest_get_anonymization_progress'] = r_serialized
-            self.log.debug(f"User '{user.name}': {r_serialized}")
+            self.log.debug(f"for '{user.name}': {r_serialized}")
         else:
             self.execution_logger.logs['rest_get_anonymization_progress__before_anonymization'] \
                 = r_serialized
@@ -284,10 +290,10 @@ class Jira:
                 progress_percentage = -3
 
         if progress_percentage >= 0:
-            self.log.debug(f"progress_percentage {progress_percentage}%")
+            self.log.debug(f"for '{user.name}': {progress_percentage}%")
         else:
             d = {-1: 'No user anonymization task found', -2: 'COMPLETED', -3: 'Not in progress'}
-            self.log.debug("{}".format(d[progress_percentage]))
+            self.log.debug(d[progress_percentage])
 
         # For any other HTTP status:
         if progress_percentage is None:
@@ -347,7 +353,7 @@ class Jira:
 
     def get_user_data(self, user_name, is_include_deleted=False):
         rel_url = '/rest/api/2/user'
-        self.log.info(f"for user {user_name}")
+        self.log.debug(f"for user-name '{user_name}'")
         url = self.base_url + rel_url
         url_params = {'includeDeleted': is_include_deleted, 'username': user_name}
         r = self.session.get(url=url, params=url_params)
@@ -357,8 +363,8 @@ class Jira:
 
     def check_if_groups_exist(self, group_names):
         rel_url = '/rest/api/2/group/member'
-        self.log.debug(f"groups: {group_names}")
-        url = self.config.effective_config['jira_base_url'] + rel_url
+        self.log.debug(f"{group_names}")
+        url = self.base_url + rel_url
         errors = []
         for group_name in group_names:
             url_params = {'groupname': group_name}
@@ -388,7 +394,7 @@ class Jira:
         return users
 
     def get_users_from_groups(self, group_names) -> List[JiraUser]:
-        self.log.debug(" {}".format(group_names))
+        self.log.debug(group_names)
         users = []
         for group_name in group_names:
             users.extend(self.get_users_from_group(group_name))
@@ -476,8 +482,8 @@ class Jira:
         rel_url = '/rest/api/2/user/anonymization'
         # TODO The function name get_anonymization_validation_data exists twice. One time here and one time
         # in ValidateCmdExecutor-class. This will result in logging this name twice if log-level is the same.
-        self.log.info(f"for user-key {user.name}")
-        url = self.config.effective_config['jira_base_url'] + rel_url
+        self.log.debug(f"for user-key '{user.name}'")
+        url = self.base_url + rel_url
         url_params = {'userKey': user.key}
         if self.config.effective_config['is_expand_validation_with_affected_entities']:
             url_params['expand'] = 'affectedEntities'

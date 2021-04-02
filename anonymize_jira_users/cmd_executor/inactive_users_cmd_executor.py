@@ -46,3 +46,5 @@ class InactiveUsersCmdExecutor(IVABaseCmdExecutor):
             for user in remaining_inactive_users:
                 print(f"# {user.name}; {user.key}; {user.display_name}; {user.email_address}", file=f)
                 print(f"{user.name}\n", file=f)
+
+        self.log.info(f"wrote file {file_path} with {len(remaining_inactive_users)} users.")

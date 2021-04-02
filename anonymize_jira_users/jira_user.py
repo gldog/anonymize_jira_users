@@ -22,7 +22,7 @@ class JiraUser:
     action: str = field(default=None)
     logs: dict = field(default_factory=dict)
 
-    def set_from_json(self, user_json):
+    def reset_from_json(self, user_json):
         user = self.from_json(user_json)
         self.name = user.name
         self.key = user.key

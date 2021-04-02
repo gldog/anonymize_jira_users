@@ -32,11 +32,11 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
         except KeyError:
             self.config.anonymize_subparser.error("Missing new_owner.")
 
-        self.log.debug(f"Checking if new_owner '{new_owner_name}' is existant and active:")
+        self.log.debug(f": Checking if new_owner '{new_owner_name}' is existant and active:")
         r = self.jira.get_user_data(user_name=new_owner_name, is_include_deleted=True)
         r_serialized = Jira.serialize_response(r)
         self.execution_logger.logs['rest_get_user__new_owner'] = r_serialized
-        self.log.debug(f"new_owner '{new_owner_name}': {r_serialized}")
+        self.log.debug(f"for new_owner '{new_owner_name}' returned {r_serialized}")
 
         # TODO Check if the new-owner-user is not deleted and is active.
         if r.status_code != 200:
@@ -113,52 +113,56 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
             else:
                 user.action = 'skipped'
 
-        self.log.info(f"Anonymizing {len(approved_users)} users:")
+        self.log.info(f"starting anonymizing {len(approved_users)} users:")
         for user_num, user in enumerate(approved_users, start=1):
-            self.log.info(f"#{user_num} (name/key): {user.name}/{user.key}")
-            r = self.jira.anonymize_user(user.key, self.new_owner.key)
-            user.logs['rest_post_anonymization'] = Jira.serialize_response(r)
-            self.log.debug(f"User '{user}': {user.logs['rest_post_anonymization']}")
-            if r.status_code == 202:
-                self.log.debug(f"Waiting the initial delay of {self.config.effective_config['initial_delay']}s.")
-                time.sleep(self.config.effective_config['initial_delay'])
-                is_timed_out = self.wait_until_anonymization_is_finished_or_timedout(user_num, user)
+            self.anonymize_user(user_num, user)
 
-                try:
-                    # startTime should always be present.
-                    time_start = user.logs['rest_get_anonymization_progress']['json']['startTime']
-                    user.time_start = time_start
-                    # In case the anonymization has been aborted, finishTime could be absent.
-                    # In this case, a KeyError is raised, and no diff is calculated.
-                    time_finish = user.logs['rest_get_anonymization_progress']['json']['finishTime']
-                    user.time_finish = time_finish
-                    diff = Tools.time_diff(user.time_start, user.time_finish)
-                    user.time_duration = Tools.get_formatted_timediff_mmss(diff)
-                except KeyError:
-                    pass
+    def anonymize_user(self, user_num, user: JiraUser):
+        self.log.info(f"#{user_num} (name/key): {user.name}/{user.key}")
+        r = self.jira.anonymize_user(user.key, self.new_owner.key)
+        user.logs['rest_post_anonymization'] = Jira.serialize_response(r)
+        self.log.debug(f"for '{user.name}' returned {user.logs['rest_post_anonymization']}")
+        if r.status_code == 202:
+            self.log.debug(f": Waiting the initial delay of {self.config.effective_config['initial_delay']}s.")
+            time.sleep(self.config.effective_config['initial_delay'])
+            is_timed_out = self.wait_until_anonymization_is_finished_or_timedout(user_num, user)
 
-                # Collecting the anonymized user-data is done before handling the timeout to
-                # save what still can be saved.
-                self.auditlog_reader.get_anonymized_user_data_from_audit_log(user)
-                # TODO check for completeness. This is at least the anonymized user-name and user-key. If the user
-                # was not deleted, this is also the user-display-name.
-                if is_timed_out:
-                    error_message = f"Anonymizing of user '{user.name}' took longer than" \
-                                    " the configured timeout of" \
-                                    f" {self.config.effective_config['timeout']} seconds. Aborting."
-                    self.execution_logger.logs['errors'].append(error_message)
-                    self.log.error(error_message)
-                    break
-                user.action = 'anonymized'
+            try:
+                # startTime should always be present.
+                time_start = user.logs['rest_get_anonymization_progress']['json']['startTime']
+                user.time_start = time_start
+                # In case the anonymization has been aborted, finishTime could be absent.
+                # In this case, a KeyError is raised, and no diff is calculated.
+                time_finish = user.logs['rest_get_anonymization_progress']['json']['finishTime']
+                user.time_finish = time_finish
+                diff = Tools.time_diff(user.time_start, user.time_finish)
+                user.time_duration = Tools.get_formatted_timediff_mmss(diff)
+            except KeyError:
+                pass
+
+            # Collecting the anonymized user-data is done before handling the timeout to
+            # save what still can be saved.
+            self.auditlog_reader.get_anonymized_user_data_from_audit_log(user)
+            # TODO check for completeness. This is at least the anonymized user-name and user-key. If the user
+            # was not deleted, this is also the user-display-name.
+            if is_timed_out:
+                error_message = f"Anonymizing of user '{user.name}' took longer than the" \
+                                f" configured timeout of {self.config.effective_config['timeout']}" \
+                                " seconds. Aborting."
+                self.execution_logger.logs['errors'].append(error_message)
+                self.log.error(error_message)
+                return
+            user.action = 'anonymized'
+        else:
+            # These error-status-codes are documented:
+            #  - 400 Returned if a mandatory parameter was not provided.
+            #  - 403 Returned if the logged-in user cannot anonymize users.
+            #  - 409 Returned if another user anonymization process is already in progress.
+            if r.status_code == 400 or r.status_code == 403 or r.status_code == 409:
+                self.log.error(
+                    f": A problem occurred scheduling anonymization for user {user.name}."
+                    f" See report {self.config.effective_config['report_details_filename']}"
+                    " for details.")
             else:
-                # These error-status-codes are documented:
-                #  - 400 Returned if a mandatory parameter was not provided.
-                #  - 403 Returned if the logged-in user cannot anonymize users.
-                #  - 409 Returned if another user anonymization process is already in progress.
-                if r.status_code == 400 or r.status_code == 403 or r.status_code == 409:
-                    self.log.error(
-                        f"A problem occurred scheduling anonymization for user {user.name}."
-                        f" See report {self.config.effective_config['report_details_filename']} for details.")
-                else:
-                    # For all other, not documented HTTP-problems:
-                    r.raise_for_status()
+                # For all other, not documented HTTP-problems:
+                r.raise_for_status()
