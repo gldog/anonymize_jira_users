@@ -373,7 +373,8 @@ class Config:
         # Set a useful logging-format. Not the most elegant way, but it works.
         self.log.handlers[0].setFormatter(
             # logging.Formatter('%(asctime)s:%(levelname)s:%(module)s:%(funcName)s(): %(message)s'))
-            logging.Formatter('%(asctime)s:%(levelname)s:%(module)s:%(funcName)s %(message)s'))
+            #logging.Formatter('%(asctime)s:%(levelname)s:%(module)s:%(funcName)s %(message)s'))
+            logging.Formatter('%(asctime)s:%(levelname)s:%(funcName)s %(message)s'))
         # See also https://docs.python.org/3/howto/logging.html:
         numeric_level = self.effective_config.get('loglevel')
         # The check for valid values have been done in parser.add_argument().
