@@ -1,4 +1,5 @@
 import abc
+from argparse import ArgumentParser
 from dataclasses import dataclass
 from logging import Logger
 
@@ -9,6 +10,7 @@ from config import Config
 class BaseCmdExecutor(metaclass=abc.ABCMeta):
     config: Config
     log: Logger
+    error_handler: ArgumentParser.error
 
     def __post_init__(self):
         pass

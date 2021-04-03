@@ -9,28 +9,32 @@ from jira_user import JiraUser
 
 @dataclass
 class ValidateCmdExecutor(IVABaseCmdExecutor):
-    # approved_users: list = field(default_factory=list, init=False)
 
     def __post_init__(self):
         super().__post_init__()
+        self.jira = Jira(config=self.config, log=self.log, execution_logger=self.execution_logger,
+                         error_handler=self.error_handler)
         pass
 
     # Override
     def check_cmd_parameters(self):
         super().check_cmd_parameters()
-        # Check if user_list_file is missing in config.
+        # Check if user_list_file is given in config and is readable.
         errors = []
-        if not self.config.effective_config.get('user_list_file') \
+        if 'user_list_file' not in self.config.effective_config \
                 or not self.config.effective_config.get('user_list_file'):
             errors.append("Missing user_list_file")
         else:
             try:
+                # Check only if readable.
                 open(self.config.effective_config['user_list_file'])
             except IOError:
                 errors.append(
                     f"User_list_file {self.config.effective_config['user_list_file']}"
                     " does not exist or is not accessible")
-        pass
+        if errors:
+            # error_handler() exits.
+            self.error_handler(errors)
 
     # Override
     def execute(self):

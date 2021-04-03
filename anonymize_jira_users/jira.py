@@ -1,5 +1,5 @@
 import re
-import warnings
+from argparse import ArgumentParser
 from collections import namedtuple
 from dataclasses import dataclass
 from json.decoder import JSONDecodeError
@@ -8,13 +8,12 @@ from typing import List
 from urllib import parse
 
 import requests
+import urllib3
 from requests import Response
 
 from config import Config
 from execution_logger import ExecutionLogger
 from jira_user import JiraUser
-
-import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -26,6 +25,7 @@ class Jira:
     config: Config
     log: Logger
     execution_logger: ExecutionLogger
+    error_handler: ArgumentParser.error
 
     SSL_VERIFY = False
 
@@ -45,27 +45,29 @@ class Jira:
             errors.append("Missing authentication")
 
         if errors:
-            self.config.iva_parent_parser.error('; '.join(errors))
+            # error_handler() exits.
+            self.error_handler('; '.join(errors))
 
         auth_error, auth_type, user_or_bearer, password = \
             self.validate_auth_parameter(self.config.effective_config['jira_auth'])
         if auth_error:
             errors.append(auth_error)
         else:
-            error_message = self.setup_http_session(auth_type, user_or_bearer, password)
-            if error_message:
-                errors.append(error_message)
+            error_msg = self.setup_http_session(auth_type, user_or_bearer, password)
+            if error_msg:
+                errors.append(error_msg)
             else:
-                error_message = self.check_for_admin_permission()
-                if error_message:
-                    errors.append(error_message)
+                error_msg = self.check_for_admin_permission()
+                if error_msg:
+                    errors.append(error_msg)
                 else:
                     r = self.get_jira_serverinfo()
                     self.version_numbers = r.json()['versionNumbers']
                     self.execution_logger.logs['rest_get_serverInfo'] = self.serialize_response(r)
 
         if errors:
-            self.config.iva_parent_parser.error('; '.join(errors))
+            # error_handler() exits.
+            self.error_handler('; '.join(errors))
 
     @staticmethod
     def validate_auth_parameter(auth):
@@ -129,10 +131,14 @@ class Jira:
             # Expect 200 OK here.
             r = self.session.get(url=url)
             if r.status_code != 200:
-                error_message = "Auth-check returned {r.status_code}"
+                error_msg = f"failed, auth-check returned {r.status_code}"
+                # Don't know if the text-attribute is always present. I think it should in newer versions of
+                # the requests-lib.
+                if getattr(r, 'text'):
+                    error_msg += f" with message {r.text}"
                 if r.status_code == 403:
-                    error_message += ". This could mean there is a CAPCHA."
-                return error_message
+                    error_msg += ". This could mean there is a CAPCHA."
+                return error_msg
         else:
             self.session.headers = {
                 'Authorization': 'Bearer ' + user_or_bearer,
@@ -175,7 +181,7 @@ class Jira:
         url = self.base_url + rel_url
         r = self.session.get(url=url)
         self.execution_logger.logs['rest_get_mypermissions'] = self.serialize_response(r, False)
-        error_message = ""
+        error_msg = ""
         if r.status_code == 200:
             # Supplement a reduced JSON, as the whole JSON is very large but most of it is not of interest.
             self.execution_logger.logs['rest_get_mypermissions']['json'] = {}
@@ -184,23 +190,29 @@ class Jira:
                 r.json()['permissions']['ADMINISTER']
             # Now check if the executing user has the appropriate permission.
             if not r.json()['permissions']['ADMINISTER']['havePermission']:
-                error_message = "Permisson-check: User is not an administrator." \
-                                " Only roles Administrator and System-Admins are allowed to anonymize users."
+                error_msg = "Permisson-check failed because user is not an administrator." \
+                            " Only roles Administrator and System-Administrator are allowed to" \
+                            " anonymize users."
         elif r.status_code == 401:
-            # The r.text() is a complete HTML-Page an too long to read in a console. Shorten it to a one-liner.
-            error_message = "Permisson-check returned 401 Unauthorized."
+            # The r.text() is a complete HTML-Page and too long for a user to be read in a console.
+            # Shorten it to a one-liner.
+            error_msg = "Permisson-check returned 401 Unauthorized."
         elif r.status_code == 403:
-            # The r.text() is a complete HTML-Page an too long to read in a console. Shorten it to a one-liner.
-            error_message = "Permisson-check returned 403 Forbidden."
+            # The r.text() is a complete HTML-Page and too long for a user to be read in a console.
+            # Shorten it to a one-liner.
+            error_msg = "Permisson-check returned 403 Forbidden."
         else:
             # The documented error-codes are as follows. But they are not expected here because no query is made for
             # an issue or a project, nor for behalf of any user.
             #   - 400 Returned if the project or issue id is invalid.
             #   - 401 Returned if request is on behalf of anonymous user.
             #   - 404 Returned if the project or issue id or key is not found.
-            error_message = "Permisson-check GET /rest/api/2/mypermissions returned" \
-                            f"{r.status_code} with message {r.text}."
-        return error_message
+            error_msg = f"Permisson-check GET /rest/api/2/mypermissions returned {r.status_code}"
+            # Don't know if the text-attribute is always present. I think it should in newer versions of
+            # the requests-lib.
+            if getattr(r, 'text'):
+                error_msg += f" with message {r.text}"
+        return error_msg
 
     def get_anonymization_progress(self, user: JiraUser = None, rel_progress_url: str = None):
         """Call the Get Progress API and check if there is an anonymization running and to get the progress.
@@ -373,7 +385,7 @@ class Jira:
                 errors.append(', '.join(r.json()['errorMessages']))
             else:
                 r.raise_for_status()
-        self.log.debug(f"  errors: {errors}")
+        self.log.debug(f"returned error: {errors}")
         return errors
 
     def get_users_from_group(self, group_name) -> List[JiraUser]:

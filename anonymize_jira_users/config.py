@@ -82,18 +82,19 @@ class Config:
     log: Logger = field(default=None, init=False)
     script_name: str = field(default=os.path.basename(__file__), init=False)
     args: argparse.Namespace = field(init=False)
+    misc_subparser: argparse.ArgumentParser = field(init=False)
     # iva means Inactive users, Anonymize, Validate.
     iva_parent_parser: argparse.ArgumentParser = field(init=False)
-    anonymize_subparser: argparse.ArgumentParser = field(init=False)
     inactive_users_subparser: argparse.ArgumentParser = field(init=False)
-    misc_subparser: argparse.ArgumentParser = field(init=False)
+    validate_supparser: argparse.ArgumentParser = field(init=False)
+    anonymize_subparser: argparse.ArgumentParser = field(init=False)
 
     def __post_init__(self):
         self.effective_config = self.DEFAULT_CONFIG.copy()
         self.effective_config['report_details_filename'] = self.REPORT_BASENAME + '_details.json'
         self.effective_config['report_json_filename'] = self.REPORT_BASENAME + '.json'
         self.effective_config['report_text_filename'] = self.REPORT_BASENAME + '.csv'
-        self.parser = self.init_parser_and_parse_parameters()
+        self.parser = self.init_argument_parser()
         self.args = self.parser.parse_args()
 
         # Make the effective config from a) the default-config, b) the config-file if given, and c) the
@@ -110,7 +111,7 @@ class Config:
             self.parser.print_help()
             sys.exit(0)
 
-    def init_parser_and_parse_parameters(self):
+    def init_argument_parser(self):
         #
         # Part 1: Define the arguments.
         #
@@ -233,7 +234,7 @@ class Config:
                                                         " If a group contains spaces, the group"
                                                         " must be enclosed in single or double."
                                                         " quotes")
-        validate_sp = sp.add_parser(self.VALIDATE_CMD,
+        self.validate_supparser = sp.add_parser(self.VALIDATE_CMD,
                                     parents=[parent_parser,
                                              self.iva_parent_parser,
                                              va_parent_parser,

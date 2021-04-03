@@ -17,6 +17,8 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
 
     def __post_init__(self):
         super().__post_init__()
+        self.jira = Jira(config=self.config, log=self.log, execution_logger=self.execution_logger,
+                         error_handler=self.error_handler)
         self.auditlog_reader = AuditlogReader(
             config=self.config, log=self.log, jira=self.jira, execution_logger=self.execution_logger)
 
@@ -30,7 +32,8 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
             if not new_owner_name:
                 raise KeyError
         except KeyError:
-            self.config.anonymize_subparser.error("Missing new_owner.")
+            # error_handler() exits.
+            self.error_handler("Missing new_owner.")
 
         self.log.debug(f": Checking if new_owner '{new_owner_name}' is existant and active:")
         r = self.jira.get_user_data(user_name=new_owner_name, is_include_deleted=True)
@@ -41,18 +44,20 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
         # TODO Check if the new-owner-user is not deleted and is active.
         if r.status_code != 200:
             if r.status_code == 404:
-                # This command exits:
-                self.config.anonymize_subparser.error(r.json()['errorMessages'])
+                # This exits.
+                self.error_handler(r.json()['errorMessages'])
             else:
                 r.raise_for_status()
 
         self.new_owner = JiraUser.from_json(r.json())
 
         if self.new_owner.deleted:
-            self.config.anonymize_subparser.error(
+            # error_handler() exits.
+            self.error_handler(
                 f"The new_owner '{new_owner_name}' is a deleted user. Expect an existant user.")
         if not self.new_owner.active:
-            self.config.anonymize_subparser.error(
+            # error_handler() exits.
+            self.error_handler(
                 f"The new_owner '{new_owner_name}' is an inactive user. Expect an active user.")
 
     # Override

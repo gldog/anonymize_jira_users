@@ -13,8 +13,8 @@ class MiscCmdExecutor(BaseCmdExecutor):
     # Override
     def check_cmd_parameters(self):
         if not self.config.args.config_template_filename:
-            # This call exits the script.
-            self.config.misc_subparser.error(f"Command '{self.config.MISC_CMD}' needs '-g'")
+            # error_handler() exits.
+            self.error_handler(f"Command '{self.config.MISC_CMD}' needs '-g'")
 
     # Override
     def execute(self):

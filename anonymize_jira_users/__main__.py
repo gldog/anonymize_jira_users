@@ -14,13 +14,6 @@ log = config.log
 
 cmd_executor = CmdExecutorFactory(config=config, execution_logger=execution_logger).new_instance()
 
-# if args.subparser_name in [CMD_ANONYMIZE, CMD_VALIDATE]:
-#    # => Let at_exit_...() write the reports.
-#    atexit.register(cleanup)
-#    atexit.register(at_exit_complete_and_write_details_report)
-#    atexit.register(at_exit_write_anonymization_reports)
-
-
 cmd_executor.check_cmd_parameters()
 cmd_executor.execute()
 

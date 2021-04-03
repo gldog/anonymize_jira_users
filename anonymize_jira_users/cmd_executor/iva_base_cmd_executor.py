@@ -27,7 +27,6 @@ class IVABaseCmdExecutor(BaseCmdExecutor):
             sys.exit(0)
 
         self.report_generator = ReportGenerator(config=self.config, execution_logger=self.execution_logger)
-        self.jira = Jira(config=self.config, log=self.log, execution_logger=self.execution_logger)
         self.users: List[JiraUser] = []
         self.report_generator.users = self.users
 

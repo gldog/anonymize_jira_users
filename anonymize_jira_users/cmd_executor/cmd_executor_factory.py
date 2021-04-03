@@ -15,7 +15,9 @@ class CmdExecutorFactory:
 
     def new_instance(self):
         if self.config.args.subparser_name == self.config.MISC_CMD:
-            return MiscCmdExecutor(self.config, log=self.config.log)
+            return MiscCmdExecutor(self.config,
+                                   log=self.config.log,
+                                   error_handler=self.config.misc_subparser.error)
         elif self.config.args.subparser_name in [self.config.INACTIVE_USERS_CMD,
                                                  self.config.VALIDATE_CMD,
                                                  self.config.ANONYMIZE_CMD]:
@@ -23,14 +25,17 @@ class CmdExecutorFactory:
             if self.config.args.subparser_name == self.config.INACTIVE_USERS_CMD:
                 return InactiveUsersCmdExecutor(config=self.config,
                                                 log=log,
-                                                execution_logger=self.execution_logger)
+                                                execution_logger=self.execution_logger,
+                                                error_handler=self.config.inactive_users_subparser.error)
             elif self.config.args.subparser_name == self.config.VALIDATE_CMD:
                 return ValidateCmdExecutor(config=self.config,
                                            log=log,
-                                           execution_logger=self.execution_logger)
+                                           execution_logger=self.execution_logger,
+                                           error_handler=self.config.validate_supparser.error)
             elif self.config.args.subparser_name == self.config.ANONYMIZE_CMD:
                 return AnonymizeCmdExecutor(config=self.config,
                                             log=log,
-                                            execution_logger=self.execution_logger)
+                                            execution_logger=self.execution_logger,
+                                            error_handler=self.config.anonymize_subparser.error)
         else:
             return None

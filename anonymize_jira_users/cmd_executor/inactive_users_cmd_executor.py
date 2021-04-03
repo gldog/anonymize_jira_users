@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from cmd_executor.iva_base_cmd_executor import IVABaseCmdExecutor
 from config import Config
+from jira import Jira
 from tools import Tools
 
 
@@ -12,7 +13,8 @@ class InactiveUsersCmdExecutor(IVABaseCmdExecutor):
 
     def __post_init__(self):
         super().__post_init__()
-        self.log = self.config.log
+        self.jira = Jira(config=self.config, log=self.log, execution_logger=self.execution_logger,
+                         error_handler=self.error_handler)
 
     # Override
     def check_cmd_parameters(self):
@@ -21,9 +23,8 @@ class InactiveUsersCmdExecutor(IVABaseCmdExecutor):
         if 'exclude_groups' in self.config.effective_config:
             errors = self.jira.check_if_groups_exist(self.config.effective_config['exclude_groups'])
             if errors:
-                self.log.error(';'.join(errors))
-                # This command exits. sp is a sub-parser.
-                self.config.inactive_users_subparser.error(', '.join(errors))
+                # error_handler() exits.
+                self.error_handler(', '.join(errors))
             self.validated_exclude_groups = self.config.effective_config['exclude_groups']
 
     # Override

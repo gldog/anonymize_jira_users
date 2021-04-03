@@ -27,7 +27,7 @@ class ReportGenerator:
         if 'script_finished' not in self.execution_logger.logs:
             self.execution_logger.logs['script_finished'] = Tools.now_to_date_string()
             self.execution_logger.logs['is_script_aborted'] = True
-            self.log.warning("Script has been aborted.")
+            self.log.warning("detected an unexpected exit.")
 
         self.execution_logger.logs['script_execution_time'] = \
             Tools.get_formatted_timediff_hhmmss(
