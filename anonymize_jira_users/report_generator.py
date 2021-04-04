@@ -46,7 +46,7 @@ class ReportGenerator:
             report_details_data = {
                 'effective_config': self.config.sanitized_effective_config,
                 'execution_logger': asdict(self.execution_logger),
-                'users': [user.asdict_for_report() for user in self.users]
+                'users': [user.asdict_for_detailed_report() for user in self.users]
             }
             # ensure_ascii=False: Write as chars, not as codes. With True, dump() would output
             # something like \u00c3 in case of a non-ASCII char.
