@@ -1,4 +1,3 @@
-import atexit
 import re
 from dataclasses import dataclass
 from os import access, R_OK
@@ -34,8 +33,6 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
 
     # Override
     def execute(self):
-        atexit.register(self.report_generator.write_anonymization_report)
-
         self.read_users_from_user_list_file()
         self.get_user_data()
         self.filter_by_existance()
@@ -175,3 +172,27 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
 
         self.log.info(f"has approved {len(remaining_users)} of {len(self.users)} users for"
                       f" anonymization: {[user.name for user in remaining_users]}")
+
+    # Overview
+    def post_execute(self):
+        num_users = len(self.users)
+        num_skipped_users = len([user for user in self.users if user.action == 'skipped'])
+        overview_data = [
+            {
+                'name': 'Users in user-list-file',
+                'key': 'number_of_users_in_user_list_file',
+                'value': num_users
+            },
+            {
+                'name': 'Skipped users',
+                'key': 'number_of_skipped_users',
+                'value': num_skipped_users
+            },
+            {
+                'name': 'Validated users',
+                'key': 'number_of_validated_users',
+                'value': num_users - num_skipped_users
+            }
+        ]
+        self.report_generator.write_anonymization_report(overview_data)
+        self.report_generator.print_overview(overview_data)

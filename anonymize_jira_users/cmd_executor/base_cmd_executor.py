@@ -22,3 +22,6 @@ class BaseCmdExecutor(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def execute(self):
         pass
+
+    def post_execute(self):
+        pass

@@ -153,3 +153,33 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
             else:
                 # For all other, not documented HTTP-problems:
                 r.raise_for_status()
+
+    # Overview
+    def post_execute(self):
+        num_users = len(self.users)
+        num_skipped_users = len([user for user in self.users if user.action == 'skipped'])
+        num_anonymized_users = len([user for user in self.users if user.action == 'anonymized'])
+        overview_data = [
+            {
+                'name': 'Users in user-list-file',
+                'key': 'number_of_users_in_user_list_file',
+                'value': num_users
+            },
+            {
+                'name': 'Skipped users',
+                'key': 'number_of_skipped_users',
+                'value': num_skipped_users
+            },
+            {
+                'name': 'Anonymized user',
+                'key': 'number_of_anonymized_users',
+                'value': num_anonymized_users
+            },
+            {
+                'name': 'Background re-index triggered',
+                'key': 'is_background_reindex_triggered',
+                'value': self.execution_logger.logs.get('is_background_reindex_triggered', False)
+            }
+        ]
+        self.report_generator.write_anonymization_report(overview_data)
+        self.report_generator.print_overview(overview_data)

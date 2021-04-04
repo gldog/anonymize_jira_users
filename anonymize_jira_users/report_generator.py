@@ -52,14 +52,14 @@ class ReportGenerator:
             # something like \u00c3 in case of a non-ASCII char.
             print(json.dumps(report_details_data, indent=4, ensure_ascii=False), file=f)
 
-    def write_anonymization_report(self):
+    def write_anonymization_report(self, overview_data):
         self.set_script_finished_date_and_execution_time()
 
         report_dirpath = self.config.create_report_dir()
         file_path = report_dirpath.joinpath(self.config.effective_config['report_json_filename'])
         self.log.debug(f"as JSON to {file_path}")
 
-        raw_report = self.create_raw_report()
+        raw_report = self.create_report_data(overview_data)
 
         with open(file_path, 'w') as f:
             # ensure_ascii=False: Write as chars, not as codes. With True, dump() would output
@@ -79,30 +79,20 @@ class ReportGenerator:
             writer.writeheader()
             writer.writerows(raw_report['users'])
 
-        self.write_result_to_console(raw_report['overview'])
-
-    def create_raw_report(self):
-        is_background_reindex_triggered = self.execution_logger.logs.get('is_background_reindex_triggered', False)
-
+    def create_report_data(self, overview_data):
+        overview = {}
+        for entry in overview_data:
+            overview[entry['key']] = entry['value']
         report = {
-            'overview': {
-                'number_of_users_in_user_list_file': len(self.users),
-                'number_of_skipped_users': len([user for user in self.users if user.action == 'skipped']),
-                'number_of_anonymized_users': len([user for user in self.users if user.action == 'anonymized']),
-                'is_background_reindex_triggered': is_background_reindex_triggered
-            },
+            'overview': overview,
             'users': [user.asdict_for_report() for user in self.users]
         }
-
         return report
 
-    def write_result_to_console(self, overview):
-        print("Anonymizing Result:")
-        print(f"  Users in user-list-file:  {overview['number_of_users_in_user_list_file']}")
-        print(f"  Skipped users:            {overview['number_of_skipped_users']}")
-        print(f"  Anonymized users:         {overview['number_of_anonymized_users']}")
-        print(f"  Background re-index triggered:  {overview['is_background_reindex_triggered']}")
-        print("")
+    def print_overview(self, overview_data):
+        print("Result:")
+        for entry in overview_data:
+            print(f"  {entry['name']}: {entry['value']}")
 
         if self.execution_logger.errors:
-            print(f"Errors have occurred during execution:\n  {'; '.join(self.execution_logger.errors)}\n")
+            print(f"Errors have occurred during execution: {'; '.join(self.execution_logger.errors)}")

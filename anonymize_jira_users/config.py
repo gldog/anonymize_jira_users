@@ -71,7 +71,7 @@ class Config:
         'is_trigger_background_reindex': False,
     }
 
-    REPORT_BASENAME = 'anonymizing_report'
+    REPORT_BASENAME = 'report'
     TEMPLATE_FILENAME = 'my_bare_default_config.cfg'
     INACTIVE_USERS_OUTFILE = 'inactive_users.cfg'
 
@@ -403,7 +403,7 @@ class Config:
 
             #   Loglevel. Valid levels are {self.PRETTY_PRINT_LOG_LEVELS}.
             #   The given value is the default.
-            #loglevel = {self.DEFAULT_CONFIG}
+            #loglevel = {self.DEFAULT_CONFIG['loglevel']}
             #   Jira base-URL.
             #   The given value is an example.
             #jira_base_url = http://localhost:2990/jira
@@ -431,29 +431,29 @@ class Config:
             #   The given value is an example.
             #encoding = utf-8
             #   Output-directory to write the reports into.
-            #report_out_dir = {self.DEFAULT_CONFIG}
+            #report_out_dir = {self.DEFAULT_CONFIG['report_out_dir']}
             #   Include 'affectedEntities' in the validation result. This is only for documentation 
             #   to enrich the detailed report. It doesn't affect the anonymization.
             #   Doing so could increase significantly execution time.
             #   The given value is the default.
-            #is_expand_validation_with_affected_entities = {self.DEFAULT_CONFIG}
+            #is_expand_validation_with_affected_entities = {self.DEFAULT_CONFIG['is_expand_validation_with_affected_entities']}
             #   Transfer roles to the user with this user-name.
             #   The given value is an example.
             #new_owner = new-owner
             #   Initial delay in seconds the Anonymizer waits after the anonymization is
             #   triggered and the first call to get the anonymization-progress.
-            #   The default of Jira is {self.DEFAULT_CONFIG} seconds, and this is also the default of the Anonymizer.
-            #initial_delay = {self.DEFAULT_CONFIG}
+            #   The default of Jira is {self.DEFAULT_CONFIG['initial_delay']} seconds, and this is also the default of the Anonymizer.
+            #initial_delay = {self.DEFAULT_CONFIG['initial_delay']}
             #   The delay in seconds between calls to get the anonymization-progress.
-            #   The default of Jira is {self.DEFAULT_CONFIG} seconds, and this is also the default of the Anonymizer.
-            #regular_delay = {self.DEFAULT_CONFIG}
+            #   The default of Jira is {self.DEFAULT_CONFIG['regular_delay']} seconds, and this is also the default of the Anonymizer.
+            #regular_delay = {self.DEFAULT_CONFIG['regular_delay']}
             #   Time in seconds the anonymization shall wait to be finished.
             #   0 (or any negative value) means: Wait as long as it takes.
             #   The given value is the default.
-            #timeout = {self.DEFAULT_CONFIG}
+            #timeout = {self.DEFAULT_CONFIG['timeout']}
             #   If at least one user was anonymized, trigger a background re-index.
             #   The given value is the default.
-            #is_trigger_background_reindex = {self.DEFAULT_CONFIG}
+            #is_trigger_background_reindex = {self.DEFAULT_CONFIG['is_trigger_background_reindex']}
             """
             f.write(textwrap.dedent(help_text))
 

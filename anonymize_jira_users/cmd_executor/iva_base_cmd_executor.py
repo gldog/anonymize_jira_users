@@ -22,7 +22,6 @@ class IVABaseCmdExecutor(BaseCmdExecutor):
 
         if self.config.args.info:
             print(f"Effective config:\n{json.dumps(self.config.sanitized_effective_config, indent=4)}")
-            print("")
             sys.exit(0)
 
         self.report_generator = ReportGenerator(config=self.config, execution_logger=self.execution_logger)

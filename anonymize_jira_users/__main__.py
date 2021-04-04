@@ -16,6 +16,7 @@ cmd_executor = CmdExecutorFactory(config=config, execution_logger=execution_logg
 
 cmd_executor.check_cmd_parameters()
 cmd_executor.execute()
+cmd_executor.post_execute()
 
 execution_logger.logs['is_script_aborted'] = False
 execution_logger.logs['script_finished'] = Tools.now_to_date_string()
