@@ -166,6 +166,27 @@ class JiraApplication:
         """Check if Jira-version is less than 8.10. """
         return self.version_numbers[0] == 8 and self.version_numbers[1] < 10
 
+    def create_user_if_absent(self, username, email=None, display_name=None, password=None, active=True):
+        r = self.admin_session.user(username=username)
+        if r.status_code == 200:
+            is_active = json.loads(r.text)['active']
+            if is_active != active:
+                r = self.user_activate(username, active)
+            # It doesn't matter which return-value is returned, either from .user() or from
+            # user_activate().
+            return r
+
+        r = self.admin_session.user_create(
+            username=username,
+            email=email if email else f'{username}@example.com',
+            display_name=display_name if display_name else f'User {username}',
+            password=password if password else self.get_password_for_jira_user(username), notification=False)
+        if r.status_code == 204 and not active:
+            r = self.user_activate(username, False)
+        # It doesn't matter which return-value is returned, either from .user_create() or from
+        # user_activate().
+        return r
+
     def user_activate(self, user_name, active=True):
         data = {'active': active, 'name': user_name}
         r = self.admin_session.user_update(user_name, data)

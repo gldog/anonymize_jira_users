@@ -56,18 +56,22 @@ class TestCmdAnonymize(BaseTestClass):
             #
 
             # User with upper- and lower-case chars in name.
-            self.usernames_for_user_list_file.append('User1Pre84')
+            user_name = 'User1Pre84'
+            display_name = 'User 1 Pre 84'
+            self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
                 AnonymizedUser(name='User1Pre84',
                                key='user1pre84',
-                               display_name='User 1 Pre 84'))
+                               display_name=display_name))
 
             # A user that will be kept an active user.
-            self.usernames_for_user_list_file.append('User2Pre84')
+            user_name = 'User2Pre84'
+            display_name = 'User 2 Pre 84'
+            self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
                 AnonymizedUser(name='User2Pre84',
                                key='user2pre84',
-                               display_name='User 2 Pre 84',
+                               display_name=display_name,
                                active=True, deleted=False,
                                filter_is_anonymize_approval=False,
                                filter_error_message='Is an active user.',
@@ -77,37 +81,45 @@ class TestCmdAnonymize(BaseTestClass):
                                action='skipped'))
 
             # A renamed user.
-            self.usernames_for_user_list_file.append('User3Pre84_renamed')
+            user_name = 'User3Pre84_renamed'
+            display_name = 'User 3 Pre 84 (renamed)'
+            self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
                 AnonymizedUser(name='User3Pre84_renamed',
                                key='user3pre84',
-                               display_name='User 3 Pre 84 (renamed)'))
+                               display_name=display_name))
 
             # User with only lower-case letter in name.
-            self.usernames_for_user_list_file.append('user5pre84')
+            user_name = 'user5pre84'
+            display_name = 'user5pre84'
+            self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
                 AnonymizedUser(name='user5pre84',
                                key='user5pre84',
-                               display_name='user5pre84'))
+                               display_name=display_name))
 
             # User with only lower-case letter in name, deleted.
             # TODO Create different data for Jira < 8.10
-            self.usernames_for_user_list_file.append('user9pre84')
+            user_name = 'user9pre84'
+            display_name = 'user9pre84'
+            self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
                 AnonymizedUser(name='user9pre84',
                                key='user9pre84',
-                               display_name='user9pre84',
+                               display_name=display_name,
                                deleted=True,
                                anonymized_user_display_name=''))
 
             # A user with a name (and key) looking like an anonymized user, but isn't anonymized.
             # Jira doesn't anonymize such user-name. And in versions less than 8.10 the user-key neither.
             # But it anonymizes the user display-name.
-            self.usernames_for_user_list_file.append('JIRAUSER11111')
+            user_name = 'JIRAUSER11111'
+            display_name = 'JIRAUSER11111'
+            self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
                 AnonymizedUser(name='JIRAUSER11111',
                                key='jirauser11111',
-                               display_name='JIRAUSER11111',
+                               display_name=display_name,
                                anonymized_user_name='JIRAUSER11111',
                                anonymized_user_key='jirauser11111'))
 
@@ -116,35 +128,25 @@ class TestCmdAnonymize(BaseTestClass):
         #
 
         # User with upper- and lower-case chars in name.
-        self.jira_application.admin_session.user_remove(username='User1Post84')
-        r = self.jira_application.admin_session.user_create(
-            username='User1Post84',
-            email='User1Post84@example.com',
-            display_name='User 1 Post 84',
-            password=self.jira_application.get_password_for_jira_user(
-                'User1Post84'), notification=False)
-
+        user_name = 'User1Post84'
+        display_name = 'User 1 Post 84'
+        r = self.jira_application.create_user_if_absent(user_name, display_name=display_name)
         r.raise_for_status()
-        self.usernames_for_user_list_file.append('User1Post84')
+        self.usernames_for_user_list_file.append(user_name)
         self.expected_report_generator.add_user(
-            AnonymizedUser(name='User1Post84',
+            AnonymizedUser(name=user_name,
                            key=json.loads(r.text)['key'],
-                           display_name='User 1 Post 84'))
+                           display_name=display_name))
 
-        # A user that will be kept an active user.
-        self.jira_application.admin_session.user_remove(username='User2Post84')
-        r = self.jira_application.admin_session.user_create(
-            username='User2Post84',
-            email='User2Post84@example.com',
-            display_name='User 2 Post 84',
-            password=self.jira_application.get_password_for_jira_user(
-                'User2Post84'), notification=False)
+        user_name = 'User2Post84'
+        display_name = 'User 2 Post 84'
+        r = self.jira_application.create_user_if_absent(user_name, display_name=display_name)
         r.raise_for_status()
-        self.usernames_for_user_list_file.append('User2Post84')
+        self.usernames_for_user_list_file.append(user_name)
         self.expected_report_generator.add_user(
-            AnonymizedUser(name='User2Post84',
+            AnonymizedUser(name=user_name,
                            key=json.loads(r.text)['key'],
-                           display_name='User 2 Post 84',
+                           display_name=display_name,
                            active=True, deleted=False,
                            filter_is_anonymize_approval=False,
                            filter_error_message='Is an active user.',
@@ -153,56 +155,45 @@ class TestCmdAnonymize(BaseTestClass):
                            anonymized_user_display_name='',
                            action='skipped'))
 
-        # User with only lower-case letters in name.
-        self.jira_application.admin_session.user_remove(username='user5post84')
-        r = self.jira_application.admin_session.user_create(
-            username='user5post84',
-            email='user5post84@example.com',
-            display_name='user5post84',
-            password=self.jira_application.get_password_for_jira_user(
-                'User5Post84'), notification=False)
+        user_name = 'user5post84'
+        display_name = 'user5post84'
+        r = self.jira_application.create_user_if_absent(user_name, display_name=display_name)
         r.raise_for_status()
-        self.usernames_for_user_list_file.append('user5post84')
+        self.usernames_for_user_list_file.append(user_name)
         self.expected_report_generator.add_user(
-            AnonymizedUser(name='user5post84',
+            AnonymizedUser(name=user_name,
                            key=json.loads(r.text)['key'],
-                           display_name='user5post84'))
+                           display_name=display_name))
 
         # User with only lower-case letter in name; deleted.
-        self.jira_application.admin_session.user_remove(username='user9post84')
-        r = self.jira_application.admin_session.user_create(
-            username='user9post84',
-            email='user9post84@example.com',
-            display_name='user9post84',
-            password=self.jira_application.get_password_for_jira_user(
-                'user9post84'), notification=False)
+        user_name = 'user9post84'
+        display_name = 'user9post84'
+        r = self.jira_application.create_user_if_absent(user_name, display_name=display_name)
         r.raise_for_status()
-        self.usernames_for_user_list_file.append('user9post84')
+        self.usernames_for_user_list_file.append(user_name)
         # In Jira version <8.10, deleted users won't be anonymized, because the REST API won't find them.
         # The user-key is None in this case. But in version >= 8.10 the API do find them.
         # TODO Create different data for Jira < 8.10
         self.expected_report_generator.add_user(
             AnonymizedUser(name='user9post84',
                            key=json.loads(r.text)['key'],
-                           display_name='user9post84',
+                           display_name=display_name,
                            deleted=True,
                            anonymized_user_display_name=''))
 
         # A user with a name looking like an anonymized user, but isn't anonymized.
         # Jira doesn't anonymize such user-name. And in versions less than 8.10 the user-key neither.
         # But it anonymizes the user display-name.
-        self.jira_application.admin_session.user_remove(username='JIRAUSER21111')
-        r = self.jira_application.admin_session.user_create(
-            username='JIRAUSER21111',
-            email='JIRAUSER21111@example.com', display_name='JIRAUSER21111',
-            password=self.jira_application.get_password_for_jira_user(
-                'JIRAUSER21111'), notification=False)
+        user_name = 'JIRAUSER21111'
+        display_name = 'JIRAUSER21111'
+        r = self.jira_application.create_user_if_absent(user_name, display_name=display_name)
         r.raise_for_status()
-        self.usernames_for_user_list_file.append('JIRAUSER21111')
+        self.usernames_for_user_list_file.append(user_name)
         self.expected_report_generator.add_user(
-            AnonymizedUser(name='JIRAUSER21111',
+            AnonymizedUser(name=user_name,
                            key=json.loads(r.text)['key'],
-                           display_name='JIRAUSER21111',
+                           display_name=display_name,
+                           anonymized_user_display_name='',
                            anonymized_user_name='JIRAUSER21111',
                            anonymized_user_key=json.loads(r.text)['key']))
 
@@ -217,16 +208,10 @@ class TestCmdAnonymize(BaseTestClass):
         # Make most users inactive users.
         for user_name in self.usernames_for_user_list_file:
             # Let there be 2 user active.
-            if user_name in ['User2Pre84', 'User2Post84']:
+            if user_name.lower() in ['user2pre84', 'user2post84']:
                 continue
             r = self.jira_application.admin_session.user_deactivate(user_name)
             r.raise_for_status()
-
-        # Get predicted user-data (before some users are going to be deleted).
-        # r = self.jira_application.get_predicted_anonymized_userdata(self.usernames_for_user_list_file)
-        # r.raise_for_status()
-        # self.expected_report_generator.predicted_anonymized_userdata = r.json()
-        # self.predicted_anonymized_userdata = r.json()
 
         self.expected_report_generator.overview = {
             "number_of_users_in_user_list_file": 11,
@@ -238,8 +223,8 @@ class TestCmdAnonymize(BaseTestClass):
         self.expected_report_generator.generate()
 
         expected_anonymizing_report_json = dataclasses.asdict(self.expected_report_generator)['report']
-        log.info("expected_anonymizing_report_json after update:\n{}".format(
-            json.dumps(expected_anonymizing_report_json, indent=4)))
+        log.info("expected_anonymizing_report_json after update:\n"
+                 f"{json.dumps(expected_anonymizing_report_json, indent=4)}")
 
         # The following file is for documenting the tests.
         with open(self.out_base_dir_path + '/predicted_anonymized_userdata.json', 'w') as f:
@@ -337,7 +322,8 @@ class ExpectedReportGenerator:
                     user.filter_is_anonymize_approval = False
                     # This message comes from Jiras REST API.
                     # user.filter_error_message = f"The user named '{user.user_name}' does not exist"
-                    user.filter_error_message = self.jira_application.get_error_msg_missing_user_in_sys_default_lang(user.name)
+                    user.filter_error_message = self.jira_application.get_error_msg_missing_user_in_sys_default_lang(
+                        user.name)
                     user.anonymized_user_name = ''
                     user.anonymized_user_key = ''
                     user.anonymized_user_display_name = ''
