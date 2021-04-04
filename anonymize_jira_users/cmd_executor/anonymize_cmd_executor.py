@@ -18,22 +18,17 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
     def __post_init__(self):
         super().__post_init__()
         self.jira = Jira(config=self.config, log=self.log, execution_logger=self.execution_logger,
-                         error_handler=self.error_handler)
-        self.auditlog_reader = AuditlogReader(
-            config=self.config, log=self.log, jira=self.jira, execution_logger=self.execution_logger)
+                         exiting_error_handler=self.exiting_error_handler)
+        self.auditlog_reader = AuditlogReader(config=self.config, log=self.log, jira=self.jira,
+                                              execution_logger=self.execution_logger)
 
     # Override
     def check_cmd_parameters(self):
         super().check_cmd_parameters()
 
-        new_owner_name = None
-        try:
-            new_owner_name = self.config.effective_config['new_owner']
-            if not new_owner_name:
-                raise KeyError
-        except KeyError:
-            # error_handler() exits.
-            self.error_handler("Missing new_owner.")
+        new_owner_name = self.config.effective_config.get('new_owner')
+        if not new_owner_name:
+            self.exiting_error_handler("Missing parameter 'new_owner'.")
 
         self.log.debug(f": Checking if new_owner '{new_owner_name}' is existant and active:")
         r = self.jira.get_user_data(user_name=new_owner_name, is_include_deleted=True)
@@ -41,23 +36,19 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
         self.execution_logger.logs['rest_get_user__new_owner'] = r_serialized
         self.log.debug(f"for new_owner '{new_owner_name}' returned {r_serialized}")
 
-        # TODO Check if the new-owner-user is not deleted and is active.
         if r.status_code != 200:
             if r.status_code == 404:
-                # This exits.
-                self.error_handler(r.json()['errorMessages'])
+                self.exiting_error_handler(r.json()['errorMessages'])
             else:
                 r.raise_for_status()
 
         self.new_owner = JiraUser.from_json(r.json())
 
         if self.new_owner.deleted:
-            # error_handler() exits.
-            self.error_handler(
+            self.exiting_error_handler(
                 f"The new_owner '{new_owner_name}' is a deleted user. Expect an existant user.")
         if not self.new_owner.active:
-            # error_handler() exits.
-            self.error_handler(
+            self.exiting_error_handler(
                 f"The new_owner '{new_owner_name}' is an inactive user. Expect an active user.")
 
     # Override
@@ -65,9 +56,9 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
         super().execute()
 
         if self.jira.is_any_anonymization_running():
-            self.log.error("There is an anonymization running, or the status of anonymization couldn't be read."
-                           " In both cases this script aborts because these cases are not handled."
-                           " Exiting.")
+            self.log.error("There is an anonymization running, or the status of anonymization"
+                           " couldn't be read. In both cases this script aborts because these"
+                           " cases are not handled. Exiting.")
             sys.exit(2)
 
         self.anonymize_users()
@@ -78,8 +69,8 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
                 # Let the user know if a re-index has been triggered.
                 # The following attribute 'is_background_reindex_triggered' is not the parameter
                 # 'is_trigger_background_reindex' got from the command-line.
-                # The Anonymizer uses two different parameters because a re-index is only triggered if at least
-                # one user has been anonymized.
+                # The Anonymizer uses two different parameters because a re-index is only triggered
+                # if at least one user has been anonymized.
                 self.jira.trigger_reindex()
                 self.execution_logger.logs['is_background_reindex_triggered'] = True
 

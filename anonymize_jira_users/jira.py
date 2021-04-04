@@ -2,7 +2,7 @@ import re
 from argparse import ArgumentParser
 from collections import namedtuple
 from dataclasses import dataclass
-from json.decoder import JSONDecodeError
+from json import JSONDecodeError
 from logging import Logger
 from typing import List
 from urllib import parse
@@ -25,7 +25,7 @@ class Jira:
     config: Config
     log: Logger
     execution_logger: ExecutionLogger
-    error_handler: ArgumentParser.error
+    exiting_error_handler: ArgumentParser.error
 
     SSL_VERIFY = False
 
@@ -45,8 +45,7 @@ class Jira:
             errors.append("Missing authentication")
 
         if errors:
-            # error_handler() exits.
-            self.error_handler('; '.join(errors))
+            self.exiting_error_handler('; '.join(errors))
 
         auth_error, auth_type, user_or_bearer, password = \
             self.validate_auth_parameter(self.config.effective_config['jira_auth'])
@@ -66,8 +65,7 @@ class Jira:
                     self.execution_logger.logs['rest_get_serverInfo'] = self.serialize_response(r)
 
         if errors:
-            # error_handler() exits.
-            self.error_handler('; '.join(errors))
+            self.exiting_error_handler('; '.join(errors))
 
     @staticmethod
     def validate_auth_parameter(auth):

@@ -7,7 +7,6 @@ from typing import List
 
 from cmd_executor.base_cmd_executor import BaseCmdExecutor
 from execution_logger import ExecutionLogger
-from jira import Jira
 from jira_user import JiraUser
 from report_generator import ReportGenerator
 

@@ -10,7 +10,7 @@ from config import Config
 class BaseCmdExecutor(metaclass=abc.ABCMeta):
     config: Config
     log: Logger
-    error_handler: ArgumentParser.error
+    exiting_error_handler: ArgumentParser.error
 
     def __post_init__(self):
         pass

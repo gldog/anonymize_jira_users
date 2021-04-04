@@ -1,6 +1,8 @@
 import atexit
 import re
 from dataclasses import dataclass
+from os import access, R_OK
+from os.path import isfile
 
 from cmd_executor.iva_base_cmd_executor import IVABaseCmdExecutor
 from jira import Jira
@@ -13,23 +15,19 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
     def __post_init__(self):
         super().__post_init__()
         self.jira = Jira(config=self.config, log=self.log, execution_logger=self.execution_logger,
-                         error_handler=self.error_handler)
-        pass
+                         exiting_error_handler=self.exiting_error_handler)
 
     # Override
     def check_cmd_parameters(self):
         super().check_cmd_parameters()
         # Check if user_list_file is given in config and is readable.
         errors = []
-        if 'user_list_file' not in self.config.effective_config \
-                or not self.config.effective_config.get('user_list_file'):
-            errors.append("Missing user_list_file")
+        user_list_file = self.config.effective_config.get('user_list_file')
+        if not user_list_file:
+            errors.append("Missing parameter 'user_list_file'")
         else:
-            try:
-                # Check only if readable.
-                open(self.config.effective_config['user_list_file'])
-            except IOError:
-                errors.append(
+            if not (isfile(user_list_file) and access(user_list_file, R_OK)):
+                self.exiting_error_handler(
                     f"User_list_file {self.config.effective_config['user_list_file']}"
                     " does not exist or is not accessible")
         if errors:

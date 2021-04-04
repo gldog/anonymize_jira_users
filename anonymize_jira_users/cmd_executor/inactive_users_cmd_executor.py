@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import List
 
 from cmd_executor.iva_base_cmd_executor import IVABaseCmdExecutor
 from config import Config
@@ -9,30 +10,29 @@ from tools import Tools
 @dataclass
 class InactiveUsersCmdExecutor(IVABaseCmdExecutor):
     config: Config
-    validated_exclude_groups: bool = False
+    exclude_groups: List[str] = None
 
     def __post_init__(self):
         super().__post_init__()
         self.jira = Jira(config=self.config, log=self.log, execution_logger=self.execution_logger,
-                         error_handler=self.error_handler)
+                         exiting_error_handler=self.exiting_error_handler)
 
     # Override
     def check_cmd_parameters(self):
         super().check_cmd_parameters()
 
-        if 'exclude_groups' in self.config.effective_config:
-            errors = self.jira.check_if_groups_exist(self.config.effective_config['exclude_groups'])
+        self.exclude_groups = self.config.effective_config.get('exclude_groups')
+        if self.exclude_groups:
+            errors = self.jira.check_if_groups_exist(self.exclude_groups)
             if errors:
-                # error_handler() exits.
-                self.error_handler(', '.join(errors))
-            self.validated_exclude_groups = self.config.effective_config['exclude_groups']
+                self.exiting_error_handler(', '.join(errors))
 
     # Override
     def execute(self):
 
         excluded_users = []
-        if self.validated_exclude_groups:
-            excluded_users = self.jira.get_users_from_groups(self.validated_exclude_groups)
+        if self.exclude_groups:
+            excluded_users = self.jira.get_users_from_groups(self.exclude_groups)
             self.execution_logger.logs['excluded_users'] = excluded_users
 
         remaining_inactive_users = self.jira.get_inactive_users(excluded_users)
