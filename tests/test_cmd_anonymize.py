@@ -245,7 +245,7 @@ class TestCmdAnonymize(BaseTestClass):
         r = self.execute_anonymizer_and_log_output(f'anonymize -c {self.config_file_path} -o {out_dir}', out_logfile)
         self.assertEqual(0, r.returncode)
 
-        with open(pathlib.Path(out_dir).joinpath('anonymizing_report.json'), 'r') as f:
+        with open(pathlib.Path(out_dir).joinpath('report.json'), 'r') as f:
             got_anonymizing_report_json = json.loads(f.read())
 
         exclude_regex_paths = [r"root\['users'\]\[\d+\]\['time_(start|finish|duration)'\]"]

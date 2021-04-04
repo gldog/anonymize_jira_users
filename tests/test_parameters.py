@@ -52,7 +52,6 @@ class Test01(BaseTestClass):
             'report_out_dir': '.',
             'loglevel': 'INFO',
             'is_expand_validation_with_affected_entities': False,
-            'is_dry_run': False,
             'new_owner': '',
             'initial_delay': 10,
             'regular_delay': 3,
@@ -62,9 +61,9 @@ class Test01(BaseTestClass):
             'info': True,
             'locale_getpreferredencoding': str(locale.getpreferredencoding()),
             'sys_getfilesystemencoding': str(sys.getfilesystemencoding()),
-            'report_details_filename': 'anonymizing_report_details.json',
-            'report_json_filename': 'anonymizing_report.json',
-            'report_text_filename': 'anonymizing_report.csv',
+            'report_details_filename': 'report_details.json',
+            'report_json_filename': 'report.json',
+            'report_text_filename': 'report.csv',
         }
 
         r = self.execute_anonymizer('inactive-users --info')
@@ -89,7 +88,6 @@ class Test01(BaseTestClass):
             'report_out_dir': '.',
             'loglevel': 'INFO',
             'is_expand_validation_with_affected_entities': False,
-            'is_dry_run': False,
             'new_owner': '',
             'initial_delay': 10,
             'regular_delay': 3,
@@ -99,9 +97,9 @@ class Test01(BaseTestClass):
             'info': True,
             'locale_getpreferredencoding': str(locale.getpreferredencoding()),
             'sys_getfilesystemencoding': str(sys.getfilesystemencoding()),
-            'report_details_filename': 'anonymizing_report_details.json',
-            'report_json_filename': 'anonymizing_report.json',
-            'report_text_filename': 'anonymizing_report.csv',
+            'report_details_filename': 'report_details.json',
+            'report_json_filename': 'report.json',
+            'report_text_filename': 'report.csv',
         }
 
         config_file = tempfile.NamedTemporaryFile(mode='w', prefix='tests-config')
@@ -117,7 +115,7 @@ class Test01(BaseTestClass):
 
         expected_config['config_file'] = config_file.name
 
-        r = self.execute_anonymizer('inactive-users -c {} --info'.format(config_file.name))
+        r = self.execute_anonymizer(f'inactive-users -c {config_file.name} --info')
         std_out = r.stdout.decode('utf-8')
         # decoded_stderr = r.stderr.decode('utf-8')
         # print("r.returncode {}".format(r.returncode))
@@ -141,7 +139,6 @@ class Test01(BaseTestClass):
             'report_out_dir': '.',
             'loglevel': 'INFO',
             'is_expand_validation_with_affected_entities': False,
-            'is_dry_run': False,
             'new_owner': '',
             'initial_delay': 10,
             'regular_delay': 3,
@@ -151,16 +148,16 @@ class Test01(BaseTestClass):
             'info': True,
             'locale_getpreferredencoding': str(locale.getpreferredencoding()),
             'sys_getfilesystemencoding': str(sys.getfilesystemencoding()),
-            'report_details_filename': 'anonymizing_report_details.json',
-            'report_json_filename': 'anonymizing_report.json',
-            'report_text_filename': 'anonymizing_report.csv',
+            'report_details_filename': 'report_details.json',
+            'report_json_filename': 'report.json',
+            'report_text_filename': 'report.csv',
         }
 
         cmdline_params = [
             '-G groupB1 groupB2 "groupB3 with spaces"'
         ]
 
-        r = self.execute_anonymizer('inactive-users {} --info'.format(' '.join(cmdline_params)))
+        r = self.execute_anonymizer(f'inactive-users {" ".join(cmdline_params)} --info')
         std_out = r.stdout.decode('utf-8')
 
         expected_config_as_sorted_json = json.dumps(expected_config, sort_keys=True)
@@ -180,7 +177,6 @@ class Test01(BaseTestClass):
             'report_out_dir': '.',
             'loglevel': 'INFO',
             'is_expand_validation_with_affected_entities': False,
-            'is_dry_run': False,
             'new_owner': '',
             'initial_delay': 10,
             'regular_delay': 3,
@@ -190,9 +186,9 @@ class Test01(BaseTestClass):
             'info': True,
             'locale_getpreferredencoding': str(locale.getpreferredencoding()),
             'sys_getfilesystemencoding': str(sys.getfilesystemencoding()),
-            'report_details_filename': 'anonymizing_report_details.json',
-            'report_json_filename': 'anonymizing_report.json',
-            'report_text_filename': 'anonymizing_report.csv',
+            'report_details_filename': 'report_details.json',
+            'report_json_filename': 'report.json',
+            'report_text_filename': 'report.csv',
         }
 
         config_file = tempfile.NamedTemporaryFile(mode='w', prefix='tests-config')
@@ -212,7 +208,7 @@ class Test01(BaseTestClass):
             '-G groupB1 groupB2 "groupB3 with spaces"'
         ]
 
-        r = self.execute_anonymizer('inactive-users -c {} {} --info'.format(config_file.name, ' '.join(cmdline_params)))
+        r = self.execute_anonymizer(f'inactive-users -c {config_file.name} {" ".join(cmdline_params)} --info')
         std_out = r.stdout.decode('utf-8')
 
         expected_config_as_sorted_json = json.dumps(expected_config, sort_keys=True)
@@ -233,7 +229,6 @@ class Test01(BaseTestClass):
             'report_out_dir': '.',
             'loglevel': 'INFO',
             'is_expand_validation_with_affected_entities': False,
-            'is_dry_run': False,
             'new_owner': '',
             'initial_delay': 10,
             'regular_delay': 3,
@@ -243,9 +238,9 @@ class Test01(BaseTestClass):
             'info': True,
             'locale_getpreferredencoding': str(locale.getpreferredencoding()),
             'sys_getfilesystemencoding': str(sys.getfilesystemencoding()),
-            'report_details_filename': 'anonymizing_report_details.json',
-            'report_json_filename': 'anonymizing_report.json',
-            'report_text_filename': 'anonymizing_report.csv',
+            'report_details_filename': 'report_details.json',
+            'report_json_filename': 'report.json',
+            'report_text_filename': 'report.csv',
         }
 
         r = self.execute_anonymizer('anonymize --info')
@@ -270,7 +265,6 @@ class Test01(BaseTestClass):
             'report_out_dir': '_report_out_dir_',
             'loglevel': 'INFO',
             'is_expand_validation_with_affected_entities': True,
-            'is_dry_run': True,
             'new_owner': '_new_owner_',
             'initial_delay': 2,
             'regular_delay': 2,
@@ -280,9 +274,9 @@ class Test01(BaseTestClass):
             'info': True,
             'locale_getpreferredencoding': str(locale.getpreferredencoding()),
             'sys_getfilesystemencoding': str(sys.getfilesystemencoding()),
-            'report_details_filename': 'anonymizing_report_details.json',
-            'report_json_filename': 'anonymizing_report.json',
-            'report_text_filename': 'anonymizing_report.csv',
+            'report_details_filename': 'report_details.json',
+            'report_json_filename': 'report.json',
+            'report_text_filename': 'report.csv',
         }
 
         config_file = tempfile.NamedTemporaryFile(mode='w', prefix='tests-config')
@@ -295,7 +289,6 @@ class Test01(BaseTestClass):
             encoding = _encoding_
             report_out_dir = _report_out_dir_
             is_expand_validation_with_affected_entities = true
-            is_dry_run = true
             new_owner = _new_owner_
             initial_delay = 2
             regular_delay = 2
@@ -306,11 +299,11 @@ class Test01(BaseTestClass):
 
         expected_config['config_file'] = config_file.name
 
-        r = self.execute_anonymizer('anonymize -c {} --info'.format(config_file.name))
+        r = self.execute_anonymizer(f'anonymize -c {config_file.name} --info')
         std_out = r.stdout.decode('utf-8')
-        print("r.returncode {}".format(r.returncode))
-        print("r.stderr {}".format(r.stderr.decode('utf-8')))
-        print("r.stdout {}".format(std_out))
+        #print(f"r.returncode {r.returncode}")
+        #print(f"r.stderr {r.stderr.decode('utf-8')}")
+        #print(f"r.stdout {std_out}")
 
         expected_config_as_sorted_json = json.dumps(expected_config, sort_keys=True)
         got_config_as_sorted_json = json.dumps(
@@ -330,7 +323,6 @@ class Test01(BaseTestClass):
             'report_out_dir': 'REPORT_OUT_DIR',
             'loglevel': 'ERROR',
             'is_expand_validation_with_affected_entities': True,
-            'is_dry_run': True,
             'new_owner': 'NEW_OWNER',
             'initial_delay': 10,
             'regular_delay': 3,
@@ -340,9 +332,9 @@ class Test01(BaseTestClass):
             'info': True,
             'locale_getpreferredencoding': str(locale.getpreferredencoding()),
             'sys_getfilesystemencoding': str(sys.getfilesystemencoding()),
-            'report_details_filename': 'anonymizing_report_details.json',
-            'report_json_filename': 'anonymizing_report.json',
-            'report_text_filename': 'anonymizing_report.csv',
+            'report_details_filename': 'report_details.json',
+            'report_json_filename': 'report.json',
+            'report_text_filename': 'report.csv',
         }
 
         cmdline_params = [
@@ -353,12 +345,11 @@ class Test01(BaseTestClass):
             '-i USER_LIST_FILE',
             '--encoding ENCODING',
             '--expand-validation-with-affected-entities',
-            '-D',
             '-n NEW_OWNER',
             '-x'
         ]
 
-        r = self.execute_anonymizer('anonymize {} --info'.format(' '.join(cmdline_params)))
+        r = self.execute_anonymizer(f'anonymize {" ".join(cmdline_params)} --info')
         std_out = r.stdout.decode('utf-8')
 
         expected_config_as_sorted_json = json.dumps(expected_config, sort_keys=True)
@@ -379,7 +370,6 @@ class Test01(BaseTestClass):
             'report_out_dir': 'REPORT_OUT_DIR',
             'loglevel': 'ERROR',
             'is_expand_validation_with_affected_entities': True,
-            'is_dry_run': True,
             'new_owner': 'NEW_OWNER',
             'initial_delay': 2,
             'regular_delay': 2,
@@ -389,13 +379,12 @@ class Test01(BaseTestClass):
             'info': True,
             'locale_getpreferredencoding': str(locale.getpreferredencoding()),
             'sys_getfilesystemencoding': str(sys.getfilesystemencoding()),
-            'report_details_filename': 'anonymizing_report_details.json',
-            'report_json_filename': 'anonymizing_report.json',
-            'report_text_filename': 'anonymizing_report.csv',
+            'report_details_filename': 'report_details.json',
+            'report_json_filename': 'report.json',
+            'report_text_filename': 'report.csv',
         }
 
         config_file = tempfile.NamedTemporaryFile(mode='w', prefix='tests-config')
-        # print("config_file {}".format(config_file.name))
         config_file.write(textwrap.dedent("""\
             [DEFAULT]
             loglevel = _loglevel_
@@ -405,7 +394,6 @@ class Test01(BaseTestClass):
             encoding = _encoding_
             report_out_dir = _report_out_dir_
             is_expand_validation_with_affected_entities = false
-            is_dry_run = false
             new_owner = _new_owner_
             initial_delay = 2
             regular_delay = 2
@@ -424,12 +412,11 @@ class Test01(BaseTestClass):
             '-i USER_LIST_FILE',
             '--encoding ENCODING',
             '--expand-validation-with-affected-entities',
-            '-D',
             '-n NEW_OWNER',
             '-x'
         ]
 
-        r = self.execute_anonymizer('anonymize -c {} {} --info'.format(config_file.name, ' '.join(cmdline_params)))
+        r = self.execute_anonymizer(f'anonymize -c {config_file.name} {" ".join(cmdline_params)} --info')
         std_out = r.stdout.decode('utf-8')
         # decoded_stderr = r.stderr.decode('utf-8')
         # print("r.returncode {}".format(r.returncode))
