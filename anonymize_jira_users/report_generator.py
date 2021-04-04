@@ -70,8 +70,7 @@ class ReportGenerator:
         self.log.debug(f"as CSV to {file_path}")
         with open(file_path, 'w', newline='') as f:
             fieldnames = ['name', 'key', 'display_name', 'active', 'deleted',
-                          'validation_has_errors',
-                          'filter_is_anonymize_approval', 'filter_error_message',
+                          'filter_error_message',
                           'action',
                           'time_start', 'time_finish', 'time_duration',
                           'anonymized_user_name', 'anonymized_user_key', 'anonymized_user_display_name']
@@ -83,10 +82,7 @@ class ReportGenerator:
         self.write_result_to_console(raw_report['overview'])
 
     def create_raw_report(self):
-        try:
-            is_background_reindex_triggered = self.execution_logger.logs['is_background_reindex_triggered']
-        except KeyError:
-            is_background_reindex_triggered = False
+        is_background_reindex_triggered = self.execution_logger.logs.get('is_background_reindex_triggered', False)
 
         report = {
             'overview': {

@@ -73,7 +73,6 @@ class TestCmdAnonymize(BaseTestClass):
                                key='user2pre84',
                                display_name=display_name,
                                active=True, deleted=False,
-                               filter_is_anonymize_approval=False,
                                filter_error_message='Is an active user.',
                                anonymized_user_name='',
                                anonymized_user_key='',
@@ -148,7 +147,6 @@ class TestCmdAnonymize(BaseTestClass):
                            key=json.loads(r.text)['key'],
                            display_name=display_name,
                            active=True, deleted=False,
-                           filter_is_anonymize_approval=False,
                            filter_error_message='Is an active user.',
                            anonymized_user_name='',
                            anonymized_user_key='',
@@ -193,7 +191,6 @@ class TestCmdAnonymize(BaseTestClass):
             AnonymizedUser(name=user_name,
                            key=json.loads(r.text)['key'],
                            display_name=display_name,
-                           anonymized_user_display_name='',
                            anonymized_user_name='JIRAUSER21111',
                            anonymized_user_key=json.loads(r.text)['key']))
 
@@ -265,8 +262,6 @@ class AnonymizedUser:
     active: bool = False
     # Since Jira 8.10.
     deleted: bool = False
-    validation_has_errors: bool = False
-    filter_is_anonymize_approval: bool = True
     filter_error_message: str = ''
     anonymized_user_name: str = None
     anonymized_user_key: str = None

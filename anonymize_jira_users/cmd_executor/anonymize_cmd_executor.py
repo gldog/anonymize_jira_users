@@ -100,17 +100,8 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
         return is_timed_out
 
     def anonymize_users(self):
-        approved_users = []
-        for user in self.users:
-            if user.filter_is_anonymize_approval:
-                approved_users.append(user)
-                # Will be overwritte with 'anonymized' in case anonymitzing finished properly.
-                user.action = 'unknown'
-            else:
-                user.action = 'skipped'
-
-        self.log.info(f"starting anonymizing {len(approved_users)} users:")
-        for user_num, user in enumerate(approved_users, start=1):
+        self.log.info(f"starting anonymizing {len(self.remaining_users)} users:")
+        for user_num, user in enumerate(self.remaining_users, start=1):
             self.anonymize_user(user_num, user)
 
     def anonymize_user(self, user_num, user: JiraUser):

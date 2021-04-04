@@ -11,8 +11,6 @@ class AnonymizedUser:
     user_display_name: str = None
     active: bool = False
     deleted: bool = False
-    validation_has_errors: bool = False
-    filter_is_anonymize_approval: bool = True
     filter_error_message: str = ''
     anonymized_user_name: str = None
     anonymized_user_key: str = None
@@ -73,7 +71,6 @@ if __name__ == '__main__':
 
     anonymized_user = AnonymizedUser(user_name='user1name', user_key='user1key', user_display_name='user1displayname',
                                      active=False, deleted=False, action='anonymized',
-                                     validation_has_errors=False, filter_is_anonymize_approval=True,
                                      filter_error_message='')
 
     expected_test_results_generator.add_user(anonymized_user)
