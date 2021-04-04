@@ -10,8 +10,6 @@ class JiraUser:
     active: bool = field(default=None)
     # deleted: Since Jira 8.10.
     deleted: bool = field(default=None)
-    validation_has_errors: bool = field(default=None)
-    filter_is_anonymize_approval: bool = field(default=None)
     filter_error_message: str = field(default=None)
     time_start: str = field(default=None)
     time_finish: str = field(default=None)
@@ -22,7 +20,7 @@ class JiraUser:
     action: str = field(default=None)
     logs: dict = field(default_factory=dict)
 
-    def reset_from_json(self, user_json):
+    def recreate_from_json(self, user_json):
         user = self.from_json(user_json)
         self.name = user.name
         self.key = user.key

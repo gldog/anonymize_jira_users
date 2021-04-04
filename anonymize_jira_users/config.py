@@ -94,6 +94,7 @@ class Config:
         self.effective_config['report_details_filename'] = self.REPORT_BASENAME + '_details.json'
         self.effective_config['report_json_filename'] = self.REPORT_BASENAME + '.json'
         self.effective_config['report_text_filename'] = self.REPORT_BASENAME + '.csv'
+        self.epilog = self.get_epilog()
         self.parser = self.init_argument_parser()
         self.args = self.parser.parse_args()
 
@@ -111,14 +112,8 @@ class Config:
             self.parser.print_help()
             sys.exit(0)
 
-    def init_argument_parser(self):
-        #
-        # Part 1: Define the arguments.
-        #
-        # All actions with 'store_true' must have a default=None. This is important for the configuration chaining of
-        # the DEFAULT_CONFIG, the config-file, and the args.
-        #
-        self.epilog = textwrap.dedent(f"""\
+    def get_epilog(self):
+        return textwrap.dedent(f"""\
         How to start
 
         o Create the file usernames.txt with the user-names to be anonymized, one 
@@ -138,6 +133,14 @@ class Config:
         o Have a look at the report {self.effective_config['report_text_filename']}. More details 
           about the users are given in {self.effective_config['report_details_filename']}.
         """)
+
+    def init_argument_parser(self):
+        #
+        # Part 1: Define the arguments.
+        #
+        # All actions with 'store_true' must have a default=None. This is important for the configuration chaining of
+        # the DEFAULT_CONFIG, the config-file, and the args.
+        #
         parser = \
             argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                     description="The Anonymizer is a Python3-script to help"
@@ -235,11 +238,11 @@ class Config:
                                                         " must be enclosed in single or double."
                                                         " quotes")
         self.validate_supparser = sp.add_parser(self.VALIDATE_CMD,
-                                    parents=[parent_parser,
-                                             self.iva_parent_parser,
-                                             va_parent_parser,
-                                             post_iva_parent_parser],
-                                    help="Validates user anonymization process.")
+                                                parents=[parent_parser,
+                                                         self.iva_parent_parser,
+                                                         va_parent_parser,
+                                                         post_iva_parent_parser],
+                                                help="Validates user anonymization process.")
         self.anonymize_subparser = sp.add_parser(self.ANONYMIZE_CMD,
                                                  parents=[parent_parser,
                                                           self.iva_parent_parser,
@@ -374,7 +377,7 @@ class Config:
         # Set a useful logging-format. Not the most elegant way, but it works.
         self.log.handlers[0].setFormatter(
             # logging.Formatter('%(asctime)s:%(levelname)s:%(module)s:%(funcName)s(): %(message)s'))
-            #logging.Formatter('%(asctime)s:%(levelname)s:%(module)s:%(funcName)s %(message)s'))
+            # logging.Formatter('%(asctime)s:%(levelname)s:%(module)s:%(funcName)s %(message)s'))
             logging.Formatter('%(asctime)s:%(levelname)s:%(funcName)s %(message)s'))
         # See also https://docs.python.org/3/howto/logging.html:
         numeric_level = self.effective_config.get('loglevel')
