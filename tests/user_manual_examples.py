@@ -23,14 +23,19 @@ class Test01(BaseTestClass):
             jira_base_url = http://localhost:2990/jira
             jira_auth = Basic admin:admin
             user_list_file = {self.user_list_file.name}
-            new_owner = new_owner
+            new_owner = the-new-owner
             # Speed up things a little bit (defaults are 10/3):
             initial_delay = 2
-            regular_delay = 2"""))
+            regular_delay = 2
+            """))
         self.config_file.flush()
 
         log.info(
             f"config_file: {self.config_file.name}, assessed_inactive_users_file: {self.user_list_file.name}")
+
+        self.jira_application.admin_session.user_create('the-new-owner', f'the-new-owner@example.com', 'The New Owner',
+                                                        password=self.jira_application.get_password_for_jira_user(
+                                                            'the-new-owner'), notification=False)
 
     def tearDown(self):
         super(Test01, self).tearDown()
@@ -71,15 +76,15 @@ class Test01(BaseTestClass):
 
         self.jira_application.user_activate(user1, True)
 
-        self.user_list_file.write('\n'.join([user1, 'deleted-user', 'user-from-ad']))
+        self.user_list_file.write('\n'.join(['missplled-user', user1, 'user-from-ad']))
         self.user_list_file.flush()
 
-        self.action = 'anonymize'
+        self.action = 'validate'
         self.out_dir = 'manual/ex2'
 
     def test_manual_example_3(self):
-        user1 = 'User6Pre84'
-        user2 = 'User7Pre84'
+        user1 = 'User1Pre84'
+        user2 = 'User2Pre84'
         user3 = 'User1Post84'
         user4 = 'User2Post84'
 
