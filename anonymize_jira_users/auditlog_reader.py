@@ -135,14 +135,16 @@ class AuditlogReader:
                         #   jira-project/jira-components/jira-core/src/main/java/com/atlassian/jira/auditing/spis/
                         #       migration/mapping/AuditExtraAttributesConverter.java:
                         #   String EVENT_DESCRIPTION_I18N_KEY = "jira.auditing.extra.parameters.event.description"
-                        #   String EVENT_LONG_DESCRIPTION_I18N_KEY = "jira.auditing.extra.parameters.event.long.description"
+                        #   String EVENT_LONG_DESCRIPTION_I18N_KEY =
+                        #       "jira.auditing.extra.parameters.event.long.description"
                         key = extra_attribute['nameI18nKey']
                         if key in ['description',
                                    'jira.auditing.extra.parameters.event.description',
                                    'jira.auditing.extra.parameters.event.long.description']:
                             anonymized_data['description'] = extra_attribute['value']
                             # The 'value' is something like:
-                            #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
+                            #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104'
+                            #       >> (was: 'user4pre84') has been anonymized."
                             # The parts of interest are 'jirauser10104', 'user4pre84', 'JIRAUSER10104', 'user4pre84'.
                             # All given in single quotes.
                             parts = re.findall(r"'(.*?)'", extra_attribute['value'])
@@ -174,8 +176,8 @@ class AuditlogReader:
                         continue
                     if changed_value['from'] == display_name_to_search_for:
                         # Found the changedValues-entry with the user-display-name.
-                        # Note, this could be equal to the user-name. And in Jira < 8.4, the user-name could also be equal
-                        # to the user-key.
+                        # Note, this could be equal to the user-name. And in Jira < 8.4, the
+                        # user-name could also be equal to the user-key.
                         anonymized_data['display_name'] = changed_value['to']
                         user.anonymized_user_display_name = changed_value['to']
                 except KeyError:
@@ -268,7 +270,8 @@ class AuditlogReader:
                 # if record['summary'] == 'User anonymized':
                 anonymized_data['description'] = record['description']
                 # The 'description' is something like:
-                #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
+                #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104'
+                #       >> (was: 'user4pre84') has been anonymized."
                 # The parts of interest are 'jirauser10104', 'user4pre84', 'JIRAUSER10104', 'user4pre84'.
                 # All given in single quotes.
                 parts = re.findall(r"'(.*?)'", record['description'])
@@ -311,10 +314,8 @@ class AuditlogReader:
          """
 
         anonymized_data = user.logs['anonymized_data_from_rest']
-        is_complete = anonymized_data['user_name'] \
-                      and anonymized_data['user_key'] \
-                      and anonymized_data['display_name']
-        self.log.debug(f"{is_complete}. anonymized_data for user '{user.name}' so far is {anonymized_data}")
+        is_complete = anonymized_data['user_name'] and anonymized_data['user_key'] and anonymized_data['display_name']
+        self.log.debug(f"'{user.name}': {is_complete}. anonymized_data so far is {anonymized_data}")
         return is_complete
 
     @staticmethod
