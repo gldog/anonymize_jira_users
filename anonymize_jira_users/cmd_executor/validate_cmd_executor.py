@@ -57,7 +57,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
                     user_name = line
                     self.users.append(JiraUser(name=user_name))
 
-        self.log.info(f"found ({len(self.users)}) users: {[user.name for user in self.users]}")
+        self.log.info(f"found {len(self.users)} users: {[user.name for user in self.users]}")
         self.remaining_users = self.users.copy()
 
     def get_user_data(self):
@@ -120,10 +120,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
         self.remaining_users = remaining_users
 
     def get_anonymization_validation_data(self):
-        if len(self.users) == len(self.remaining_users):
-            self.log.info(f"for {len(self.remaining_users)} users:")
-        else:
-            self.log.info(f"for {len(self.remaining_users)} of {len(self.users)} users")
+        self.log.info(f"for {len(self.remaining_users)} users")
 
         for user in self.remaining_users:
             self.log.info(f"for '{user.name}'")
@@ -141,7 +138,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
                 r.raise_for_status()
 
     def filter_by_validation_errors(self):
-        self.log.info(f"{len(self.remaining_users)} users:")
+        self.log.info(f"{len(self.remaining_users)} users")
 
         remaining_users = []
         for user in self.remaining_users:
@@ -164,14 +161,14 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
                 user.filter_error_message = ""
                 remaining_users.append(user)
 
+        self.log.info(f"has approved {len(remaining_users)} of {len(self.remaining_users)} users for"
+                      f" anonymization: {[user.name for user in remaining_users]}")
+
         self.remaining_users = remaining_users
 
         for user in self.users:
             if user not in self.remaining_users:
                 user.action = 'skipped'
-
-        self.log.info(f"has approved {len(remaining_users)} of {len(self.users)} users for"
-                      f" anonymization: {[user.name for user in remaining_users]}")
 
     # Overview
     def post_execute(self):

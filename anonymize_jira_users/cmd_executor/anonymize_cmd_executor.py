@@ -100,7 +100,7 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
         return is_timed_out
 
     def anonymize_users(self):
-        self.log.info(f"starting anonymizing {len(self.remaining_users)} users:")
+        self.log.info(f"starting anonymizing {len(self.remaining_users)} users")
         for user_num, user in enumerate(self.remaining_users, start=1):
             self.anonymize_user(user_num, user)
 
