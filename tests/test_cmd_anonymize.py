@@ -194,6 +194,38 @@ class TestCmdAnonymize(BaseTestClass):
                            anonymized_user_name='JIRAUSER21111',
                            anonymized_user_key=json.loads(r.text)['key']))
 
+        # User with zero as name. Must not be interpreted as False.
+        user_name = '0'
+        display_name = '0'
+        r = self.jira_application.create_user_if_absent(user_name, display_name=display_name)
+        r.raise_for_status()
+        self.usernames_for_user_list_file.append(user_name)
+        self.expected_report_generator.add_user(
+            AnonymizedUser(name=user_name,
+                           key=json.loads(r.text)['key'],
+                           display_name=display_name))
+
+        user_name = 'with space'
+        display_name = 'With a space in name'
+        r = self.jira_application.create_user_if_absent(user_name, display_name=display_name,
+                                                        email='with_space@example.com')
+        r.raise_for_status()
+        self.usernames_for_user_list_file.append(user_name)
+        self.expected_report_generator.add_user(
+            AnonymizedUser(name=user_name,
+                           key=json.loads(r.text)['key'],
+                           display_name=display_name))
+
+        # user_name = 'パスワード'
+        # display_name = '現在 のログイ ン失敗'
+        # r = self.jira_application.create_user_if_absent(user_name, display_name=display_name)
+        # r.raise_for_status()
+        # self.usernames_for_user_list_file.append(user_name)
+        # self.expected_report_generator.add_user(
+        #     AnonymizedUser(name=user_name,
+        #                    key=json.loads(r.text)['key'],
+        #                    display_name=display_name))
+
         # Let each user become an issue-creator.
         for user_name in self.usernames_for_user_list_file:
             r = self.jira_application.create_issue_and_update_userpicker_customfield_by_user(user_name)
@@ -209,13 +241,6 @@ class TestCmdAnonymize(BaseTestClass):
                 continue
             r = self.jira_application.admin_session.user_deactivate(user_name)
             r.raise_for_status()
-
-        self.expected_report_generator.overview = {
-            "number_of_users_in_user_list_file": 11,
-            "number_of_skipped_users": 2,
-            "number_of_anonymized_users": 9,
-            "is_background_reindex_triggered": False
-        }
 
         self.expected_report_generator.generate()
 
@@ -272,8 +297,6 @@ class AnonymizedUser:
 @dataclass()
 class ExpectedReportGenerator:
     jira_application: JiraApplication
-    # predicted_anonymized_userdata: dict = None
-    overview: dict = None
     users: List[AnonymizedUser] = field(default_factory=list)
     report: dict = None
 
@@ -283,7 +306,7 @@ class ExpectedReportGenerator:
         pass
 
     def generate(self):
-        self.report = {'overview': self.overview, 'users': self.users}
+        self.report = {'overview': {}, 'users': self.users}
         user_names = [user.name for user in self.users]
         log.info(f"user_names {user_names}")
         r = self.jira_application.get_predicted_anonymized_userdata(user_names)
@@ -328,12 +351,12 @@ class ExpectedReportGenerator:
                 user.deleted = None
 
         # Generate 'overview':
-        self.overview['number_of_users_in_user_list_file'] = len(self.users)
-        self.overview['number_of_skipped_users'] = 0
-        self.overview['number_of_anonymized_users'] = 0
-        self.overview['is_background_reindex_triggered'] = False
+        self.report['overview']['number_of_users_in_user_list_file'] = len(self.users)
+        self.report['overview']['number_of_skipped_users'] = 0
+        self.report['overview']['number_of_anonymized_users'] = 0
+        self.report['overview']['is_background_reindex_triggered'] = False
         for user in self.users:
             if user.action == 'anonymized':
-                self.overview['number_of_anonymized_users'] += 1
+                self.report['overview']['number_of_anonymized_users'] += 1
             elif user.action == 'skipped':
-                self.overview['number_of_skipped_users'] += 1
+                self.report['overview']['number_of_skipped_users'] += 1
