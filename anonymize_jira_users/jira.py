@@ -1,3 +1,4 @@
+import inspect
 import re
 from argparse import ArgumentParser
 from collections import namedtuple
@@ -20,6 +21,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
+
+class HTTPError(Exception):
+    pass
+
+
 @dataclass()
 class Jira:
     config: Config
@@ -33,44 +39,28 @@ class Jira:
         self.session = requests.Session()
         self.version_numbers = []
 
-        errors = []
-
-        if not self.config.effective_config['jira_base_url']:
-            errors.append("Missing jira_base_url")
-        else:
-            # Remove trailing slash if present.
+        try:
+            if not self.config.effective_config['jira_base_url']:
+                raise ValueError("Missing jira_base_url")
+            # Set  base-URL, remove trailing slash if present.
             self.base_url = self.config.effective_config['jira_base_url'].rstrip('/')
-
-        if not self.config.effective_config['jira_auth']:
-            errors.append("Missing authentication")
-
-        if errors:
-            self.exiting_error_handler('; '.join(errors))
-
-        auth_error, auth_type, user_or_bearer, password = \
-            self.validate_auth_parameter(self.config.effective_config['jira_auth'])
-        if auth_error:
-            errors.append(auth_error)
-        else:
-            error_msg = self.setup_http_session(auth_type, user_or_bearer, password)
-            if error_msg:
-                errors.append(error_msg)
-            else:
-                error_msg = self.check_for_admin_permission()
-                if error_msg:
-                    errors.append(error_msg)
-                else:
-                    r = self.get_jira_serverinfo()
-                    self.version_numbers = r.json()['versionNumbers']
-                    self.execution_logger.logs['rest_get_serverInfo'] = self.serialize_response(r)
-
-        if errors:
-            self.exiting_error_handler('; '.join(errors))
+            if not self.config.effective_config['jira_auth']:
+                raise ValueError("Missing authentication")
+            auth_type, username_or_bearer_token, password = \
+                self.validate_auth_parameter(self.config.effective_config['jira_auth'])
+            self.setup_http_session(auth_type, username_or_bearer_token, password)
+            self.check_for_admin_permission()
+            r = self.get_jira_serverinfo()
+            r.raise_for_status()
+            self.version_numbers = r.json()['versionNumbers']
+            self.execution_logger.logs['rest_get_serverInfo'] = self.serialize_response(r)
+        except Exception as e:
+            self.exiting_error_handler(e)
 
     @staticmethod
     def validate_auth_parameter(auth):
         """Check parameter 'auth' for valid auth-type 'Basic' or 'Bearer, extract the auth-data, and return them.
-        :param auth: Expected is either something like 'Basic user:pass', or
+        :param auth: Expect either the format 'Basic user:pass', or
                     'Bearer NDcyOTE1ODY4Nzc4Omj+FiGVuLh/vs4WjTS9/3lGaysM'
         :return: AuthValidationResult-tuple.
             1 - Error-message in case the auth couldn't be parsed properly. None otherwise.
@@ -82,75 +72,79 @@ class Jira:
         # Split 'Basic' or 'Bearer' from the rest.
         auth_parts = re.split(r'\s+', auth, 1)
 
-        AuthValidationResult = namedtuple('AuthValidationResult',
-                                          ['error_message', 'auth_type', 'user_name', 'password'])
+        AuthValidationResult = namedtuple('AuthValidationResult', ['auth_type', 'user_name', 'password'])
 
         if len(auth_parts) < 2:
-            return AuthValidationResult("Invalid format in authentication parameter.", None, None, None)
+            raise ValueError(f"{inspect.currentframe().f_code.co_name} detected invalid format in"
+                             " authentication parameter.")
 
         auth_type = auth_parts[0].lower()
         if not auth_type.lower() in ['basic', 'bearer']:
-            return AuthValidationResult(
-                f"Invalid authentication type '{auth_type}'. Expect 'Basic' or 'Bearer'.",
-                None, None, None)
+            raise ValueError(f"{inspect.currentframe().f_code.co_name} detected invalid "
+                             f"authentication type '{auth_parts[0]}'. Expect 'Basic' or 'Bearer'.")
 
         username = None
         password = None
         if auth_type == 'basic':
-            # Split only at the first colon, as a colon could be part of the password.
-            name_and_password = re.split(r':', auth_parts[1], 1)
-            if len(name_and_password) != 2:
-                return AuthValidationResult("Invalid format for 'Basic' in authentication argument.", None, None, None)
+            # The lolon is the delimiter between the username and the password. Split between them.
+            # But split only at the first colon, as a colon could be part of the password.
+            username_and_password = re.split(r':', auth_parts[1], 1)
+            if len(username_and_password) != 2:
+                raise ValueError(f"{inspect.currentframe().f_code.co_name} detected invalid format"
+                                 " for 'Basic' in authentication argument."
+                                 " Expect 'Basic username:password'")
             else:
-                username = name_and_password[0]
-                password = name_and_password[1]
+                username = username_and_password[0]
+                password = username_and_password[1]
 
-        token = None
+        bearer_token = None
         if auth_type == 'bearer':
             if len(auth_parts) != 2:
-                return AuthValidationResult("Invalid format for 'Bearer' in authentication argument.", None, None, None)
+                raise ValueError(f"{inspect.currentframe().f_code.co_name} detected invalid format"
+                                 " for 'Bearer' in authentication argument."
+                                 " Expect 'Bearer <token>'")
             else:
-                token = auth_parts[1]
+                bearer_token = auth_parts[1]
 
         return AuthValidationResult(
-            None,
             auth_type,
-            username if auth_type == 'basic' else token,
+            username if auth_type == 'basic' else bearer_token,
             password if auth_type == 'basic' else None)
 
-    def setup_http_session(self, auth_type, user_or_bearer, passwd):
+    def setup_http_session(self, auth_type, username_or_bearer_token, passwd):
         self.session.verify = self.SSL_VERIFY
         self.session.headers = {
             'Content-Type': 'application/json'
         }
         if auth_type == 'basic':
-            self.session.auth = (user_or_bearer, passwd)
+            self.session.auth = (username_or_bearer_token, passwd)
             url = self.base_url + '/rest/auth/1/session'
             # Expect 200 OK here.
             r = self.session.get(url=url)
-            if r.status_code != 200:
-                error_msg = f"failed, auth-check returned {r.status_code}"
-                # Don't know if the text-attribute is always present. I think it should in newer versions of
-                # the requests-lib.
-                if getattr(r, 'text'):
-                    error_msg += f" with message {r.text}"
-                if r.status_code == 403:
-                    error_msg += ". This could mean there is a CAPCHA."
-                return error_msg
+            if r.status_code == 401:
+                raise HTTPError(f"{inspect.currentframe().f_code.co_name} failed with"
+                                f" {r.status_code} due to invalid credentials.")
+            if r.status_code == 403:
+                raise HTTPError(f"{inspect.currentframe().f_code.co_name} failed with"
+                                f" {r.status_code} because the login is denied due to a CAPTCHA"
+                                " requirement, throtting, or any other reason."
+                                " In case of a 403 status code it is possible that the supplied"
+                                " credentials are valid but the user is not allowed to log in at"
+                                " this point in time.")
         else:
             self.session.headers = {
-                'Authorization': 'Bearer ' + user_or_bearer,
+                'Authorization': 'Bearer ' + username_or_bearer_token,
                 'Content-Type': 'application/json'
             }
-        return ""
 
     def check_for_admin_permission(self):
         """Check if the user can log-in and is an administrator.
 
-        In Jira there are two levels of administration: The Administrator and the System Administrator. The weaker
-        Administrator is sufficient for anonymization. To check against administrator-permissions, call the
-        GET /rest/api/2/mypermissions API. This returns among others the "ADMINISTR" and the "SYSTEM_ADMIN" entries.
-        Check for permissions["ADMINISTER"]["havePermission"]==True. System-admins have both set to true.
+        In Jira there are two levels of administration: The Administrator and the System
+        Administrator. The weaker Administrator is sufficient for anonymization. To check against
+        administrator-permissions, call the GET /rest/api/2/mypermissions API. This returns among
+        others the "ADMINISTR" and the "SYSTEM_ADMIN" entries. Check for
+        permissions["ADMINISTER"]["havePermission"]==True. System-admins have both set to true.
 
         {
             ...,
@@ -160,7 +154,8 @@ class Jira:
                     "key": "ADMINISTER",
                     "name": "Jira Administrators",
                     "type": "GLOBAL",
-                    "description": "Ability to perform most administration functions (excluding Import & Export, SMTP Configuration, etc.).",
+                    "description": "Ability to perform most administration functions (excluding
+                        >> Import & Export, SMTP Configuration, etc.).",
                     "havePermission": true
                 },
                 "SYSTEM_ADMIN": {
@@ -168,7 +163,8 @@ class Jira:
                     "key": "SYSTEM_ADMIN",
                     "name": "Jira System Administrators",
                     "type": "GLOBAL",
-                    "description": "Ability to perform all administration functions. There must be at least one group with this permission.",
+                    "description": "Ability to perform all administration functions. There must be
+                        >> at least one group with this permission.",
                     "havePermission": false
                 },
             }
@@ -179,87 +175,83 @@ class Jira:
         url = self.base_url + rel_url
         r = self.session.get(url=url)
         self.execution_logger.logs['rest_get_mypermissions'] = self.serialize_response(r, False)
-        error_msg = ""
         if r.status_code == 200:
-            # Supplement a reduced JSON, as the whole JSON is very large but most of it is not of interest.
+            # Log a reduced JSON, as the whole JSON is very large but most of it is not of interest.
             self.execution_logger.logs['rest_get_mypermissions']['json'] = {}
             self.execution_logger.logs['rest_get_mypermissions']['json']['permissions'] = {}
             self.execution_logger.logs['rest_get_mypermissions']['json']['permissions']['ADMINISTER'] = \
                 r.json()['permissions']['ADMINISTER']
             # Now check if the executing user has the appropriate permission.
             if not r.json()['permissions']['ADMINISTER']['havePermission']:
-                error_msg = "Permisson-check failed because user is not an administrator." \
-                            " Only roles Administrator and System-Administrator are allowed to" \
-                            " anonymize users."
-        elif r.status_code == 401:
-            # The r.text() is a complete HTML-Page and too long for a user to be read in a console.
-            # Shorten it to a one-liner.
-            error_msg = "Permisson-check returned 401 Unauthorized."
-        elif r.status_code == 403:
-            # The r.text() is a complete HTML-Page and too long for a user to be read in a console.
-            # Shorten it to a one-liner.
-            error_msg = "Permisson-check returned 403 Forbidden."
+                raise ValueError(f"{inspect.currentframe().f_code.co_name} failed because user is"
+                                 " not an administrator. Only roles Administrator and"
+                                 " System-Administrator are allowed to anonymize users.")
         else:
-            # The documented error-codes are as follows. But they are not expected here because no query is made for
-            # an issue or a project, nor for behalf of any user.
+            # The documented error-codes are as follows.
             #   - 400 Returned if the project or issue id is invalid.
-            #   - 401 Returned if request is on behalf of anonymous user.
+            #   - 401 Returned request is on behalf of anonymous user and feature flag
+            #       `jira.restrict.anonymous.access.to.mypermissions.rest.api.enabled` is enabled
             #   - 404 Returned if the project or issue id or key is not found.
-            error_msg = f"Permisson-check GET /rest/api/2/mypermissions returned {r.status_code}"
-            # Don't know if the text-attribute is always present. I think it should in newer versions of
-            # the requests-lib.
-            if getattr(r, 'text'):
-                error_msg += f" with message {r.text}"
-        return error_msg
+            raise HTTPError(f"{inspect.currentframe().f_code.co_name} failed with {r.status_code}")
 
     def get_anonymization_progress(self, user: JiraUser = None, rel_progress_url: str = None):
-        """Call the Get Progress API and check if there is an anonymization running and to get the progress.
+        """Call the Get Progress API and check if there is an anonymization running and to get the
+        progress.
 
         There are two reasons to do this:
-            1. Before the first anonymization to check if there is any anonymization running. In this case both
-                parameters user_name and full_progress_url must be None / absent.
-            2. During the anonymization to check if it is finished. The latest response is stored for each user.
+            1. Before the first anonymization to check if there is any anonymization running. In
+                this case both parameters user_name and full_progress_url must be None / absent.
+            2. During the anonymization to check if it is finished. The latest response is stored
+                for each user.
 
         When is an anonymization running, and when it is finished?
 
-        Let's start with the HTTP status codes. 404 means "Returned if there is no user anonymization task found.". It is
-        obvious there is no anonymization running. I can return something like "No anon. running".
+        Let's start with the HTTP status codes. 404 means "Returned if there is no user
+        anonymization task found.". It is obvious there is no anonymization running. I can return
+        something like "No anon. running".
 
-        There is another status code documented: 403 "Returned if the logged-in user cannot anonymize users.". This is a
-        problem the script has handled before the anonymization has been scheduled and is not checked here
-        (in fact at the end of this function there is a r.raise_for_status() as a lifeline in case I haven't implemented
-        a bullet-proof permission check earlier).
+        There is another status code documented: 403 "Returned if the logged-in user cannot
+        anonymize users.". This is a problem the script has handled before the anonymization has
+        been scheduled and is not checked here (in fact at the end of this function there is a
+        r.raise_for_status() as a lifeline in case I haven't implemented a bullet-proof permission
+        check earlier).
 
-        There is the HTTP status code 200 left. If that is returned, I have to look into the JSON responses "status"-
-        attribute. I haven't a mapping of HTTP status-code to progress "status"-attribute yet, by I have the list of
-         "status" values read from the Jira source code
-         (jira-project/jira-components/jira-plugins/jira-rest/jira-rest-plugin/src/main/java/com/atlassian/jira/rest/v2/user/anonymization/UserAnonymizationProgressBean.java):
+        There is the HTTP status code 200 left. If that is returned, I have to look into the JSON
+        responses "status"-attribute. I haven't a mapping of HTTP status-code to progress
+        "status"-attribute yet, by I have the list of "status" values read from the Jira source
+        code (jira-project/jira-components/jira-plugins/jira-rest/jira-rest-plugin/src/main/java/
+            >> com/atlassian/jira/rest/v2/user/anonymization/UserAnonymizationProgressBean.java):
         These are:
           - COMPLETED The anonymization process finished. Some errors or warnings might be present.
-          - INTERRUPTED There is no connection with the node that was executing the anonymization process. Usually, this
-                means that the node crashed and the anonymization task needs to be cleaned up from the cluster.
+          - INTERRUPTED There is no connection with the node that was executing the anonymization
+                process. Usually, this means that the node crashed and the anonymization task needs
+                to be cleaned up from the cluster.
           - IN_PROGRESS The anonymization process is still being performed.
-          - VALIDATION_FAILED The anonymization process hasn't been started because the validation has failed for some
-                anonymization handlers.
+          - VALIDATION_FAILED The anonymization process hasn't been started because the validation
+                has failed for some anonymization handlers.
 
         Note, I have seen a "status" "IN_PROGRESS" with a "currentProgress" of 100.
 
         As a conclusion I can say:
 
-        HTTP status | "status" attribute| Anonymization not running (anymore) / is finished |   Anonymization is running
-            404     |   don't care      |   Yes                                                     No
-            200     |   IN_PROGRESS     |   No                                                      Yes
-            200     |   other           |   Yes                                                     No
+        HTTP status | "status" attribute| An. not running (anymore) | An. is running
+                    |                   |   or is finished          |
+                    +                   +                           +
+            404     |   don't care      |   Yes                     |   No
+            200     |   IN_PROGRESS     |   No                      |   Yes
+            200     |   other           |   Yes                     |   No
 
-        The "errors" and "warnings" are not evaluated in this implementation step. Maybe later. I assume the validation
-        does the job to show errors, and the filter_users() will filter users out in case of errors.
+        The "errors" and "warnings" are not evaluated in this implementation step. Maybe later. I
+        assume the validation does the job to show errors, and the filter_users() will filter users
+        out in case of errors.
 
-        :param user: Optional. Given if there has been scheduled one of our anonymizations. In this case, the
-            full_progress_url is also mandatory.
-        :param rel_progress_url: Optional. Given if there has been scheduled one of our anonymizations. In this case,
-            the user_name is also mandatory.
+        :param user: Optional. Given if there has been scheduled one of our anonymizations. In this
+        case, the full_progress_url is also mandatory.
+        :param rel_progress_url: Optional. Given if there has been scheduled one of our
+        anonymizations. In this case, the user_name is also mandatory.
         :return:
-            o The progress (percentage) from the returned JSON. 100 doesn't mean the "status" is also "COMPLETED".
+            o The progress (percentage) from the returned JSON. 100 doesn't mean the "status" is
+                also "COMPLETED".
             o -1: if HTTP-status is 404 ("Returned if there is no user anonymization task found.").
             o -2: if the "status" is "COMPLETED". I assume a "currentProgress" of 100.
             o -3: Other "status" than "IN_PROGRESS" and "COMPLETED". Means "not in progress".
@@ -276,7 +268,8 @@ class Jira:
             url = self.base_url + rel_url
             self.log.debug(": Checking if any anonymization is running")
         r = self.session.get(url=url)
-        # If this call is for a specific user/anonymization-task, store the response in the user's data.
+        # If this call is for a specific user/anonymization-task, store the response in the user's
+        # data.
         r_serialized = self.serialize_response(r)
         if user:
             user.logs['rest_get_anonymization_progress'] = r_serialized
@@ -331,8 +324,8 @@ class Jira:
             serialization in case of large orun interesting responses.
         :return:
         """
-        # The body is a b'String in Python 3 and is not readable by json.dumps(). It has to be decoded before.
-        # The 'utf-8' is only a suggestion here.
+        # The body is a b'String in Python 3 and is not readable by json.dumps(). It has to be
+        # decoded before. The 'utf-8' is only a suggestion here.
         decoded_body = r.request.body.decode('utf-8') if r.request.body else None
         try:
             r_json = r.json()
@@ -351,7 +344,6 @@ class Jira:
         rel_url = '/rest/api/2/serverInfo'
         url = self.base_url + rel_url
         r = self.session.get(url=url)
-        r.raise_for_status()
         return r
 
     def is_jira_version_less_then(self, major, minor):
