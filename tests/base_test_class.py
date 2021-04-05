@@ -53,29 +53,25 @@ class BaseTestClass(unittest.TestCase):
         pass
 
     @classmethod
-    def execute_anonymizer(cls, cmd):
+    def execute_anonymizer(cls, cmd, is_log_output=False, out_filepath=None):
         zipapp.create_archive(f'../{cls.ANONYMIZER_NAME}')
         cmd = f'{cls.PYTHON_BINARY} ../{cls.ANONYMIZER_NAME}.pyz {cmd}'
-        # cmd = f'{cls.PYTHON_BINARY} ../anonymize_jira_users.py {cmd}'
+        # OLD: cmd = f'{cls.PYTHON_BINARY} ../anonymize_jira_users.py {cmd}'
         log.info(f"execute: {cmd}")
-        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        r = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # result contains: result.returncode, result.stderr, result.stdout.
-        return result
-
-    @classmethod
-    def execute_anonymizer_and_log_output(cls, cmd, out_filepath=None):
-        r = cls.execute_anonymizer(cmd)
-        # result r contains: r.returncode, r.stderr, r.stdout.
-        decoded_stdout = r.stdout.decode()
-        decoded_stderr = r.stderr.decode()
-        print(f"r.returncode: {r.returncode}")
-        print(f"r.stderr:\n{decoded_stderr}")
-        print(f"r.stdout:\n{decoded_stdout}")
-        if out_filepath:
-            with open(out_filepath, 'w') as f:
-                f.write(f"r.returncode: {r.returncode}\n")
-                f.write(f"r.stderr:\n{decoded_stderr}")
-                f.write(f"r.stdout:\n{decoded_stdout}")
+        if is_log_output or out_filepath:
+            decoded_stdout = r.stdout.decode()
+            decoded_stderr = r.stderr.decode()
+            if is_log_output:
+                log.info(f"r.returncode: {r.returncode}")
+                log.info(f"r.stderr:\n{decoded_stderr}")
+                log.info(f"r.stdout:\n{decoded_stdout}")
+            if out_filepath:
+                with open(out_filepath, 'w') as f:
+                    f.write(f"r.returncode: {r.returncode}\n")
+                    f.write(f"r.stderr:\n{decoded_stderr}")
+                    f.write(f"r.stdout:\n{decoded_stdout}")
         return r
 
     @classmethod

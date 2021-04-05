@@ -28,7 +28,7 @@ class TestCmdAnonymize(BaseTestClass):
         """
         Setting up this tests is quite speific to this tests, so all set-up stuff is placed here.
         """
-        self.is_include_users_from_generated_test_resouces = False
+        self.is_include_users_from_generated_test_resouces = True
 
         pathlib.Path(self.out_base_dir_path).mkdir(parents=True)
 
@@ -267,7 +267,8 @@ class TestCmdAnonymize(BaseTestClass):
 
         out_dir = self.out_base_dir_path + '/anonymize'
         out_logfile = out_dir + '/log.out'
-        r = self.execute_anonymizer_and_log_output(f'anonymize -c {self.config_file_path} -o {out_dir}', out_logfile)
+        r = self.execute_anonymizer(f'anonymize -c {self.config_file_path} -o {out_dir}', is_log_output=True,
+                                    out_filepath=out_logfile)
         self.assertEqual(0, r.returncode)
 
         with open(pathlib.Path(out_dir).joinpath('report.json'), 'r') as f:

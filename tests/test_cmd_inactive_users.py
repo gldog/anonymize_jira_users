@@ -80,7 +80,7 @@ class TestCmdInactiveUsers(BaseTestClass):
         self.write_config_file(
             filename=config_file_path)
         cmd = f'inactive-users -c {config_file_path} -o {subtest_path}'
-        r = self.execute_anonymizer_and_log_output(cmd, subtest_path + '/log.out')
+        r = self.execute_anonymizer(cmd, is_log_output=True, out_filepath=subtest_path + '/log.out')
         self.assertEqual(0, r.returncode)
         expected_file_content = self.create_expected_filecontent(users_for_user_list_file, [])
         self.compare_expected_content_with_got_file(expected_file_content, subtest_path + '/inactive_users.cfg')
@@ -92,7 +92,7 @@ class TestCmdInactiveUsers(BaseTestClass):
             filename=config_file_path,
             exclude_groups=['exclude_group_1'])
         cmd = f'inactive-users -c {config_file_path} -o {subtest_path}'
-        r = self.execute_anonymizer_and_log_output(cmd, subtest_path + '/log.out')
+        r = self.execute_anonymizer(cmd, is_log_output=True, out_filepath=subtest_path + '/log.out')
         self.assertEqual(0, r.returncode)
         expected_file_content = self.create_expected_filecontent(users_for_user_list_file, ['in_eg_1'])
         self.compare_expected_content_with_got_file(expected_file_content, subtest_path + '/inactive_users.cfg')
@@ -104,7 +104,7 @@ class TestCmdInactiveUsers(BaseTestClass):
             filename=config_file_path,
             exclude_groups=['exclude_group_1', 'exclude_group_2'])
         cmd = f'inactive-users -c {config_file_path} -o {subtest_path}'
-        r = self.execute_anonymizer_and_log_output(cmd, subtest_path + '/log.out')
+        r = self.execute_anonymizer(cmd, is_log_output=True, out_filepath=subtest_path + '/log.out')
         self.assertEqual(0, r.returncode)
         expected_file_content = self.create_expected_filecontent(users_for_user_list_file, ['in_eg_'])
         self.compare_expected_content_with_got_file(expected_file_content, subtest_path + '/inactive_users.cfg')

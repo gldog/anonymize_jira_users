@@ -56,9 +56,9 @@ class TestMassAnonymization(BaseTestClass):
             self.config_file_path = self.out_base_dir_path + '/my-tests-config.cfg'
             self.write_config_file(filename=self.config_file_path, user_list_file=user_list_file_path)
 
-            r = self.execute_anonymizer_and_log_output(
-                f'anonymize -c {self.config_file_path} -o {self.out_base_dir_path}',
-                self.out_base_dir_path + '/log.out')
+            r = self.execute_anonymizer(
+                f'anonymize -c {self.config_file_path} -o {self.out_base_dir_path}',is_log_output=True,
+                out_filepath=self.out_base_dir_path + '/log.out')
             # decoded_stdout = r.stdout.decode('Latin-1')
             # decoded_stderr = r.stderr.decode('Latin-1')
             # print("r.returncode {}".format(r.returncode))
