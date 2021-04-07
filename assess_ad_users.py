@@ -13,32 +13,41 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import logging
+import locale
+import os
 import re
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
+# Download it from: http://www.joeware.net/freetools/tools/adfind/
+AD_QUERY_TOOL = 'adfind'
+ENCODING = 'latin-1'
+
 DIRECTORY_ATTRIBUTES = [
-    'Benutzername',
-    'Vollst',
-    'Konto aktiv',
-    'Konto abgelaufen'
+    'cn',
+    'mail',
+    'accountExpires'
 ]
 
-log = logging.getLogger()
-logging.basicConfig(level=logging.WARNING)
-log.handlers[0].setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(message)s'))
-numeric_level = getattr(logging, 'DEBUG', None)
-log.setLevel(numeric_level)
 
-# net_binary_name = '/Users/jo/atlas/prj/anonymize_jira_users/net_mock.py'
-net_binary_name = 'net'
+def format_ldap_timestamp(timestamp):
+    """
+    This function is copied from https://gist.github.com/caot/f57fbf419d6b37d53f6f4a525942cafc.
+    About "Account-Expires attribute":
+        https://docs.microsoft.com/en-us/windows/win32/adschema/a-accountexpires
+    "Convert 18-digit LDAP/FILETIME timestamps to human-readable date":
+        https://www.epochconverter.com/ldap
+    """
+    timestamp = float(timestamp)
+    seconds_since_epoch = timestamp / 10 ** 7
+    loc_dt = datetime.fromtimestamp(seconds_since_epoch)
+    loc_dt -= timedelta(days=(1970 - 1601) * 365 + 89)
+    return loc_dt
 
 
-def read_user_names_from_infile(file_name):
+def read_user_names_from_file(file_name):
     user_names = []
     with open(file_name, 'r') as f:
         infile = f.read()
@@ -52,68 +61,111 @@ def read_user_names_from_infile(file_name):
     return user_names
 
 
-def read_ad_user_data_from_file(filename):
-    with open(filename, 'r', encoding=None) as f:
-        infile = f.read()
-        return infile
+def count_by_ldap_filter(ldap_filter):
+    cmd = [AD_QUERY_TOOL, '-f', ldap_filter, '-c']
+    r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+    decoded_stdout = r.stdout.decode(ENCODING)
+    # Search a line of format:
+    #   "1 Objects returned"
+    m = re.search(r'^\s*([0-9]+)\s+Objects returned', decoded_stdout, re.MULTILINE)
+    return int(m.group(1)) if m else 0
 
 
-def parse_ad_user_data(user_data):
-    lines = re.split(r'[\n\r]+', user_data)
+def get_by_ldap_filter(ldap_filter):
+    cmd = [AD_QUERY_TOOL, '-f', ldap_filter]
+    r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
+    return r.stdout.decode(ENCODING)
+
+
+def get_ad_properties_for_san(sam_account_name, ad_attributes=None):
+    decoded_stdout = get_by_ldap_filter(f'samAccountName={sam_account_name}')
+    lines = re.split(r'[\n\r]+', decoded_stdout)
     user_properties = {}
     for line in lines:
         line = line.strip()
-        for da in DIRECTORY_ATTRIBUTES:
-            if line.startswith(da):
-                parts = re.split(r'\s{2,}', line)
-                user_properties[parts[0]] = parts[1]
+        # print(f"LINE: {line}")
+        ad_attributes = ad_attributes if ad_attributes else DIRECTORY_ATTRIBUTES
+        for da in ad_attributes:
+            # The lines are in the following format:
+            # >cn: The Animal
+            # >mail: animal@example.com
+            if line.startswith(f'>{da}:'):
+                line = line.replace(f'>{da}: ', '')
+                if da == 'accountExpires':
+                    # The date is given as "18-digit LDAP/FILETIME timestamps". It is not always
+                    # set to a real date. Sometimes it is set to a "marker"-date indicating a
+                    # date far in the future.
+                    # Unfortunately, the format_ldap_timestamp() can't convert timestamps in higher
+                    # ranges. The magic number "13" limits the timestamps to those around "now":
+                    # 130000000000000000: 14. December 2012 23:06:40
+                    # 139999999999999999: 23. August 2044 00:53:20
+                    # If not in range, the timestamp is printed to the file rather than the
+                    # human readable format.
+                    if line.startswith('13'):
+                        line = format_ldap_timestamp(line)
+                user_properties[da] = line
     return user_properties
 
 
-def get_ad_data_for_user(user_name):
-    cmd = '{} user {} /domain'.format(net_binary_name, user_name)
-    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    # result contains: returncode, stderr, stdout
-    return result
+def print_usage():
+    print(f"Usage: {os.path.basename(__file__)} <user-name-file>")
 
 
 def main():
-    print("getpreferredencoding {}, getfilesystemencoding {}".format(locale.getpreferredencoding(),
-                                                                     sys.getfilesystemencoding()))
-    in_file_name = sys.argv[1]
-    user_names = read_user_names_from_infile(in_file_name)
-    log.info("User-names {}".format(user_names))
+    print("Always call me in a Windows CMD-shell.")
+    if len(sys.argv) != 2:
+        print_usage()
+        sys.exit(1)
+    print(f"getpreferredencoding {locale.getpreferredencoding()}, getfilesystemencoding {sys.getfilesystemencoding()}")
+    user_name_file = sys.argv[1]
+    user_names = read_user_names_from_file(user_name_file)
+    print(f"User-names ({len(user_names)}): {user_names}")
     lines = []
     for user_name in user_names:
-        # log.info("User {}".format(user_name))
-        net_result = get_ad_data_for_user(user_name)
-        if net_result.returncode == 0:
-            # user_properties = parse_ad_user_data(net_result.stdout.decode('utf-8'))
-            decoded_stdout = net_result.stdout.decode('Latin-1')
-            user_properties = parse_ad_user_data(decoded_stdout)
-            # log.debug("user_properties {}".format(user_properties))
-            line_parts = []
-            for k, v in user_properties.items():
-                line_parts.append("{}: {}".format(k, v))
-            line = '; '.join(line_parts)
+        # log.info(f"User {user_name}")
+        # Expect 0 or 1, as samAccountName is expected as unique.
+        if count_by_ldap_filter(f'sAMAccountName={user_name}'):
             # The user has been found in the directory. It is likely they shall not be anonymized.
-            log.info("User {}: {}".format(user_name, line))
-            lines.append('# {}'.format(line))
-            lines.append("#{}".format(user_name))
+            ad_properties = get_ad_properties_for_san(user_name)
+            line_parts = []
+            for k, v in ad_properties.items():
+                line_parts.append(f'{k}: {v}')
+            line = '; '.join(line_parts)
+            print(f"User {user_name}: {line}")
+            lines.append(f'# {line}')
+
+            # Is there any other dataset with that user-name 'cn'? This could mean, the same user has
+            # multiple accounts. Let the caller know.
+            ldap_filter = f'(&(cn={ad_properties["cn"]})(!(sAMAccountName={user_name})))'
+            num_others = count_by_ldap_filter(ldap_filter)
+            # DBG: print(f":: ldap_filter {ldap_filter}; num_others {num_others}")
+            if num_others > 0:
+                if num_others == 1:
+                    count_phrase = 'is 1 more user'
+                else:
+                    count_phrase = f'are {num_others} more users'
+                message = f'# NOTE: There {count_phrase} in AD with cn={ad_properties["cn"]}'
+                lines.append(message)
+                print(f"User {user_name}: {message}")
+                cmd = f'{AD_QUERY_TOOL} -f "cn={ad_properties["cn"]}"'
+                message = f"#  To get the data of all users including {user_name}, type '{cmd}'"
+                lines.append(message)
+                print(f"User {user_name}: {message}")
+            lines.append(f'#{user_name}')
         else:
             # The user not has been found in the directory. It is likely they shall be anonymized.
-            line = "Not in directory"
-            log.info("User {}: {}".format(user_name, line))
-            lines.append('# {}'.format(line))
-            lines.append("{}".format(user_name))
-        lines.append("")
+            user_info = 'Not found in directory'
+            print(f'User {user_name}: {user_info}')
+            lines.append(f'# {user_info}')
+            lines.append(f"{user_name}")
+        lines.append('')
 
-    stem_name = Path(in_file_name).stem
-    out_file_name = "{}_assessed.txt".format(stem_name)
+    stem_name = Path(user_name_file).stem
+    out_file_name = f'{stem_name}_assessed.cfg'
     with open(out_file_name, 'w', encoding='utf-8') as f:
         # Create a date/time-string, but remove the nit-picky microseconds.
-        date_string = "{}".format(datetime.now()).split('.')[0]
-        f.write("# File generated at {}\n\n".format(date_string))
+        date_string = str(datetime.now()).split('.')[0]
+        f.write(f'# File generated at {date_string}\n\n')
         f.write('\n'.join(lines))
 
 
