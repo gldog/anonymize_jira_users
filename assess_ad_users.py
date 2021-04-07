@@ -18,7 +18,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 # Download it from: http://www.joeware.net/freetools/tools/adfind/
@@ -30,21 +30,6 @@ DIRECTORY_ATTRIBUTES = [
     'mail',
     'accountExpires'
 ]
-
-
-def format_ldap_timestamp(timestamp):
-    """
-    This function is copied from https://gist.github.com/caot/f57fbf419d6b37d53f6f4a525942cafc.
-    About "Account-Expires attribute":
-        https://docs.microsoft.com/en-us/windows/win32/adschema/a-accountexpires
-    "Convert 18-digit LDAP/FILETIME timestamps to human-readable date":
-        https://www.epochconverter.com/ldap
-    """
-    timestamp = float(timestamp)
-    seconds_since_epoch = timestamp / 10 ** 7
-    loc_dt = datetime.fromtimestamp(seconds_since_epoch)
-    loc_dt -= timedelta(days=(1970 - 1601) * 365 + 89)
-    return loc_dt
 
 
 def read_user_names_from_file(file_name):
@@ -72,7 +57,7 @@ def count_by_ldap_filter(ldap_filter):
 
 
 def get_by_ldap_filter(ldap_filter):
-    cmd = [AD_QUERY_TOOL, '-f', ldap_filter]
+    cmd = [AD_QUERY_TOOL, '-f', ldap_filter, '-tdcs']
     r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True)
     return r.stdout.decode(ENCODING)
 
@@ -91,18 +76,6 @@ def get_ad_properties_for_san(sam_account_name, ad_attributes=None):
             # >mail: animal@example.com
             if line.startswith(f'>{da}:'):
                 line = line.replace(f'>{da}: ', '')
-                if da == 'accountExpires':
-                    # The date is given as "18-digit LDAP/FILETIME timestamps". It is not always
-                    # set to a real date. Sometimes it is set to a "marker"-date indicating a
-                    # date far in the future.
-                    # Unfortunately, the format_ldap_timestamp() can't convert timestamps in higher
-                    # ranges. The magic number "13" limits the timestamps to those around "now":
-                    # 130000000000000000: 14. December 2012 23:06:40
-                    # 139999999999999999: 23. August 2044 00:53:20
-                    # If not in range, the timestamp is printed to the file rather than the
-                    # human readable format.
-                    if line.startswith('13'):
-                        line = format_ldap_timestamp(line)
                 user_properties[da] = line
     return user_properties
 
@@ -144,13 +117,13 @@ def main():
                     count_phrase = 'is 1 more user'
                 else:
                     count_phrase = f'are {num_others} more users'
-                message = f'# NOTE: There {count_phrase} in AD with cn={ad_properties["cn"]}'
-                lines.append(message)
-                print(f"User {user_name}: {message}")
+                message = f'NOTE: There {count_phrase} in AD with cn={ad_properties["cn"]}'
+                lines.append(f'#   {message}')
+                print(f"User {user_name}:   {message}")
                 cmd = f'{AD_QUERY_TOOL} -f "cn={ad_properties["cn"]}"'
-                message = f"#  To get the data of all users including {user_name}, type '{cmd}'"
-                lines.append(message)
-                print(f"User {user_name}: {message}")
+                message = f"To get the data of all users including {user_name}, type '{cmd}'"
+                lines.append(f'#   {message}')
+                print(f"User {user_name}:   {message}")
             lines.append(f'#{user_name}')
         else:
             # The user not has been found in the directory. It is likely they shall be anonymized.
