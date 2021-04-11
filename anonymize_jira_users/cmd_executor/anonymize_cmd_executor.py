@@ -93,7 +93,7 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
                 is_timed_out = False
                 break
             if datetime.now() >= next_progress_print_at:
-                self.log.info(f"Progress {progress_percentage}%")
+                self.log.info(f": {progress_percentage}%")
                 next_progress_print_at += timedelta(minutes=1)
             time.sleep(self.config.effective_config['regular_delay'])
 

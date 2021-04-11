@@ -103,7 +103,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
         self.remaining_users = remaining_users
 
     def filter_by_active_status(self):
-        self.log.info(f"{len(self.remaining_users)} users:")
+        self.log.info(f"{len(self.remaining_users)} users")
         remaining_users = []
         for user in self.remaining_users:
             # 'asctive' can be None, False, or True. Non is the default nor not yet initialized
@@ -120,7 +120,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
         self.remaining_users = remaining_users
 
     def get_anonymization_validation_data(self):
-        self.log.info(f"for {len(self.remaining_users)} users")
+        self.log.info(f"for {len(self.remaining_users)} users:")
 
         for user in self.remaining_users:
             self.log.info(f"for '{user.name}'")

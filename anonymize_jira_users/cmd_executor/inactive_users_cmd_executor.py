@@ -41,7 +41,7 @@ class InactiveUsersCmdExecutor(IVABaseCmdExecutor):
         report_dirpath = self.config.create_report_dir()
         file_path = report_dirpath.joinpath(self.config.INACTIVE_USERS_OUTFILE)
         with open(file_path, 'w') as f:
-            print(f"# File generated at {Tools.now_to_date_string()}\n", file=f)
+            print(f"# File {self.config.INACTIVE_USERS_OUTFILE} generated at {Tools.now_to_date_string()}\n", file=f)
             print(f"# Users: {len(remaining_inactive_users)}\n", file=f)
             print("# User attributes: User-name; user-key; display-name; email-address\n", file=f)
             for user in remaining_inactive_users:
