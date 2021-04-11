@@ -447,6 +447,8 @@ class Jira:
         start_at = 0
         user_count_so_far = 0
         users = []
+        self.execution_logger.logs['rest_user_search'] = {}
+        page_no = 1
         # Query the paged API until an empty page.
         while not is_beyond_last_page:
             url_params = {
@@ -456,10 +458,12 @@ class Jira:
                 # 'maxResults': max_results,
                 'startAt': start_at}
             r = self.session.get(url=url, params=url_params)
-            r_serialized = self.serialize_response(r, False)
-            self.log.debug(r_serialized)
+            self.log.debug(self.serialize_response(r, False))
+            self.execution_logger.logs['rest_user_search'][f'page_{page_no}'] = self.serialize_response(r, True)
+            page_no += 1
             r.raise_for_status()
             user_count_so_far += len(r.json())
+            self.log.debug(f"; user_count_so_far {user_count_so_far}")
             if len(r.json()) == 0:
                 is_beyond_last_page = True
                 # Warning about JRASERVER-29069.
