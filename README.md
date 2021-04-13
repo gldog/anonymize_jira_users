@@ -11,8 +11,6 @@ Other articles
 User Manual
 =
 
-- [README](#readme)
-- [User Manual](#user-manual)
 - [Quick-start](#quick-start)
 - [Command Line Options](#command-line-options)
     * [Overview](#overview)
@@ -37,18 +35,18 @@ User Manual
         + [About](#about)
         + [Example 1: Anonymization without errors](#example-1--anonymization-without-errors)
 - [Example-Workflow](#example-workflow)
+- [My Workflow](#my-workflow)
 - [History of anonymization and related functions](#history-of-anonymization-and-related-functions)
 - [Known issues](#known-issues)
     * [Validation error-messages in unexpected language](#validation-error-messages-in-unexpected-language)
     * [Anonymization slow in case Jira is connected to a Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-a-oracle-db)
-    * [Anonymized user-/key-/display-name is null](#anonymized-user--key--display-name-is-null)
     * [Tickets at Atlassian](#tickets-at-atlassian)
 
 <small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents
 generated with markdown-toc</a></i></small>
 
-The Anonymizer is a Python3-script to help Jira-admins anonymizing Jira-users in bulk.
-It is compatible to Python >= 3.7.
+The Anonymizer is a Python3-script to help Jira-admins anonymizing Jira-users in bulk. It
+is compatible to Python >= 3.7.
 
 Atlassian introduced user anonymization in Jira 8.7. So the Anonymizer works in Jira
 versions equal or greater than 8.7.
@@ -1068,7 +1066,7 @@ The commands are:
 
     #
     # 2. Assess and filter the users in inactive_users.cfg manually. Create a new 
-    #   user-list assessed_inactive_users.cfg.
+    #   user-list inactive_users_assessed.cfg.
     #   ...
     #
 
@@ -1081,7 +1079,7 @@ The commands are:
     mkdir -p $REPORTS_BASE_DIR/2_validate
     python anonymize_jira_users.pyz validate -c $CONFIG_FILE \
         -o $REPORTS_BASE_DIR/2_validate \
-        -i $REPORTS_BASE_DIR/1_inactive_users/assessed_inactive_users.cfg 2>&1
+        -i $REPORTS_BASE_DIR/1_inactive_users/inactive_users_assessed.cfg 2>&1
         | tee $REPORTS_BASE_DIR/2_validate/out.log
 
 .
@@ -1092,7 +1090,7 @@ The commands are:
     mkdir -p $REPORTS_BASE_DIR/3_anonymize
     python anonymize_jira_users.pyz anonymize -c $CONFIG_FILE \
         -o $REPORTS_BASE_DIR/3_anonymize \
-        -i $REPORTS_BASE_DIR/1_inactive_users/assessed_inactive_users.cfg 2>&1
+        -i $REPORTS_BASE_DIR/1_inactive_users/inactive_users_assessed.cfg 2>&1
         | tee $REPORTS_BASE_DIR/3_anonymize/out.log
 
 .
@@ -1100,6 +1098,58 @@ The commands are:
     #
     # 5. Make a re-index. You could let the Anonymizer do this by setting the option '-x'.
     #
+
+---
+
+# My Workflow
+
+I maintain 3 Jira instances B, C, and O. Instance C is connected to a MS Active Directory,
+and B and O have local user-management maintained by a specific department.
+
+Instance C:
+
+The workflow is according to the steps in "Example Workflow", but assessing the users is
+supported by Python-script `assess_ad_users.py` located in the tool-directory.
+
+I my company, employees going to leave will get an expire-date in the near future in AD.
+Two weeks after that expire-date, the user is automatically removed from AD.
+
+Employees who have left for parental leave, sabbatical leave, or other similar reasons
+will return. These employees get a placeholder expire-date of e.g. 01.01.3000 and will be
+kept in AD.
+
+For anonymizing this means: If a Jira-user's account can't be found in AD, they definetely
+shall be anonymized.
+
+The steps are:
+
+1. Let the Anonymizer create a list of users potentially to be anonymized.
+2. Assess the users:
+    1. Call
+       `python assess_ad_users.py %REPORTS_BASE_DIR%\1_inactive_users\inactive_users.cfg`
+       . This will check each user for existance in AD. The script writes the new
+       file `inactive_users_assessed.cfg`. This file is basically `inactive_users.cfg`.
+       But it is extended with data from AD. If a user is still in AD, the user is
+       commented out.
+    2. Assess the users manually afterwards. Mayby you know something about them. E.g. if
+       they have new AD-accounts and they have filters or dashboards thay want to switch
+       from the former account to the new one, and so forth. Comment out these users.
+3. Let the Anonymizer validate the users in inactive_users_assessed.cfg.
+4. Let the Anonymizer anonymize the users in assessed_inactive_users.cfg.
+5. Archive the data of the anonymized users: The mapping of the user-name to the
+   anonymized user-name/key and -display-name is archived for legal- and revision-
+   department. This is done on a restricted Confluence page. To put the data in the page,
+   the report.csv is imported to a MS Excel sheet, and copied from there to the page (this
+   is the only way I know to let Confluence detect the 'table format').
+
+Instance B and O:
+
+As instance C, but with a different step 2:
+
+Assess the users: Send the list to the department responsible for the user-management and
+let them comment out users to not anoymize.
+
+
 
 ---
 
