@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import logging
 import re
@@ -6,7 +7,7 @@ import unittest
 import zipapp
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List
+from typing import List, Any
 
 import requests
 import urllib3
@@ -342,3 +343,82 @@ class JiraApplication:
             return user_name
         else:
             return cls.std_password
+
+
+@dataclass
+class AnonymizedUser:
+    name: str = None
+    key: str = None
+    display_name: str = None
+    active: Any = False
+    # Since Jira 8.10.
+    deleted: Any = False
+    filter_error_message: str = ''
+    anonymized_user_name: str = None
+    anonymized_user_key: str = None
+    anonymized_user_display_name: str = None
+    action: str = 'anonymized'
+
+
+@dataclass()
+class ExpectedReportGenerator:
+    jira_application: JiraApplication
+    users: List[AnonymizedUser] = field(default_factory=list)
+    overview: dict = None
+    report: dict = None
+
+    def add_user(self, anonymized_user):
+        """Make a copy of the AnonymizedUser and add it to the list. """
+        self.users.append(AnonymizedUser(**dataclasses.asdict(anonymized_user)))
+        pass
+
+    def generate(self):
+        self.report = {'overview': {}, 'users': self.users}
+        user_names = [user.name for user in self.users]
+        log.info(f"user_names {user_names}")
+        r = self.jira_application.get_predicted_anonymized_userdata(user_names)
+        r.raise_for_status()
+        predicted_anonymized_userdata = r.json()
+        log.info(f"predicted_anonymized_userdata {predicted_anonymized_userdata}")
+
+        for user in self.users:
+            if user.filter_error_message:
+                continue
+
+            paud_for_user = predicted_anonymized_userdata[user.name]
+
+            if self.jira_application.is_jiraversion_lt810() and user.deleted:
+                user.anonymized_user_name = ''
+                user.anonymized_user_key = ''
+                user.anonymized_user_display_name = ''
+            else:
+                if user.anonymized_user_name is None:
+                    user.anonymized_user_name = 'jirauser{}'.format(paud_for_user['appUserId'])
+                if user.anonymized_user_key is None:
+                    user.anonymized_user_key = 'JIRAUSER{}'.format(paud_for_user['appUserId'])
+                if user.anonymized_user_display_name is None:
+                    user.anonymized_user_display_name = paud_for_user['anonymizedDisplayName']
+
+            if self.jira_application.is_jiraversion_lt810():
+                if user.deleted:
+                    # In Jira-versions less than 8.10, deleted users could not retrieved by the REST-API. As a
+                    # consequence, most of the attributes the the report are None.
+                    user.key = None
+                    user.display_name = None
+                    user.active = None
+                    user.validation_has_errors = False
+                    user.filter_is_anonymize_approval = False
+                    # This message comes from Jiras REST API.
+                    # user.filter_error_message = f"The user named '{user.user_name}' does not exist"
+                    user.filter_error_message = self.jira_application.get_error_msg_missing_user_in_sys_default_lang(
+                        user.name)
+                    user.anonymized_user_name = ''
+                    user.anonymized_user_key = ''
+                    user.anonymized_user_display_name = ''
+                    user.action = 'skipped'
+                # The 'deleted'-attribute was introduce in Jira 8.10. In tests with Jira-version less than 8.10
+                # this attribute is always None.
+                user.deleted = None
+
+        # Generate 'overview':
+        self.report['overview'] = self.overview

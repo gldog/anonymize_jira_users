@@ -84,7 +84,7 @@ class AuditlogReader:
             r = self.jira.get_audit_events_since(anonymization_start_date_utc)
             r.raise_for_status()
             audit_entry_count = r.json()['pagingInfo']['size']
-            message = f"returned audit log entries after {waited_seconds_so_far} seconds: {audit_entry_count}."
+            message = f"'{user.name}' returned audit log entries after {waited_seconds_so_far} seconds: {audit_entry_count}."
             self.log.info(message + " TODO: This will become a DEBUG level message.")
             user.logs['rest_auditing']['entries_after_seconds_msg'] = message
             if audit_entry_count > 0:

@@ -34,6 +34,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
     # Override
     def execute(self):
         self.read_users_from_user_list_file()
+        self.filter_by_duplicate()
         self.get_user_data()
         self.filter_by_existance()
         self.filter_by_active_status()
@@ -60,11 +61,25 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
         self.log.info(f"found {len(self.users)} users: {[user.name for user in self.users]}")
         self.remaining_users = self.users.copy()
 
+    def filter_by_duplicate(self):
+        self.log.info(f"{len(self.remaining_users)} users")
+        remaining_users = []
+        lower_user_names = []
+        for user in self.remaining_users:
+            if user.name.lower() not in lower_user_names:
+                remaining_users.append(user)
+                lower_user_names.append(user.name.lower())
+            else:
+                user.filter_error_message = 'Duplicate in user-name-file'
+                self.log.warning(f"blocks '{user.name}': {user.filter_error_message}")
+
+        self.remaining_users = remaining_users
+
     def get_user_data(self):
         """Get each user's data before anonymization."""
 
-        self.log.info(f"for {len(self.users)} users")
-        for user in self.users:
+        self.log.info(f"for {len(self.remaining_users)} users")
+        for user in self.remaining_users:
             self.log.debug(f"for '{user.name}'")
             r = self.jira.get_user_data(user_name=user.name, is_include_deleted=True)
             r_serialized = Jira.serialize_response(r, True)
@@ -98,7 +113,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
                 if errors:
                     user.filter_error_message = ', '.join(errors)
                     self.log.debug(f"for '{user.name}' returned the error {errors}")
-                self.log.info(f"'{user.name}': Skip. {user.filter_error_message}")
+                self.log.warning(f"blocks '{user.name}': {user.filter_error_message}")
 
         self.remaining_users = remaining_users
 
@@ -115,7 +130,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
             else:
                 error_msg = "Is an active user."
                 user.filter_error_message = error_msg
-                self.log.info(f"'{user.name}': Skip. {error_msg}")
+                self.log.warning(f"blocks '{user.name}': {error_msg}")
 
         self.remaining_users = remaining_users
 

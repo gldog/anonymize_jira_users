@@ -388,6 +388,7 @@ command:
 
 - Parse and check the parameters.
 - Read the user-names from the user-list-file.
+- Filter-out duplicate users in user-list-file.
 - For each user: Get user-data from
   the [Jira user REST-API](https://docs.atlassian.com/software/jira/docs/api/REST/8.14.1/#api/2/user-getUser)
   .
@@ -561,7 +562,9 @@ We call:
 
 The output is:
 
+    2021-04-05 17:48:03,251:INFO:read_users_from_user_list_file users.cfg
     2021-04-05 17:48:03,251:INFO:read_users_from_user_list_file found 2 users: ['User1Pre84', 'User1Post84']
+    2021-04-05 17:48:03,251:INFO:filter_by_duplicate 2 users
     2021-04-05 17:48:03,251:INFO:get_user_data for 2 users
     2021-04-05 17:48:03,312:INFO:filter_by_existance 2 users
     2021-04-05 17:48:03,312:INFO:filter_by_active_status 2 users:
@@ -656,7 +659,9 @@ We call again:
 
 The output is:
 
+    2021-04-05 17:59:46,797:INFO:read_users_from_user_list_file users.cfg
     2021-04-05 17:59:46,797:INFO:read_users_from_user_list_file found (3) users: ['missplled-user', 'User1Pre84', 'user-from-ad']
+    2021-04-05 17:59:46,797:INFO:filter_by_duplicate 3 users
     2021-04-05 17:59:46,797:INFO:get_user_data for 3 users
     2021-04-05 17:59:46,900:INFO:filter_by_existance 3 users
     2021-04-05 17:59:46,901:INFO:filter_by_existance 'missplled-user': Skip. The user named 'deleted-user' does not exist
@@ -841,6 +846,7 @@ The output is:
 
     2021-04-05 18:34:05,514:INFO:read_users_from_user_list_file users.cfg
     2021-04-05 18:34:05,514:INFO:read_users_from_user_list_file found 4 users: ['User1Pre84', 'User2Pre84', 'User1Post84', 'User2Post84']
+    2021-04-05 18:34:05,514:filter_by_duplicate 4 users
     2021-04-05 18:34:05,515:INFO:get_user_data for 4 users
     2021-04-05 18:34:05,628:INFO:filter_by_existance 4 users
     2021-04-05 18:34:05,628:INFO:filter_by_active_status 4 users:
@@ -1127,9 +1133,7 @@ The commands are:
 
 **Jira 8.12, released 26 August 2020**
 
--
-
-Fixed: [JRASERVER-71153 Usernames not fully anonymized in issue history](https://jira.atlassian.com/browse/JRASERVER-71153)
+- Fixed: [JRASERVER-71153 Usernames not fully anonymized in issue history](https://jira.atlassian.com/browse/JRASERVER-71153)
 
 - REST-API GET /rest/api/2/user supports 'includeDeleted'.
 - REST-API deprecated: GET /rest/api/2/auditing/record [5]
@@ -1157,22 +1161,6 @@ the Jira-system-default-language? Or other?
 ## Anonymization slow in case Jira is connected to a Oracle-DB
 
 - [JRASERVER-71251 Improve User Anonymize Feature](https://jira.atlassian.com/browse/JRASERVER-71251)
-
-## Anonymized user-/key-/display-name is null
-
-The following issues occured in my local test-instance.
-
-I my tests I saw occurences where the anonymized user-name, user-key, and display-name are
-null. I saw two root-causes:
-
-1. Despite the fact the audit log is present, the query of the Anonyizer got an empty
-   result.
-2. Accessing the audit log results in an exception. This status persist. If you open the
-   audit log in the UI, you'll get an UI-error-message like "
-   We couldn't load audit events. Try again later.", and an Exception is shown in the
-   atlassian-jira.log. A Jira-restart didn't fix this. Seen in several Jira-versions. A
-   similar issue is filed for
-   Bitbucket: [BSERV-12516 Audit Log feature unable to load older logs and run into error](https://jira.atlassian.com/browse/BSERV-12516)
 
 ## Tickets at Atlassian
 

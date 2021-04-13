@@ -2,12 +2,10 @@ import dataclasses
 import json
 import logging
 import pathlib
-from dataclasses import dataclass, field
-from typing import List
 
 from deepdiff import DeepDiff
 
-from base_test_class import BaseTestClass, JiraApplication
+from base_test_class import BaseTestClass, ExpectedReportGenerator, AnonymizedUser
 
 log = logging.getLogger()
 logging.basicConfig(level=logging.DEBUG)
@@ -21,9 +19,6 @@ class TestCmdAnonymize(BaseTestClass):
     def tearDown(self):
         super(TestCmdAnonymize, self).tearDown()
 
-        # for user_name in self.usernames_for_user_list_file:
-        #    self.user_activate(user_name)
-
     def test_01(self):
         """
         Setting up this tests is quite speific to this tests, so all set-up stuff is placed here.
@@ -36,7 +31,6 @@ class TestCmdAnonymize(BaseTestClass):
 
         self.expected_report_generator = ExpectedReportGenerator(self.jira_application)
         self.expected_report_generator.jira_version = self.jira_application.version_numbers
-        self.expected_report_generator.error_msg_missing_user = self.jira_application
 
         # This user might exist. In that case ignore the error.
         r = self.jira_application.admin_session.user_create(
@@ -60,8 +54,8 @@ class TestCmdAnonymize(BaseTestClass):
             display_name = 'User 1 Pre 84'
             self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
-                AnonymizedUser(name='User1Pre84',
-                               key='user1pre84',
+                AnonymizedUser(name=user_name,
+                               key=user_name.lower(),
                                display_name=display_name))
 
             # A user that will be kept an active user.
@@ -69,8 +63,8 @@ class TestCmdAnonymize(BaseTestClass):
             display_name = 'User 2 Pre 84'
             self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
-                AnonymizedUser(name='User2Pre84',
-                               key='user2pre84',
+                AnonymizedUser(name=user_name,
+                               key=user_name.lower(),
                                display_name=display_name,
                                active=True, deleted=False,
                                filter_error_message='Is an active user.',
@@ -84,7 +78,7 @@ class TestCmdAnonymize(BaseTestClass):
             display_name = 'User 3 Pre 84 (renamed)'
             self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
-                AnonymizedUser(name='User3Pre84_renamed',
+                AnonymizedUser(name=user_name,
                                key='user3pre84',
                                display_name=display_name))
 
@@ -93,8 +87,8 @@ class TestCmdAnonymize(BaseTestClass):
             display_name = 'user5pre84'
             self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
-                AnonymizedUser(name='user5pre84',
-                               key='user5pre84',
+                AnonymizedUser(name=user_name,
+                               key=user_name.lower(),
                                display_name=display_name))
 
             # User with only lower-case letter in name, deleted.
@@ -103,8 +97,8 @@ class TestCmdAnonymize(BaseTestClass):
             display_name = 'user9pre84'
             self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
-                AnonymizedUser(name='user9pre84',
-                               key='user9pre84',
+                AnonymizedUser(name=user_name,
+                               key=user_name.lower(),
                                display_name=display_name,
                                deleted=True,
                                anonymized_user_display_name=''))
@@ -116,12 +110,29 @@ class TestCmdAnonymize(BaseTestClass):
             display_name = 'JIRAUSER11111'
             self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
-                AnonymizedUser(name='JIRAUSER11111',
-                               key='jirauser11111',
+                AnonymizedUser(name=user_name,
+                               key=user_name.lower(),
                                display_name=display_name,
-                               anonymized_user_name='JIRAUSER11111',
-                               anonymized_user_key='jirauser11111'))
+                               anonymized_user_name=user_name,
+                               anonymized_user_key=user_name.lower()))
 
+            # User with umlaut.
+            user_name = 'ä_ö_ü_ß'
+            display_name = 'Ä_Ö_Ü_ß'
+            self.usernames_for_user_list_file.append(user_name)
+            self.expected_report_generator.add_user(
+                AnonymizedUser(name=user_name,
+                               key=user_name.lower(),
+                               display_name=display_name))
+
+            # User with spaces.
+            user_name = 'Username With Space'
+            display_name = 'Username With Space'
+            self.usernames_for_user_list_file.append(user_name)
+            self.expected_report_generator.add_user(
+                AnonymizedUser(name=user_name,
+                               key=user_name.lower(),
+                               display_name=display_name))
         #
         # The following user has been created in Jira >= 8.4.
         #
@@ -205,10 +216,21 @@ class TestCmdAnonymize(BaseTestClass):
                            key=json.loads(r.text)['key'],
                            display_name=display_name))
 
-        user_name = 'with space'
-        display_name = 'With a space in name'
+        user_name = 'Username With Space Post84'
+        display_name = 'Username With Space Post84'
         r = self.jira_application.create_user_if_absent(user_name, display_name=display_name,
-                                                        email='with_space@example.com')
+                                                        email='with_space_post84@example.com')
+        r.raise_for_status()
+        self.usernames_for_user_list_file.append(user_name)
+        self.expected_report_generator.add_user(
+            AnonymizedUser(name=user_name,
+                           key=json.loads(r.text)['key'],
+                           display_name=display_name))
+
+        user_name = 'ä_ö_ü_ß_post84'
+        display_name = 'Ä_Ö_Ü_ß_Post84'
+        r = self.jira_application.create_user_if_absent(user_name, display_name=display_name,
+                                                        email='ä_ö_ü_ß_post84@example.com')
         r.raise_for_status()
         self.usernames_for_user_list_file.append(user_name)
         self.expected_report_generator.add_user(
@@ -227,26 +249,33 @@ class TestCmdAnonymize(BaseTestClass):
         #                    display_name=display_name))
 
         # Let each user become an issue-creator.
-        for user_name in self.usernames_for_user_list_file:
-            r = self.jira_application.create_issue_and_update_userpicker_customfield_by_user(user_name)
+        for user in self.expected_report_generator.users:
+            r = self.jira_application.create_issue_and_update_userpicker_customfield_by_user(user.name)
             # Un-assign issue in case of users to be deleted. A user can only be deleted if not an assignee.
-            if user_name in ['user9pre84', 'user9post84']:
+            if user.name.lower() in ['user9pre84', 'user9post84']:
                 issue_key = r.json()['key']
                 self.jira_application.admin_session.assign_issue(issue=issue_key, assignee=None)
 
         # Make most users inactive users.
-        for user_name in self.usernames_for_user_list_file:
+        for user in self.expected_report_generator.users:
             # Let there be 2 user active.
-            if user_name.lower() in ['user2pre84', 'user2post84']:
+            if user.name.lower() in ['user2pre84', 'user2post84']:
+                user.action = 'skipped'
                 continue
-            r = self.jira_application.admin_session.user_deactivate(user_name)
+            r = self.jira_application.admin_session.user_deactivate(user.name)
             r.raise_for_status()
 
+        self.expected_report_generator.overview = {
+            'number_of_users_in_user_list_file': 16 if self.is_include_users_from_generated_test_resouces else 8,
+            'number_of_skipped_users': 2 if self.is_include_users_from_generated_test_resouces else 1,
+            'number_of_anonymized_users': 14 if self.is_include_users_from_generated_test_resouces else 7,
+            'is_background_reindex_triggered': False
+        }
         self.expected_report_generator.generate()
 
         expected_anonymizing_report_json = dataclasses.asdict(self.expected_report_generator)['report']
         log.info("expected_anonymizing_report_json after update:\n"
-                 f"{json.dumps(expected_anonymizing_report_json, indent=4)}")
+                 f"{json.dumps(expected_anonymizing_report_json, indent=4, ensure_ascii=False)}")
 
         # The following file is for documenting the tests.
         with open(self.out_base_dir_path + '/predicted_anonymized_userdata.json', 'w') as f:
@@ -278,86 +307,3 @@ class TestCmdAnonymize(BaseTestClass):
         ddiff = DeepDiff(expected_anonymizing_report_json, got_anonymizing_report_json,
                          exclude_regex_paths=exclude_regex_paths)
         self.assertFalse(ddiff)
-
-
-@dataclass
-class AnonymizedUser:
-    name: str = None
-    key: str = None
-    display_name: str = None
-    active: bool = False
-    # Since Jira 8.10.
-    deleted: bool = False
-    filter_error_message: str = ''
-    anonymized_user_name: str = None
-    anonymized_user_key: str = None
-    anonymized_user_display_name: str = None
-    action: str = 'anonymized'
-
-
-@dataclass()
-class ExpectedReportGenerator:
-    jira_application: JiraApplication
-    users: List[AnonymizedUser] = field(default_factory=list)
-    report: dict = None
-
-    def add_user(self, anonymized_user):
-        """Make a copy of the AnonymizedUser and add it to the list. """
-        self.users.append(AnonymizedUser(**dataclasses.asdict(anonymized_user)))
-        pass
-
-    def generate(self):
-        self.report = {'overview': {}, 'users': self.users}
-        user_names = [user.name for user in self.users]
-        log.info(f"user_names {user_names}")
-        r = self.jira_application.get_predicted_anonymized_userdata(user_names)
-        r.raise_for_status()
-        predicted_anonymized_userdata = r.json()
-        log.info(f"predicted_anonymized_userdata {predicted_anonymized_userdata}")
-
-        for user in self.users:
-            paud_for_user = predicted_anonymized_userdata[user.name]
-
-            if self.jira_application.is_jiraversion_lt810() and user.deleted:
-                user.anonymized_user_name = ''
-                user.anonymized_user_key = ''
-                user.anonymized_user_display_name = ''
-            else:
-                if user.anonymized_user_name is None:
-                    user.anonymized_user_name = 'jirauser{}'.format(paud_for_user['appUserId'])
-                if user.anonymized_user_key is None:
-                    user.anonymized_user_key = 'JIRAUSER{}'.format(paud_for_user['appUserId'])
-                if user.anonymized_user_display_name is None:
-                    user.anonymized_user_display_name = paud_for_user['anonymizedDisplayName']
-
-            if self.jira_application.is_jiraversion_lt810():
-                if user.deleted:
-                    # In Jira-versions less than 8.10, deleted users could not retrieved by the REST-API. As a
-                    # consequence, most of the attributes the the report are None.
-                    user.key = None
-                    user.display_name = None
-                    user.active = None
-                    user.validation_has_errors = False
-                    user.filter_is_anonymize_approval = False
-                    # This message comes from Jiras REST API.
-                    # user.filter_error_message = f"The user named '{user.user_name}' does not exist"
-                    user.filter_error_message = self.jira_application.get_error_msg_missing_user_in_sys_default_lang(
-                        user.name)
-                    user.anonymized_user_name = ''
-                    user.anonymized_user_key = ''
-                    user.anonymized_user_display_name = ''
-                    user.action = 'skipped'
-                # The 'deleted'-attribute was introduce in Jira 8.10. In tests with Jira-version less than 8.10
-                # this attribute is always None.
-                user.deleted = None
-
-        # Generate 'overview':
-        self.report['overview']['number_of_users_in_user_list_file'] = len(self.users)
-        self.report['overview']['number_of_skipped_users'] = 0
-        self.report['overview']['number_of_anonymized_users'] = 0
-        self.report['overview']['is_background_reindex_triggered'] = False
-        for user in self.users:
-            if user.action == 'anonymized':
-                self.report['overview']['number_of_anonymized_users'] += 1
-            elif user.action == 'skipped':
-                self.report['overview']['number_of_skipped_users'] += 1
