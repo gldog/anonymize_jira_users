@@ -14,6 +14,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class TestMassAnonymization(BaseTestClass):
+    """Under construction. """
 
     def setUp(self):
         super(TestMassAnonymization, self).setUp()
@@ -24,10 +25,6 @@ class TestMassAnonymization(BaseTestClass):
     def test_01(self):
 
         pathlib.Path(self.out_base_dir_path).mkdir(parents=True)
-
-        #report_base_dir = 'test_02b'
-        #if os.path.exists(report_base_dir):
-        #    shutil.rmtree(report_base_dir)
 
         usernames_for_user_list_file = []
 

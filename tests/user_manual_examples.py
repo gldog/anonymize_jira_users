@@ -12,6 +12,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class Test01(BaseTestClass):
+    """Create the reports needed for the user-manual."""
 
     def setUp(self):
         super(Test01, self).setUp()
