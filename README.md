@@ -1163,9 +1163,23 @@ As instance C, but with a different step 2:
 Assess the users: Send the list to the department responsible for the user-management and
 let them comment out users to not anoymize.
 
+---
 
+# Anonymize deleted users
 
+Deleted users aren't anymore in DB table `cwd_user`, but still in table `app_user`.
 
+Anonymized users have a lower_user_name of format jirauser12345.
+
+The following SQL statement gets the user-names of deleted, not yet anonymized users:
+
+    SELECT au.lower_user_name 
+    FROM   app_user au 
+    WHERE  au.lower_user_name NOT LIKE 'jirauser%' 
+    AND au.lower_user_name NOT IN (SELECT u.lower_user_name 
+                                   FROM   cwd_user u) 
+
+Put these users in the user_list_file.cfg and run the anonymization.
 
 ---
 
@@ -1180,6 +1194,10 @@ let them comment out users to not anoymize.
   still active, or has been deleted." [1].
 - Limitations: "Personal data might still appear in the issue history, which shows all
   past activity on an issue." [1].
+
+Remark: I can't get anonymization of deleted users running in Jira versions before 8.10,
+neither in the admin-UI nor with the REST-API. The anonymization-dialog shows:
+_The user named 'jojo' does not exist_.
 
 **Jira 8.8, released 19 March 2020**
 
@@ -1199,10 +1217,8 @@ let them comment out users to not anoymize.
 
 **Jira 8.12, released 26 August 2020**
 
--
-
-Fixed: [JRASERVER-71153 Usernames not fully anonymized in issue history](https://jira.atlassian.com/browse/JRASERVER-71153)
-
+- Fixed:
+  [JRASERVER-71153 Usernames not fully anonymized in issue history](https://jira.atlassian.com/browse/JRASERVER-71153)
 - REST-API GET /rest/api/2/user supports 'includeDeleted'.
 - REST-API deprecated: GET /rest/api/2/auditing/record [5]
 
@@ -1258,8 +1274,6 @@ the user to be anonymized? Or...?
 ## Anonymization slow in case Jira is connected to an Oracle-DB
 
 - [JRASERVER-71251 Improve User Anonymize Feature](https://jira.atlassian.com/browse/JRASERVER-71251)
-
-Anonymization in my Jira connected to Oracle takes 12 - 20 min/user.
 
 ## Tickets at Atlassian
 
