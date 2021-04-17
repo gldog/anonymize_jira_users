@@ -11,10 +11,11 @@ Other articles
 User Manual
 =
 
+- [General](#general)
 - [Quick-start](#quick-start)
 - [Command Line Options](#command-line-options)
     * [Overview](#overview)
-    * [Parameter without command](#parameter-without-command)
+    * [Parameters without command](#parameters-without-command)
     * [Parameters for command "inactive-users"](#parameters-for-command--inactive-users-)
     * [Parameters for command "validate"](#parameters-for-command--validate-)
     * [Parameters for command "anonymize"](#parameters-for-command--anonymize-)
@@ -37,22 +38,40 @@ User Manual
 - [Example-Workflow](#example-workflow)
 - [My Workflow](#my-workflow)
 - [History of anonymization and related functions](#history-of-anonymization-and-related-functions)
+- [F. A. Q.](#f-a-q)
+    * [Can we Anonymize a user on JIRA Cloud?](#can-we-anonymize-a-user-on-jira-cloud-)
 - [Known issues](#known-issues)
+    * [Command inactive-users might return a max. of 1000 users](#command-inactive-users-might-return-a-max-of-1000-users)
     * [Validation error-messages in unexpected language](#validation-error-messages-in-unexpected-language)
-    * [Anonymization slow in case Jira is connected to a Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-a-oracle-db)
+    * [Anonymization slow in case Jira is connected to an Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-an-oracle-db)
     * [Tickets at Atlassian](#tickets-at-atlassian)
 
 <small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents
 generated with markdown-toc</a></i></small>
 
-The Anonymizer is a Python3-script to help Jira-admins anonymizing Jira-users in bulk. It
+
+
+
+---
+
+# General
+
+The Anonymizer is a Python-script to help Jira-admins anonymizing Jira-users in bulk. It
 is compatible to Python >= 3.7.
 
 Atlassian introduced user anonymization in Jira 8.7. So the Anonymizer works in Jira
-versions equal or greater than 8.7.
+versions >= 8.7.
 
 All information stated here is about Jira Server and Jira Data Center. Jira Cloud is not
-considered.
+considered (it has no anonymization function at all).
+
+Call dist (TODO, no dists published yet):
+
+    python anonymize_jira_users.pyz ...
+
+Call latest main:
+
+    python -m zipapp anonymize_jira_users  &&  python anonymize_jira_users.pyz
 
 ---
 
@@ -69,8 +88,8 @@ considered.
   happen in case of anonymizing.
 - Call `python anonymize_jira_users.pyz anonymize -c my_config.cfg` to execute
   anonymization.
-- Have a look at the report `report.csv`. More details about the users are given
-  in `report_details.json`
+- Have a look at the report `report.csv` or `report.json`. More details about the users
+  and the execution are given in `report_details.json`
 - Make a background re-index.
 
 ---
@@ -85,14 +104,14 @@ The Anonymizer has the following commands:
 
 - `inactive-users`: Retrieves a list of inactive, not yet anonymized users. These users
   are candidates for anonymization.
-- `validate`:            Validates user anonymization process.
+- `validate`:            Validates user anonymization process. No anonymization is done.
 - `anonymize`:           Anonymizes users.
 - `misc`:                Bundle diverse functions. Currently `-g`
   to generate a template-config-file is the only function.
 
 The above commands have different parameter-lists.
 
-## Parameter without command
+## Parameters without command
 
     --version             show program's version number and exit
 
@@ -242,10 +261,6 @@ A minimal config-file consists of:
     jira_auth = Basic admin:admin
     user_list_file = users.cfg
     new_owner = the-new-owner
-
-Call:
-
-`python anonymize_jira_users.pyz anonymize -c my_config.cfg`
 
 The full set of parameters are:
 
@@ -492,7 +507,7 @@ and `anonymize`.
 ## Command "inactive-users"
 
 If you like to anonymize users in bulk you first need a list of users. Without the
-Anonymizer, you retrieved this list somehow. The command `inactive-users` could ease this.
+Anonymizer, you retrieve this list somehow. The command `inactive-users` could ease this.
 It retrieves a list of inactive, not yet anonymized users.
 
 You can give groups with users to be excluded by parameter `--exclude-groups`.
@@ -648,8 +663,7 @@ Again, the filter does not give the anonymization approval if:
 
 - the user doesn't exist (`missplled-user`), or
 - the user is an active user (`User1Pre84`), or
-- the validation-step returned an unexpected HTTP status code (other than 200), or
-  returned any validation error (`user-from-ad`).
+- the anonymization-validation any validation error (`user-from-ad`).
 
 We call again:
 
@@ -662,7 +676,7 @@ The output is:
     2021-04-05 17:59:46,797:INFO:filter_by_duplicate 3 users
     2021-04-05 17:59:46,797:INFO:get_user_data for 3 users
     2021-04-05 17:59:46,900:INFO:filter_by_existance 3 users
-    2021-04-05 17:59:46,901:INFO:filter_by_existance 'missplled-user': Skip. The user named 'deleted-user' does not exist
+    2021-04-05 17:59:46,901:INFO:filter_by_existance 'missplled-user': Skip. The user named 'missplled-user' does not exist
     2021-04-05 17:59:46,901:INFO:filter_by_active_status 2 users:
     2021-04-05 17:59:46,901:INFO:filter_by_active_status 'User1Pre84': Skip. Is an active user.
     2021-04-05 17:59:46,901:INFO:get_anonymization_validation_data for 1 users
@@ -1109,7 +1123,7 @@ and B and O have local user-management maintained by a specific department.
 Instance C:
 
 The workflow is according to the steps in "Example Workflow", but assessing the users is
-supported by Python-script `assess_ad_users.py` located in the tool-directory.
+supported by Python-script `assess_ad_users.py` located in the tools-directory.
 
 I my company, employees going to leave will get an expire-date in the near future in AD.
 Two weeks after that expire-date, the user is automatically removed from AD.
@@ -1119,7 +1133,7 @@ will return. These employees get a placeholder expire-date of e.g. 01.01.3000 an
 kept in AD.
 
 For anonymizing this means: If a Jira-user's account can't be found in AD, they definetely
-shall be anonymized.
+have left the company and shall be anonymized.
 
 The steps are:
 
@@ -1133,7 +1147,7 @@ The steps are:
        commented out.
     2. Assess the users manually afterwards. Mayby you know something about them. E.g. if
        they have new AD-accounts and they have filters or dashboards thay want to switch
-       from the former account to the new one, and so forth. Comment out these users.
+       from the former account to the new one, and so forth.
 3. Let the Anonymizer validate the users in inactive_users_assessed.cfg.
 4. Let the Anonymizer anonymize the users in assessed_inactive_users.cfg.
 5. Archive the data of the anonymized users: The mapping of the user-name to the
@@ -1148,6 +1162,8 @@ As instance C, but with a different step 2:
 
 Assess the users: Send the list to the department responsible for the user-management and
 let them comment out users to not anoymize.
+
+
 
 
 
@@ -1183,7 +1199,9 @@ let them comment out users to not anoymize.
 
 **Jira 8.12, released 26 August 2020**
 
-- Fixed: [JRASERVER-71153 Usernames not fully anonymized in issue history](https://jira.atlassian.com/browse/JRASERVER-71153)
+-
+
+Fixed: [JRASERVER-71153 Usernames not fully anonymized in issue history](https://jira.atlassian.com/browse/JRASERVER-71153)
 
 - REST-API GET /rest/api/2/user supports 'includeDeleted'.
 - REST-API deprecated: GET /rest/api/2/auditing/record [5]
@@ -1198,19 +1216,50 @@ let them comment out users to not anoymize.
 
 ---
 
+# F. A. Q.
+
+## Can we Anonymize a user on JIRA Cloud?
+
+No,
+see [Can we Anonymize a user on JIRA Cloud?](https://community.atlassian.com/t5/Atlassian-Access-questions/Can-we-Anonymize-a-user-on-JIRA-Cloud/qaq-p/1632822)
+
+---
+
 # Known issues
+
+## Command inactive-users might return a max. of 1000 users
+
+The command `inactive-users` uses the REST API `/rest/api/2/user/search`. There is an open
+Jira-bug documented in
+[JRASERVER-29069](https://jira.atlassian.com/browse/JRASERVER-29069) which leads
+(in some Jira instances) to a max. of 1000 users. I have seen this bug in some instances,
+but others delivered more than 1000 users. I have no idea under what circumstances this
+bug occurs or not.
+
+If the list of users in the out-file of command `inactive-users` is exact 1000, it is
+likely you ran into the bug. The Anonymizer logs a warning to the command line in that
+case.
+
+The anonymizer calls the API with following parameters:
+
+`/rest/api/2/user/search?username=.&includeInactive=true&includeActive=false&startAt=...`
+
+Unfortunately the REST API itself hasn't an exclude-parameter, so the amount of users will
+grow over time (the users anonymized so far still counts to the users the API delivers).
 
 ## Validation error-messages in unexpected language
 
 The returned error-messages in the JSON-responses
 from [Jira Anonymization REST API](https://docs.atlassian.com/software/jira/docs/api/REST/8.14.1/#api/2/user/anonymization)
-are expected in the language-setting of the executing admin. But they're sometimes in a
-different language. Is this different language the one of the user to be anonymized, or
-the Jira-system-default-language? Or other?
+I expect in the language-setting of the executing admin. But they're sometimes in a
+different language. Is this different language the system default language, or the one of
+the user to be anonymized? Or...?
 
-## Anonymization slow in case Jira is connected to a Oracle-DB
+## Anonymization slow in case Jira is connected to an Oracle-DB
 
 - [JRASERVER-71251 Improve User Anonymize Feature](https://jira.atlassian.com/browse/JRASERVER-71251)
+
+Anonymization in my Jira connected to Oracle takes 12 - 20 min/user.
 
 ## Tickets at Atlassian
 
