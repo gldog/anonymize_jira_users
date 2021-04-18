@@ -66,7 +66,8 @@ class TestCmdAnonymize(BaseTestClass):
                 AnonymizedUser(name=user_name,
                                key=user_name.lower(),
                                display_name=display_name,
-                               active=True, deleted=False,
+                               active=True,
+                               deleted=False,
                                filter_error_message='Is an active user.',
                                anonymized_user_name='',
                                anonymized_user_key='',
@@ -157,7 +158,8 @@ class TestCmdAnonymize(BaseTestClass):
             AnonymizedUser(name=user_name,
                            key=json.loads(r.text)['key'],
                            display_name=display_name,
-                           active=True, deleted=False,
+                           active=True,
+                           deleted=False,
                            filter_error_message='Is an active user.',
                            anonymized_user_name='',
                            anonymized_user_key='',
@@ -265,10 +267,24 @@ class TestCmdAnonymize(BaseTestClass):
             r = self.jira_application.admin_session.user_deactivate(user.name)
             r.raise_for_status()
 
+        number_of_users_in_user_list_file = 16 if self.is_include_users_from_generated_test_resouces else 8
+        is_jiraversion_lt810 = self.jira_application.is_jiraversion_lt810()
+        if self.is_include_users_from_generated_test_resouces:
+            # In Jira-version less than 8.10, deleted users won't be anonymized. The REST-API can't find them.
+            if is_jiraversion_lt810:
+                number_of_skipped_users = 4
+            else:
+                number_of_skipped_users = 2
+        else:
+            if is_jiraversion_lt810:
+                number_of_skipped_users = 2
+            else:
+                number_of_skipped_users = 1
+
         self.expected_report_generator.overview = {
-            'number_of_users_in_user_list_file': 16 if self.is_include_users_from_generated_test_resouces else 8,
-            'number_of_skipped_users': 2 if self.is_include_users_from_generated_test_resouces else 1,
-            'number_of_anonymized_users': 14 if self.is_include_users_from_generated_test_resouces else 7,
+            'number_of_users_in_user_list_file': number_of_users_in_user_list_file,
+            'number_of_skipped_users': number_of_skipped_users,
+            'number_of_anonymized_users': number_of_users_in_user_list_file - number_of_skipped_users,
             'is_background_reindex_triggered': False
         }
         self.expected_report_generator.generate()
