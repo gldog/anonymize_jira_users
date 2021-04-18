@@ -69,9 +69,9 @@ Call dist (TODO, no dists published yet):
 
     python anonymize_jira_users.pyz ...
 
-Call latest main:
+Call latest main, in the project root-dir 'anonymize_jira_users':
 
-    python -m zipapp anonymize_jira_users  &&  python anonymize_jira_users.pyz ...
+    python -m zipapp anonymize_jira_users  &&  python anonymize_jira_users.pyz
 
 ---
 
