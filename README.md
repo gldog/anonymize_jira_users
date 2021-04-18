@@ -71,7 +71,7 @@ Call dist (TODO, no dists published yet):
 
 Call latest main:
 
-    python -m zipapp anonymize_jira_users  &&  python anonymize_jira_users.pyz
+    python -m zipapp anonymize_jira_users  &&  python anonymize_jira_users.pyz ...
 
 ---
 
