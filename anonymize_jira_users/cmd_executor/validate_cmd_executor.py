@@ -162,22 +162,25 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
 
             query_validation = user.logs['rest_get_anonymization__query_validation']
             if query_validation['status_code'] != 200:
-                error_messages.append("HTTP status-code of the REST validation API is not 200.")
+                error_messages.append("HTTP status-code of the REST validation API is not 200")
                 # Regardless of the status code there could be validation-errors (seen e.g.
-            # in use case "admin tries to anonymize themself": Status code was 400 Bad Request
-            # and the error was "You can't anonymize yourself.").
+                # in use case "admin tries to anonymize themself": Status code was 400 Bad Request
+                # and the error was "You can't anonymize yourself.").
+
             if query_validation['json']['errors']:
-                error_messages.append("There is at least one validation error message.")
+                error_messages.append("There is at least one validation error message")
 
             if error_messages:
-                user.filter_error_message = '; '.join(error_messages)
-                self.log.warning(f"blocks '{user.name}': {error_messages}")
+                see_report_msg = self.config.effective_config['report_details_filename']
+                error_messages.append(f"See {see_report_msg}.")
+                user.filter_error_message = '. '.join(error_messages)
+                self.log.warning(f"blocks '{user.name}': {user.filter_error_message}")
             else:
                 user.filter_error_message = ""
                 remaining_users.append(user)
 
-        self.log.info(f"has approved {len(remaining_users)} of {len(self.remaining_users)} users for"
-                      f" anonymization: {[user.name for user in remaining_users]}")
+        self.log.info(f"has approved {len(remaining_users)} of {len(self.remaining_users)} users"
+                      f" for anonymization: {[user.name for user in remaining_users]}")
 
         self.remaining_users = remaining_users
 
