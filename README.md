@@ -392,6 +392,20 @@ try e.g.:
 
 or play around with other encodings.
 
+### --background-reindex
+
+Background re-indexing could last very long time on large DC-instances.
+
+From [Search indexing](https://confluence.atlassian.com/adminjiraserver/search-indexing-938847710.html):
+
+> On a multi-node Jira Data Center, you can use the Full re-index option without actually
+> locking the instance. Therefore, if your Data Center instance has multiple nodes, don't
+> bother with a Background re-index. See
+> [Re-indexing Jira Data Center with no downtime](https://confluence.atlassian.com/adminjiraserver/search-indexing-938847710.html#Searchindexing-reindexdc)
+> for instructions.
+
+
+
 ---
 
 # How the Anonymizer works
@@ -482,10 +496,11 @@ The anonymizer creates:
 
 What file is created or if a summary is written depends on the command:
 
-        Report / Command    | inactive-users | validate | anonymize
-        report_details.json |   Y            |   Y      |   Y
-        report.json/.csv    |   N            |   Y      |   Y
-        Summary on cmd-line |   N            |   Y      |   Y
+| Report / Command    | inactive-users | validate | anonymize |
+| --- | :---: | :---: | :---: |
+| report_details.json | Y | Y | Y |
+| report.json/.csv | N | Y | Y |
+| Summary on cmd-line | N | Y | Y |
 
 The reports contain more information in case of command `anonymize` than in case of
 just `validate`.

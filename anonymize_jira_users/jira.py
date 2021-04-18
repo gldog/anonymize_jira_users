@@ -59,20 +59,21 @@ class Jira:
 
     @staticmethod
     def validate_auth_parameter(auth):
-        """Check parameter 'auth' for valid auth-type 'Basic' or 'Bearer, extract the auth-data, and return them.
+        """Check parameter 'auth' for valid auth-type 'Basic' or 'Bearer, extract the auth-data,
+        and return them.
         :param auth: Expect either the format 'Basic user:pass', or
                     'Bearer NDcyOTE1ODY4Nzc4Omj+FiGVuLh/vs4WjTS9/3lGaysM'
         :return: AuthValidationResult-tuple.
-            1 - Error-message in case the auth couldn't be parsed properly. None otherwise.
-            2 - The auth-type 'basic' or 'bearer' (lower case).
-            3 - In case of 'basic': The user-name. In case of 'bearer': The token.
-            4 - In case of 'basic': The password. In case  of 'bearer': None.
+            1 - The auth-type 'basic' or 'bearer' (lower case).
+            2 - In case of 'basic': The user-name. In case of 'bearer': The token.
+            3 - In case of 'basic': The password. In case  of 'bearer': None.
         """
 
         # Split 'Basic' or 'Bearer' from the rest.
         auth_parts = re.split(r'\s+', auth, 1)
 
-        AuthValidationResult = namedtuple('AuthValidationResult', ['auth_type', 'user_name', 'password'])
+        AuthValidationResult = \
+            namedtuple('AuthValidationResult', ['auth_type', 'user_name', 'password'])
 
         if len(auth_parts) < 2:
             raise ValueError(f"{inspect.currentframe().f_code.co_name} detected invalid format in"
@@ -169,7 +170,7 @@ class Jira:
                 },
             }
         }
-        :return: If the auth-user can log-in and is an administrator.
+
         """
         rel_url = '/rest/api/2/mypermissions'
         url = self.base_url + rel_url
@@ -256,7 +257,8 @@ class Jira:
             o -2: if the "status" is "COMPLETED". I assume a "currentProgress" of 100.
             o -3: Other "status" than "IN_PROGRESS" and "COMPLETED". Means "not in progress".
         """
-        self.log.debug(f"for user_name {user.name if user else None} and rel_progress_url {rel_progress_url}")
+        self.log.debug(f"for user_name {user.name if user else None}"
+                       f" and rel_progress_url {rel_progress_url}")
         assert not (bool(user) ^ bool(rel_progress_url))
 
         if rel_progress_url:
@@ -321,10 +323,10 @@ class Jira:
         :param r: The response of a requests.get(), requests.post(), ...
         :param is_include_json_response: True (default), if the response.json() shall be included
             in the serialied  result. With is_include_json_response=False the caller can suppress
-            serialization in case of large orun interesting responses.
-        :return:
+            serialization in case of large or uninteresting responses.
         """
-        # The body is a b'String in Python 3 and is not readable by json.dumps(). It has to be
+
+        # The body is a b'String in Python3 and is not readable by json.dumps(). It has to be
         # decoded before. The 'utf-8' is only a suggestion here.
         decoded_body = r.request.body.decode('utf-8') if r.request.body else None
         try:
@@ -332,7 +334,9 @@ class Jira:
         except JSONDecodeError:
             r_json = None
 
-        j = {'status_code': r.status_code, 'requst_body': decoded_body, 'requst_method': r.request.method,
+        j = {'status_code': r.status_code,
+             'requst_body': decoded_body,
+             'requst_method': r.request.method,
              'requst_url': r.request.url}
 
         if is_include_json_response:
@@ -359,8 +363,6 @@ class Jira:
         url = self.base_url + rel_url
         url_params = {'includeDeleted': is_include_deleted, 'username': user_name}
         r = self.session.get(url=url, params=url_params)
-        # self.execution_logger.rest_get_user__new_owner = self._serialize_response(r)
-        # self.log.debug(self.execution_logger.rest_get_user__new_owner)
         return r
 
     def check_if_groups_exist(self, group_names):
@@ -386,7 +388,11 @@ class Jira:
         start_at = 0
         users = []
         while not is_last_page:
-            url_params = {'groupname': group_name, 'includeInactiveUsers': True, 'startAt': start_at}
+            url_params = {
+                'groupname': group_name,
+                'includeInactiveUsers': True,
+                'startAt': start_at
+            }
             r = self.session.get(url=url, params=url_params)
             r.raise_for_status()
             for user_json in r.json()['values']:
@@ -403,8 +409,7 @@ class Jira:
         return users
 
     def get_inactive_users(self, excluded_users: List[JiraUser]) -> List[JiraUser]:
-        """Query inactive users and filter-out users from the excluded_users and
-        the already anonymized users.
+        """Return inactive users not in any of the exclude_groups and not yet anonymized.
 
         Already anonymized users have the e-mail-address '@jira.invalid'.
 
@@ -430,11 +435,9 @@ class Jira:
         This function uses the REST API `/rest/api/2/user/search`. There is an open Jira-bug documented
         in [JRASERVER-29069](https://jira.atlassian.com/browse/JRASERVER-29069) which leads (in some
         Jira instances) to a max. of 1000 users. I have seen this bug in some instances, but others
-        delivered more than 1000 users as expected.
+        delivered more than 1000.
 
         If the number of returned users is exact 1000, it is likely you ran into the bug RASERVER-29069.
-
-        :return: Inactive users not in any of the exclude_groups and not yet anonymized.
         """
 
         excluded_user_names = [user.name for user in excluded_users]
@@ -445,7 +448,7 @@ class Jira:
         is_beyond_last_page = False
         url = self.base_url + rel_url
         start_at = 0
-        user_count_so_far = 0
+        num_users_so_far = 0
         users = []
         self.execution_logger.logs['rest_user_search'] = {}
         page_no = 1
@@ -459,15 +462,16 @@ class Jira:
                 'startAt': start_at}
             r = self.session.get(url=url, params=url_params)
             self.log.debug(self.serialize_response(r, False))
-            self.execution_logger.logs['rest_user_search'][f'page_{page_no}'] = self.serialize_response(r, True)
+            self.execution_logger.logs['rest_user_search'][f'page_{page_no}'] = \
+                self.serialize_response(r, True)
             page_no += 1
             r.raise_for_status()
-            user_count_so_far += len(r.json())
-            self.log.debug(f"; user_count_so_far {user_count_so_far}")
+            num_users_so_far += len(r.json())
+            self.log.debug(f"; num_users_so_far {num_users_so_far}")
             if len(r.json()) == 0:
                 is_beyond_last_page = True
                 # Warning about JRASERVER-29069.
-                if user_count_so_far == 1000:
+                if num_users_so_far == 1000:
                     self.log.warning(
                         f"The REST API '{rel_url}' returned exact 1000 users."
                         " This could mean you ran into JRASERVER-29069."
@@ -486,8 +490,9 @@ class Jira:
 
     def get_anonymization_validation_data(self, user: JiraUser):
         rel_url = '/rest/api/2/user/anonymization'
-        # TODO The function name get_anonymization_validation_data exists twice. One time here and one time
-        # in ValidateCmdExecutor-class. This will result in logging this name twice if log-level is the same.
+        # The function name 'get_anonymization_validation_data' exists twice. One time here and
+        # one time in ValidateCmdExecutor-class. This will result in logging this name twice if
+        # log-level is DEBUG.
         self.log.debug(f"for user-key '{user.name}'")
         url = self.base_url + rel_url
         url_params = {'userKey': user.key}
@@ -505,9 +510,7 @@ class Jira:
 
     def get_audit_records_since(self, date_utc):
         """
-        TODO
         :param date_utc: The date given in UTC with format "2020-12-30T13:53:17.996Z".
-        :return:
         """
         rel_url = '/rest/api/2/auditing/record'
         url = self.base_url + rel_url
@@ -517,9 +520,7 @@ class Jira:
 
     def get_audit_events_since(self, date_utc):
         """
-        TODO
         :param date_utc: The date given in UTC with format "2020-12-30T13:53:17.996Z".
-        :return:
         """
         rel_url = '/rest/auditing/1.0/events'
         url = self.base_url + rel_url
@@ -533,18 +534,19 @@ class Jira:
         Note,
         from https://confluence.atlassian.com/jirakb/reindex-jira-server-using-rest-api-via-curl-command-663617587.html:
 
-        "For JIRA DC a better approach than background indexing is to take one node out of the cluster and run
-        FOREGROUND reindexing.
-        See  JRASERVER-66969 - Discourage Background Indexing for Datacenter instances in Indexing Page CLOSED"
+        "For JIRA DC a better approach than background indexing is to take one node out of the
+        cluster and run FOREGROUND reindexing.
+        See  JRASERVER-66969 - Discourage Background Indexing for Datacenter instances in Indexing
+        Page CLOSED"
         """
 
         # Also from
         # https://confluence.atlassian.com/jirakb/reindex-jira-server-using-rest-api-via-curl-command-663617587.html:
         #   - FOREGROUND - runs a lock/full reindexing
-        #   - BACKGROUND - runs a background reindexing. If JIRA fails to finish the background reindexing, respond
-        #       with 409 Conflict (error message).
-        #   - BACKGROUND_PREFERRED  - If possible do a background reindexing. If it's not possible (due to an
-        #       inconsistent index), do a foreground reindexing.
+        #   - BACKGROUND - runs a background reindexing. If JIRA fails to finish the background
+        #       reindexing, respond with 409 Conflict (error message).
+        #   - BACKGROUND_PREFERRED  - If possible do a background reindexing. If it's not possible
+        #       (due to an inconsistent index), do a foreground reindexing.
         url_params = {
             'type': 'BACKGROUND',
             'indexComments': True,
@@ -555,14 +557,3 @@ class Jira:
         url = self.base_url + rel_url
         r = self.session.post(url=url)
         self.execution_logger.logs['rest_post_reindex'] = self.serialize_response(r)
-
-    # TODO deprecated
-    def ___get_users_data(self, users):
-        rel_url = '/rest/api/2/user'
-        self.log.info(f"for {len(users)} users")
-        url = self.base_url + rel_url
-        for user_name in users.keys():
-            url_params = {'includeDeleted': True, 'username': user_name}
-            r = self.session.get(url=url, params=url_params)
-            users[user_name]['rest_get_user__before_anonymization'] = self.serialize_response(r)
-            self.log.debug(users[user_name]['rest_get_user__before_anonymization'])

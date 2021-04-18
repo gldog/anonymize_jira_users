@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class Tools:
@@ -13,14 +13,14 @@ class Tools:
         return Tools.to_date_string(datetime.now())
 
     @staticmethod
-    def time_diff(d1, d2):
+    def time_diff(d1: str, d2: str) -> timedelta:
         format_string = '%Y-%m-%dT%H:%M:%S.%f'
         dd1 = datetime.strptime(d1.split("+")[0], format_string)
         dd2 = datetime.strptime(d2.split("+")[0], format_string)
         return dd2 - dd1
 
     @staticmethod
-    def get_formatted_timediff_mmss(time_diff):
+    def get_formatted_timediff_mmss(time_diff: timedelta) -> str:
         """Convert the given time_diff to format "MM:SS". If the time-diff is < 1s, overwrite it to 1s.
 
         The MM can be > 60 min.
@@ -41,7 +41,7 @@ class Tools:
         return formatted_diff
 
     @staticmethod
-    def get_formatted_timediff_hhmmss(time_diff):
+    def get_formatted_timediff_hhmmss(time_diff: timedelta) -> str:
         """Convert the given time_diff to format "HH:MM:SS". If the time-diff is < 1s, overwrite it to 1s.
 
         The HH can be > 24 h.

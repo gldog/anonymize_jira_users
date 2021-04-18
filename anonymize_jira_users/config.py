@@ -116,14 +116,14 @@ class Config:
         return textwrap.dedent(f"""\
         How to start
 
-        o Create the file usernames.txt with the user-names to be anonymized, one 
+        o Create the file users.cfg with the user-names to be anonymized, one 
           user-name per line.
         o Create a config-file-template:
               {self.script_name} misc -g
           The file my_bare_default_config.cfg has been created.
         o Rename the file, e.g. to my_config.cfg.
         o In that file, set the attributes jira_base_url, jira_auth with
-          format 'Basic admin:admin', user_list_file = usernames.txt, new_owner.
+          format 'Basic admin:admin', user_list_file = users.cfg, new_owner.
         o Call
               {self.script_name} validate -c my_config.cfg
           to see what would happen in case of anonymizing.
