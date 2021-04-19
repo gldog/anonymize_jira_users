@@ -67,7 +67,7 @@ versions >= 8.7.
 All information stated here is about Jira Server and Jira Data Center. Jira Cloud is not
 considered (it has no anonymization function at all).
 
-Call dist `anonymize_jira_users.pyz`:
+Call dist (TODO, no dists published yet):
 
     python anonymize_jira_users.pyz ...
 
