@@ -14,40 +14,42 @@ User Manual
 - [General](#general)
 - [Quick-start](#quick-start)
 - [Command Line Options](#command-line-options)
-    * [Overview](#overview)
-    * [Parameters without command](#parameters-without-command)
-    * [Parameters for command "inactive-users"](#parameters-for-command--inactive-users-)
-    * [Parameters for command "validate"](#parameters-for-command--validate-)
-    * [Parameters for command "anonymize"](#parameters-for-command--anonymize-)
-    * [Parameters for command "misc"](#parameters-for-command--misc-)
-    * [The config-file](#the-config-file)
-    * [Combination of parameters from the config-file and the command-line](#combination-of-parameters-from-the-config-file-and-the-command-line)
-    * [Details about some options](#details-about-some-options)
-        + [--info](#--info)
-        + [--user-list-file and --encoding](#--user-list-file-and---encoding)
+  * [Overview](#overview)
+  * [Parameters without command](#parameters-without-command)
+  * [Parameters for command "inactive-users"](#parameters-for-command--inactive-users-)
+  * [Parameters for command "validate"](#parameters-for-command--validate-)
+  * [Parameters for command "anonymize"](#parameters-for-command--anonymize-)
+  * [Parameters for command "misc"](#parameters-for-command--misc-)
+  * [The config-file](#the-config-file)
+  * [Combination of parameters from the config-file and the command-line](#combination-of-parameters-from-the-config-file-and-the-command-line)
+  * [Details about some options](#details-about-some-options)
+    + [--info](#--info)
+    + [--user-list-file and --encoding](#--user-list-file-and---encoding)
+    + [--background-reindex](#--background-reindex)
 - [How the Anonymizer works](#how-the-anonymizer-works)
 - [The reports](#the-reports)
 - [The commands in detail](#the-commands-in-detail)
-    * [Command "inactive-users"](#command--inactive-users-)
-    * [Command "validate"](#command--validate-)
-        + [Example 1: Validation succeeded for all users (no validation error at all)](#example-1--validation-succeeded-for-all-users--no-validation-error-at-all-)
-        + [Example 2: Validation failed for all users](#example-2--validation-failed-for-all-users)
-    * [Command "anonymize"](#command--anonymize-)
-        + [About](#about)
-        + [Example 1: Anonymization without errors](#example-1--anonymization-without-errors)
+  * [Command "inactive-users"](#command--inactive-users-)
+  * [Command "validate"](#command--validate-)
+    + [Example 1: Validation succeeded for all users (no validation error at all)](#example-1--validation-succeeded-for-all-users--no-validation-error-at-all-)
+    + [Example 2: Validation failed for all users](#example-2--validation-failed-for-all-users)
+  * [Command "anonymize"](#command--anonymize-)
+    + [About](#about)
+    + [Example 1: Anonymization without errors](#example-1--anonymization-without-errors)
 - [Example-Workflow](#example-workflow)
 - [My Workflow](#my-workflow)
+- [Anonymize deleted users](#anonymize-deleted-users)
 - [History of anonymization and related functions](#history-of-anonymization-and-related-functions)
 - [F. A. Q.](#f-a-q)
-    * [Can we Anonymize a user on JIRA Cloud?](#can-we-anonymize-a-user-on-jira-cloud-)
+  * [Can we Anonymize a user on JIRA Cloud?](#can-we-anonymize-a-user-on-jira-cloud-)
 - [Known issues](#known-issues)
-    * [Command inactive-users might return a max. of 1000 users](#command-inactive-users-might-return-a-max-of-1000-users)
-    * [Validation error-messages in unexpected language](#validation-error-messages-in-unexpected-language)
-    * [Anonymization slow in case Jira is connected to an Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-an-oracle-db)
-    * [Tickets at Atlassian](#tickets-at-atlassian)
+  * [Command inactive-users might return a max. of 1000 users](#command-inactive-users-might-return-a-max-of-1000-users)
+  * [Validation error-messages in unexpected language](#validation-error-messages-in-unexpected-language)
+  * [Anonymization slow in case Jira is connected to an Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-an-oracle-db)
+  * [Tickets at Atlassian](#tickets-at-atlassian)
 
-<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents
-generated with markdown-toc</a></i></small>
+<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents generated with markdown-toc</a></i></small>
+
 
 
 
@@ -65,7 +67,7 @@ versions >= 8.7.
 All information stated here is about Jira Server and Jira Data Center. Jira Cloud is not
 considered (it has no anonymization function at all).
 
-Call dist (TODO, no dists published yet):
+Call dist `anonymize_jira_users.pyz`:
 
     python anonymize_jira_users.pyz ...
 
