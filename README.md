@@ -64,8 +64,7 @@ is compatible to Python >= 3.7.
 Atlassian introduced user anonymization in Jira 8.7. So the Anonymizer works in Jira
 versions >= 8.7.
 
-All information stated here is about Jira Server and Jira Data Center. Jira Cloud is not
-considered (it has no anonymization function at all).
+All information stated here is about Jira Server and Jira Data Center.
 
 Call dist (TODO, no dists published yet):
 
