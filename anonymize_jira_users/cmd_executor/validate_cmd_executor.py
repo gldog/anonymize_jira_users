@@ -24,11 +24,11 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
         errors = []
         user_list_file = self.config.effective_config.get('user_list_file')
         if not user_list_file:
-            errors.append("Missing parameter 'user_list_file'")
+            self.exiting_error_handler("Missing parameter 'user_list_file'")
         else:
             if not (isfile(user_list_file) and access(user_list_file, R_OK)):
                 self.exiting_error_handler(
-                    f"User_list_file {self.config.effective_config['user_list_file']}"
+                    f"user_list_file {self.config.effective_config['user_list_file']}"
                     " does not exist or is not accessible")
 
     # Override
