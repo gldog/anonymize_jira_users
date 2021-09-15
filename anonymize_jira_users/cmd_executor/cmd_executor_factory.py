@@ -2,8 +2,8 @@ from dataclasses import dataclass
 
 from cmd_executor.anonymize_cmd_executor import AnonymizeCmdExecutor
 from cmd_executor.inactive_users_cmd_executor import InactiveUsersCmdExecutor
-from cmd_executor.misc_cmd_executor import MiscCmdExecutor
 from cmd_executor.validate_cmd_executor import ValidateCmdExecutor
+from cmd_executor.write_config_template_cmd_executor import WriteConfigTemplateCmdExecutor
 from config import Config
 from execution_logger import ExecutionLogger
 
@@ -14,10 +14,10 @@ class CmdExecutorFactory:
     execution_logger: ExecutionLogger
 
     def new_instance(self):
-        if self.config.args.subparser_name == self.config.MISC_CMD:
-            return MiscCmdExecutor(self.config,
-                                   log=self.config.log,
-                                   exiting_error_handler=self.config.misc_subparser.error)
+        if self.config.args.subparser_name == self.config.WRITE_CONFIG_TEMPLATE_CMD:
+            return WriteConfigTemplateCmdExecutor(self.config,
+                                                  log=self.config.log,
+                                                  exiting_error_handler=self.config.write_config_template_subparser.error)
         elif self.config.args.subparser_name in [self.config.INACTIVE_USERS_CMD,
                                                  self.config.VALIDATE_CMD,
                                                  self.config.ANONYMIZE_CMD]:

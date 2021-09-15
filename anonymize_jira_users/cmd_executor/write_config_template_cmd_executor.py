@@ -4,7 +4,7 @@ from cmd_executor.base_cmd_executor import BaseCmdExecutor
 from config import Config
 
 
-class MiscCmdExecutor(BaseCmdExecutor):
+class WriteConfigTemplateCmdExecutor(BaseCmdExecutor):
     config: Config
 
     def __post_init__(self):
@@ -13,7 +13,7 @@ class MiscCmdExecutor(BaseCmdExecutor):
     # Override
     def check_cmd_parameters(self):
         if not self.config.args.config_template_filename:
-            self.exiting_error_handler(f"Command '{self.config.MISC_CMD}' needs '-g'")
+            self.exiting_error_handler(f"Command '{self.config.WRITE_CONFIG_TEMPLATE_CMD}' needs '-f'")
 
     # Override
     def execute(self):

@@ -41,7 +41,7 @@ class Config:
     # The validate-command is a subset of the anonymize-command. They share a lot of code and
     # the "anonymization"-reports.
     VALIDATE_CMD = 'validate'
-    MISC_CMD = 'misc'
+    WRITE_CONFIG_TEMPLATE_CMD = 'write-config-template'
     LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
     PRETTY_PRINT_LOG_LEVELS = ', '.join(LOG_LEVELS)
     # These values for false and true are taken from the docs of Python
@@ -82,7 +82,7 @@ class Config:
     log: Logger = field(default=None, init=False)
     script_name: str = field(default=os.path.basename(__file__), init=False)
     args: argparse.Namespace = field(init=False)
-    misc_subparser: argparse.ArgumentParser = field(init=False)
+    write_config_template_subparser: argparse.ArgumentParser = field(init=False)
     # iva means Inactive users, Anonymize, Validate.
     iva_parent_parser: argparse.ArgumentParser = field(init=False)
     inactive_users_subparser: argparse.ArgumentParser = field(init=False)
@@ -99,8 +99,8 @@ class Config:
         self.args = self.parser.parse_args()
 
         # Make the effective config from a) the default-config, b) the config-file if given, and c) the
-        # command-line-parameters. This is not needed for command CMD_MISC. But to not make an exception here, always
-        # make it.
+        # command-line-parameters. This is not needed for command WRITE_CONFIG_TEMPLATE_CMD. But to not
+        # make an exception here, always make it.
         self.make_effective_config(self.args)
 
         # After creation of effective_config:
@@ -119,7 +119,7 @@ class Config:
         o Create the file users.cfg with the user-names to be anonymized, one 
           user-name per line.
         o Create a config-file-template:
-              {self.script_name} misc -g
+              {self.script_name} {self.WRITE_CONFIG_TEMPLATE_CMD} -f
           The file my_bare_default_config.cfg has been created.
         o Rename the file, e.g. to my_config.cfg.
         o In that file, set the attributes jira_base_url, jira_auth with
@@ -163,7 +163,8 @@ class Config:
         self.iva_parent_parser.add_argument('-c', '--config-file',
                                             help="Config-file to pre-set command-line-options."
                                                  " You can generate a config-file-template with"
-                                                 " option 'misc -g'. There are parameters in the"
+                                                 f" option '{self.WRITE_CONFIG_TEMPLATE_CMD} -f'."
+                                                 " There are parameters in the"
                                                  " config-file not present on the command line."
                                                  " Empty parameters in the config-file are ignored."
                                                  " Parameters given on the command line overwrite"
@@ -249,11 +250,9 @@ class Config:
                                                           va_parent_parser,
                                                           post_iva_parent_parser],
                                                  help="Anonymizes users.")
-        self.misc_subparser = sp.add_parser(self.MISC_CMD,
-                                            parents=[parent_parser],
-                                            help="Intended to bundle diverse functions."
-                                                 " Currently `-g` to generate a"
-                                                 " template-config-file is the only function.")
+        self.write_config_template_subparser = sp.add_parser(self.WRITE_CONFIG_TEMPLATE_CMD,
+                                                             parents=[parent_parser],
+                                                             help="Write a configuration-template.")
 
         #
         # Add arguments special to command "anonymize".
@@ -269,15 +268,15 @@ class Config:
                                                    " background re-index.")
 
         #
-        # Add arguments special to command "misc".
+        # Add arguments special to command "write-config-template".
         #
-        self.misc_subparser.add_argument('-g', '--generate-config-template',
-                                         metavar='CONFIG_TEMPLATE_FILE',
-                                         const=self.TEMPLATE_FILENAME,
-                                         nargs='?',
-                                         dest='config_template_filename',
-                                         help="Generate a configuration-template."
-                                              f" Defaults to {self.TEMPLATE_FILENAME}.")
+        self.write_config_template_subparser.add_argument('-f', '--template-file',
+                                                          metavar='CONFIG_TEMPLATE_FILE',
+                                                          const=self.TEMPLATE_FILENAME,
+                                                          nargs='?',
+                                                          dest='config_template_filename',
+                                                          help="Write a configuration-template."
+                                                               f" Defaults to {self.TEMPLATE_FILENAME}.")
 
         #
         # Part 2: Parse the arguments and return them.
@@ -296,12 +295,13 @@ class Config:
         :return: Nothing.
         """
 
-        # If a config-file is given, merge it into the global config. No-None-values overwrites the values present
+        # If a config-file is given, merge it into the global config. No-None-values overwrite the values present
         # so far.
         #
-        # A config-file can only be present for the sub-parsers CMD_ANONYMIZE, CMD_INACTIVE_USERS, CMD_VALIDATE,
-        # but not for CMD_MISC. But to not make the CMD_MISC an exception, always note the config_file. Doing this,
-        # we have to check if the config_file attribute is giben in the namespace (it is absent in case of CMD_MISC).
+        # A config-file can only be present for the sub-parsers CMD_ANONYMIZE, CMD_INACTIVE_USERS, CMD_VALIDATE.
+        # But to not make the WRITE_CONFIG_TEMPLATE_CMD an exception, always note the config_file. Doing this,
+        # we have to check if the config_file attribute is given in the namespace (it is absent in case of
+        # WRITE_CONFIG_TEMPLATE_CMD).
         if hasattr(args, 'config_file') and args.config_file:
             parser = configparser.ConfigParser()
             # The parser could read the file by itself by calling parser.read(args.config_file). But if the file doesn't
@@ -309,13 +309,11 @@ class Config:
             # opened.
             with open(args.config_file) as f:
                 parser.read_file(f)
-            # Values from the [DEFAULTS] section. Only this section is used by the Anonymizer.
+            # Values from the [DEFAULTS] section. Only this section is used.
             defaults_section = parser.defaults()
-
             configfile_config = {}
-            # parser.defaults() is documented as dict, but it is something weird without an .items()-function.
-            # Wrapping it by a dict() function solves this.
-            for k, v in dict(defaults_section).items():
+            # parser.defaults() is documented as dict, but it is a collections.OrderedDict.
+            for k, v in defaults_section.items():
                 if k.lower() == 'exclude_groups':
                     groups = re.split('[\\n\\r]+', v)
                     configfile_config[k] = groups

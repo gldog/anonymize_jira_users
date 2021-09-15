@@ -11,6 +11,8 @@ Other articles
 User Manual
 =
 
+- [README](#readme)
+- [User Manual](#user-manual)
 - [General](#general)
 - [Quick-start](#quick-start)
 - [Command Line Options](#command-line-options)
@@ -19,7 +21,7 @@ User Manual
   * [Parameters for command "inactive-users"](#parameters-for-command--inactive-users-)
   * [Parameters for command "validate"](#parameters-for-command--validate-)
   * [Parameters for command "anonymize"](#parameters-for-command--anonymize-)
-  * [Parameters for command "misc"](#parameters-for-command--misc-)
+  * [Parameters for command "write-config-template"](#parameters-for-command--write-config-template-)
   * [The config-file](#the-config-file)
   * [Combination of parameters from the config-file and the command-line](#combination-of-parameters-from-the-config-file-and-the-command-line)
   * [Details about some options](#details-about-some-options)
@@ -48,10 +50,7 @@ User Manual
   * [Anonymization slow in case Jira is connected to an Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-an-oracle-db)
   * [Tickets at Atlassian](#tickets-at-atlassian)
 
-<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents generated with markdown-toc</a></i></small>
-
-
-
+Table of contents generated with [markdown-toc](http://ecotrust-canada.github.io/markdown-toc).
 
 
 ---
@@ -66,13 +65,19 @@ versions >= 8.7.
 
 All information stated here is about Jira Server and Jira Data Center.
 
-Call dist (TODO, no dists published yet):
-
-    python anonymize_jira_users.pyz ...
 
 Call latest main, in the project root-dir 'anonymize_jira_users':
 
-    python -m zipapp anonymize_jira_users  &&  python anonymize_jira_users.pyz
+    python anonymize_jira_users ...
+
+You can also create a single zip-file with
+
+    python zipapp anonymize_jira_users
+
+which creates `anonymize_jira_users.pyz`. You can copy this file elswhere
+and execute it as
+
+    python anonymize_jira_users.pyz ...
 
 ---
 
@@ -80,7 +85,7 @@ Call latest main, in the project root-dir 'anonymize_jira_users':
 
 - Create the file `users.cfg` with the user-names to be anonymized, one user-name per
   line.
-- Create a config-file-template: `python anonymize_jira_users.pyz misc -g`. The
+- Create a config-file-template: `python anonymize_jira_users.pyz write-config-template -f`. The
   file `my_bare_default_config.cfg` has been created.
 - Rename the file, e.g. to `my_config.cfg`.
 - In that file, set the attributes `jira_base_url`,
@@ -105,10 +110,9 @@ The Anonymizer has the following commands:
 
 - `inactive-users`: Retrieves a list of inactive, not yet anonymized users. These users
   are candidates for anonymization.
-- `validate`:            Validates user anonymization process. No anonymization is done.
-- `anonymize`:           Anonymizes users.
-- `misc`:                Bundle diverse functions. Currently `-g`
-  to generate a template-config-file is the only function.
+- `validate`: Validates user anonymization process. No anonymization is done.
+- `anonymize`: Anonymizes users.
+- `write-config-template`: Write a configuration-template.
 
 The above commands have different parameter-lists.
 
@@ -123,11 +127,12 @@ The above commands have different parameter-lists.
                             Log-level. Defaults to INFO.
       -c CONFIG_FILE, --config-file CONFIG_FILE
                             Config-file to pre-set command-line-options. You can
-                            generate a config-file-template with option 'misc -g'.
-                            There are parameters in the config-file not present on
-                            the command line. Empty parameters in the config-file
-                            are ignored. Parameters given on the command line
-                            overwrite parameters given in the config-file.
+                            generate a config-file-template with option 'write-
+                            config-template -f'. There are parameters in the
+                            config-file not present on the command line. Empty
+                            parameters in the config-file are ignored. Parameters
+                            given on the command line overwrite parameters given
+                            in the config-file.
       -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
                             Jira base-URL.
       -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
@@ -154,11 +159,12 @@ The above commands have different parameter-lists.
                             Log-level. Defaults to INFO.
       -c CONFIG_FILE, --config-file CONFIG_FILE
                             Config-file to pre-set command-line-options. You can
-                            generate a config-file-template with option 'misc -g'.
-                            There are parameters in the config-file not present on
-                            the command line. Empty parameters in the config-file
-                            are ignored. Parameters given on the command line
-                            overwrite parameters given in the config-file.
+                            generate a config-file-template with option 'write-
+                            config-template -f'. There are parameters in the
+                            config-file not present on the command line. Empty
+                            parameters in the config-file are ignored. Parameters
+                            given on the command line overwrite parameters given
+                            in the config-file.
       -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
                             Jira base-URL.
       -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
@@ -198,11 +204,12 @@ The above commands have different parameter-lists.
                             Log-level. Defaults to INFO.
       -c CONFIG_FILE, --config-file CONFIG_FILE
                             Config-file to pre-set command-line-options. You can
-                            generate a config-file-template with option 'misc -g'.
-                            There are parameters in the config-file not present on
-                            the command line. Empty parameters in the config-file
-                            are ignored. Parameters given on the command line
-                            overwrite parameters given in the config-file.
+                            generate a config-file-template with option 'write-
+                            config-template -f'. There are parameters in the
+                            config-file not present on the command line. Empty
+                            parameters in the config-file are ignored. Parameters
+                            given on the command line overwrite parameters given
+                            in the config-file.
       -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
                             Jira base-URL.
       -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
@@ -241,19 +248,20 @@ The above commands have different parameter-lists.
                             If at least one user was anonymized, trigger a
                             background re-index.
 
-## Parameters for command "misc"
+
+## Parameters for command "write-config-template"
 
       -h, --help            show this help message and exit
       -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
                             Log-level. Defaults to INFO.
-      -g [CONFIG_TEMPLATE_FILE], --generate-config-template [CONFIG_TEMPLATE_FILE]
-                            Generate a configuration-template. Defaults to my-
-                            bare-default-config.cfg.
+      -f [CONFIG_TEMPLATE_FILE], --template-file [CONFIG_TEMPLATE_FILE]
+                            Write a configuration-template. Defaults to
+                            my_bare_default_config.cfg.
 
 ## The config-file
 
 Most of the command-line-options can be set in a config-file. A template for this file can
-be generated with `python anonymize_jira_users.pyz misc -g`.
+be generated with `python anonymize_jira_users.pyz write-config-template -f`.
 
 A minimal config-file consists of:
 
