@@ -181,5 +181,5 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
                 'value': self.execution_logger.logs.get('is_background_reindex_triggered', False)
             }
         ]
-        self.report_generator.write_anonymization_report(overview_data)
+        self.report_generator.write_report(overview_data)
         self.report_generator.print_overview(overview_data)

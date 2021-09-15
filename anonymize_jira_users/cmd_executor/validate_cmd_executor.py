@@ -209,5 +209,5 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
                 'value': num_users - num_skipped_users
             }
         ]
-        self.report_generator.write_anonymization_report(overview_data)
+        self.report_generator.write_report(overview_data)
         self.report_generator.print_overview(overview_data)

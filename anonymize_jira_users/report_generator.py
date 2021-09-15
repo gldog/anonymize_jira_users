@@ -52,7 +52,7 @@ class ReportGenerator:
             # something like \u00c3 in case of a non-ASCII char.
             print(json.dumps(report_details_data, indent=4, ensure_ascii=False), file=f)
 
-    def write_anonymization_report(self, overview_data):
+    def write_report(self, overview_data):
         self.set_script_finished_date_and_execution_time()
 
         report_dirpath = self.config.create_report_dir()
