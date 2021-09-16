@@ -1,7 +1,6 @@
-import abc
-import atexit
 import json
 import sys
+from abc import ABCMeta
 from dataclasses import dataclass
 from typing import List
 
@@ -12,7 +11,7 @@ from report_generator import ReportGenerator
 
 
 @dataclass
-class IVABaseCmdExecutor(BaseCmdExecutor):
+class IVABaseCmdExecutor(BaseCmdExecutor, metaclass=ABCMeta):
     """Base-class for InactiveUsersCmdExecutor, ValidateCmdExecutor, and AnonymizeCmdExecutor."""
 
     execution_logger: ExecutionLogger
@@ -28,11 +27,6 @@ class IVABaseCmdExecutor(BaseCmdExecutor):
         self.users: List[JiraUser] = []
         self.report_generator.users = self.users
 
-    # @abc.abstractmethod
     def check_cmd_parameters(self):
         atexit.register(self.report_generator.write_details_report)
         self.log.debug(f"Effective config: {self.config.sanitized_effective_config}")
-
-    @abc.abstractmethod
-    def execute(self):
-        pass

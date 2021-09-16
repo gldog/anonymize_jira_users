@@ -1,3 +1,4 @@
+import atexit
 import re
 from dataclasses import dataclass
 from os import access, R_OK
@@ -21,7 +22,6 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
     def check_cmd_parameters(self):
         super().check_cmd_parameters()
         # Check if user_list_file is given in config and is readable.
-        errors = []
         user_list_file = self.config.effective_config.get('user_list_file')
         if not user_list_file:
             self.exiting_error_handler("Missing parameter 'user_list_file'")
@@ -33,6 +33,9 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
 
     # Override
     def execute(self):
+        # The derrived AnonymizeCmdExecutor calls this execute(). In that case it is the post_execute()
+        # from AnonymizeCmdExecutor.
+        atexit.register(self.post_execute)
         self.read_users_from_user_list_file()
         self.filter_by_duplicate()
         self.get_user_data()
@@ -188,7 +191,6 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
             if user not in self.remaining_users:
                 user.action = 'skipped'
 
-    # Overview
     def post_execute(self):
         num_users = len(self.users)
         num_skipped_users = len([user for user in self.users if user.action == 'skipped'])

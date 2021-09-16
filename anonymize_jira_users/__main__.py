@@ -10,12 +10,10 @@ execution_logger.logs['script_started'] = Tools.now_to_date_string()
 config = Config()
 
 cmd_executor = CmdExecutorFactory(config=config, execution_logger=execution_logger).new_instance()
-
 cmd_executor.check_cmd_parameters()
 cmd_executor.execute()
 
 execution_logger.logs['is_script_aborted'] = False
 execution_logger.logs['script_finished'] = Tools.now_to_date_string()
 
-# Write/print the report.
-cmd_executor.post_execute()
+# Note, there is also the post_execute(). It is registered for atexit if needed

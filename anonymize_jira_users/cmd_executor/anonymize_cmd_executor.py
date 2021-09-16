@@ -53,6 +53,8 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
 
     # Override
     def execute(self):
+        # The ValidateCmdExecutor.execute() calls atexit.register(self.post_execute), but it is the
+        # AnonymizeCmdExecutor's one.
         super().execute()
 
         if self.jira.is_any_anonymization_running():
@@ -154,7 +156,6 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
                 # For all other, not documented HTTP-problems:
                 r.raise_for_status()
 
-    # Overview
     def post_execute(self):
         num_users = len(self.users)
         num_skipped_users = len([user for user in self.users if user.action == 'skipped'])
