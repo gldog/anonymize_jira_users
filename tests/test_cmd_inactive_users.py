@@ -1,5 +1,4 @@
 import logging
-import pathlib
 from typing import List
 
 from base_test_class import BaseTestClass
@@ -74,40 +73,40 @@ class TestCmdInactiveUsers(BaseTestClass):
         self.jira_application.admin_session.add_user_to_group('u06_in_eg_2', 'exclude_group_2')
         self.jira_application.admin_session.add_user_to_group('u07_in_eg_1_and_2', 'exclude_group_2')
 
-        subtest_path = f'{self.out_base_dir_path}/test_A'
-        pathlib.Path(subtest_path).mkdir(parents=True)
-        config_file_path = subtest_path + '/my-tests-config.cfg'
+        subtest_path = self.out_base_dir_path.joinpath('test_A')
+        subtest_path.mkdir(parents=True)
+        config_file_path = subtest_path.joinpath('my-tests-config.cfg')
         self.write_config_file(
             filename=config_file_path)
         cmd = f'inactive-users -c {config_file_path} -o {subtest_path}'
-        r = self.execute_anonymizer(cmd, is_log_output=True, out_filepath=subtest_path + '/log.out')
+        r = self.execute_anonymizer(cmd, is_log_output=True, out_filepath=subtest_path.joinpath('log.out'))
         self.assertEqual(0, r.returncode)
         expected_file_content = self.create_expected_filecontent(users_for_user_list_file, [])
-        self.compare_expected_content_with_got_file(expected_file_content, subtest_path + '/inactive_users.cfg')
+        self.compare_expected_content_with_got_file(expected_file_content, subtest_path.joinpath('inactive_users.cfg'))
 
-        subtest_path = f'{self.out_base_dir_path}/test_B'
-        pathlib.Path(subtest_path).mkdir(parents=True)
-        config_file_path = subtest_path + '/my-tests-config.cfg'
+        subtest_path = self.out_base_dir_path.joinpath('test_B')
+        subtest_path.mkdir(parents=True)
+        config_file_path = subtest_path.joinpath('my-tests-config.cfg')
         self.write_config_file(
             filename=config_file_path,
             exclude_groups=['exclude_group_1'])
         cmd = f'inactive-users -c {config_file_path} -o {subtest_path}'
-        r = self.execute_anonymizer(cmd, is_log_output=True, out_filepath=subtest_path + '/log.out')
+        r = self.execute_anonymizer(cmd, is_log_output=True, out_filepath=subtest_path.joinpath('log.out'))
         self.assertEqual(0, r.returncode)
         expected_file_content = self.create_expected_filecontent(users_for_user_list_file, ['in_eg_1'])
-        self.compare_expected_content_with_got_file(expected_file_content, subtest_path + '/inactive_users.cfg')
+        self.compare_expected_content_with_got_file(expected_file_content, subtest_path.joinpath('inactive_users.cfg'))
 
-        subtest_path = f'{self.out_base_dir_path}/test_C'
-        pathlib.Path(subtest_path).mkdir(parents=True)
-        config_file_path = subtest_path + '/my-tests-config.cfg'
+        subtest_path = self.out_base_dir_path.joinpath('test_C')
+        subtest_path.mkdir(parents=True)
+        config_file_path = subtest_path.joinpath('my-tests-config.cfg')
         self.write_config_file(
             filename=config_file_path,
             exclude_groups=['exclude_group_1', 'exclude_group_2'])
         cmd = f'inactive-users -c {config_file_path} -o {subtest_path}'
-        r = self.execute_anonymizer(cmd, is_log_output=True, out_filepath=subtest_path + '/log.out')
+        r = self.execute_anonymizer(cmd, is_log_output=True, out_filepath=subtest_path.joinpath('log.out'))
         self.assertEqual(0, r.returncode)
         expected_file_content = self.create_expected_filecontent(users_for_user_list_file, ['in_eg_'])
-        self.compare_expected_content_with_got_file(expected_file_content, subtest_path + '/inactive_users.cfg')
+        self.compare_expected_content_with_got_file(expected_file_content, subtest_path.joinpath('inactive_users.cfg'))
 
     @staticmethod
     def create_expected_filecontent(users: List[JiraUser], excludes):
@@ -144,7 +143,13 @@ class TestCmdInactiveUsers(BaseTestClass):
         log.info(expected_file_content)
 
         with open(filepath, 'r') as f:
-            lines = f.read().splitlines(False)[1:]
+            # Strip-off the first line. It contains something like in the following example, which
+            # would need extra effort to compare:
+            #     File inactive_users.cfg generated at 2021-09-18T17:33:48
+            #
+            lines_of_got_file = f.read().splitlines(False)[1:]
             log.info("GOT:")
-            log.info(lines)
-            self.assertListEqual(expected_file_content, lines)
+            log.info(lines_of_got_file)
+            self.assertListEqual(expected_file_content, lines_of_got_file,
+                                 f"\nexpected_file_content: {expected_file_content}"
+                                 f", lines_of_got_file: {lines_of_got_file}")

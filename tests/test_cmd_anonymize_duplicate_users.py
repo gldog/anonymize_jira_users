@@ -1,7 +1,6 @@
 import dataclasses
 import json
 import logging
-import pathlib
 
 from deepdiff import DeepDiff
 
@@ -27,7 +26,7 @@ class TestCmdAnonymize(BaseTestClass):
         Setting up this tests is quite speific to this tests, so all set-up stuff is placed here.
         """
 
-        pathlib.Path(self.out_base_dir_path).mkdir(parents=True)
+        self.out_base_dir_path.mkdir(parents=True)
 
         self.usernames_for_user_list_file = []
 
@@ -134,21 +133,21 @@ class TestCmdAnonymize(BaseTestClass):
                  f"{json.dumps(expected_anonymizing_report_json, indent=4, ensure_ascii=False)}")
 
         # The following file is for documenting the tests.
-        with open(self.out_base_dir_path + '/predicted_anonymized_userdata.json', 'w') as f:
+        with open(self.out_base_dir_path.joinpath('predicted_anonymized_userdata.json'), 'w') as f:
             f.write(json.dumps(r.json(), indent=4))
 
-        user_list_file_path = self.out_base_dir_path + '/users.cfg'
+        user_list_file_path = self.out_base_dir_path.joinpath('users.cfg')
         self.write_usernames_to_user_list_file(self.usernames_for_user_list_file, filepath=user_list_file_path)
-        self.config_file_path = self.out_base_dir_path + '/my-tests-config.cfg'
+        self.config_file_path = self.out_base_dir_path.joinpath('my-tests-config.cfg')
         self.write_config_file(filename=self.config_file_path, user_list_file=user_list_file_path)
 
-        out_dir = self.out_base_dir_path + '/anonymize'
-        out_logfile = out_dir + '/log.out'
+        out_dir = self.out_base_dir_path.joinpath('anonymize')
+        out_logfile = out_dir.joinpath('log.out')
         r = self.execute_anonymizer(f'anonymize -c {self.config_file_path} -o {out_dir}', is_log_output=True,
                                     out_filepath=out_logfile)
         self.assertEqual(0, r.returncode)
 
-        with open(pathlib.Path(out_dir).joinpath('report.json'), 'r') as f:
+        with open(out_dir.joinpath('report.json'), 'r') as f:
             got_anonymizing_report_json = json.loads(f.read())
 
         exclude_regex_paths = [r"root\['users'\]\[\d+\]\['time_(start|finish|duration)'\]"]

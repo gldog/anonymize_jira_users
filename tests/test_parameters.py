@@ -14,12 +14,12 @@ logging.basicConfig(level=logging.DEBUG)
 class Test01(BaseTestClass):
     """
     The "effective configuration" of the Anonymizer results from a merge of
-        - the built-in default configuration with
-        - the configuration from a config-file, and with
-        - the configuration from command line arguments.
+        - the built-in default configuration
+        - the configuration from a config-file
+        - the configuration from command line arguments
 
-    To read the effective configuration, the Anonymizer is called with parameter --info, which prints the
-    effective config to the command line and then exits. The output is:
+    To only create and print the effective configuration, the Anonymizer is called with parameter --info. This.
+    The output is:
 
     Effective config:
     {
@@ -28,7 +28,9 @@ class Test01(BaseTestClass):
 
     The tests-groups:
 
-    test_1x: Command 'inactive-users'. Here, only arguments specific to this command are tested.
+    The tests are grouped by their function-prefixes.
+
+    test_1x: Command 'inactive-users'. Here only arguments specific to this command are tested.
     test_2x: Command 'anoynmize'. Includes tests of arguments of command 'validate', as 'validate' is
         a sub-set of 'anonymize'.
     """
@@ -218,7 +220,7 @@ class Test01(BaseTestClass):
         self.maxDiff = None
         self.assertEqual(expected_config_as_sorted_json, got_config_as_sorted_json)
 
-    def test_21_command_ananlyize_with_defaults_only(self):
+    def test_21_command_anonymize_with_defaults_only(self):
         expected_config = {
             'subparser_name': 'anonymize',
             'jira_base_url': '',
@@ -254,7 +256,7 @@ class Test01(BaseTestClass):
         self.maxDiff = None
         self.assertEqual(expected_config_as_sorted_json, got_config_as_sorted_json)
 
-    def test_22_command_analyze_with_config_file(self):
+    def test_22_command_anonymize_with_config_file(self):
         expected_config = {
             'subparser_name': 'anonymize',
             'jira_base_url': '_jira_base_url_',
@@ -301,9 +303,6 @@ class Test01(BaseTestClass):
 
         r = self.execute_anonymizer(f'anonymize -c {config_file.name} --info')
         std_out = r.stdout.decode('utf-8')
-        #print(f"r.returncode {r.returncode}")
-        #print(f"r.stderr {r.stderr.decode('utf-8')}")
-        #print(f"r.stdout {std_out}")
 
         expected_config_as_sorted_json = json.dumps(expected_config, sort_keys=True)
         got_config_as_sorted_json = json.dumps(

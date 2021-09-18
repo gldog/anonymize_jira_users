@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import logging
+import pathlib
 import re
 import subprocess
 import unittest
@@ -45,9 +46,10 @@ class BaseTestClass(unittest.TestCase):
 
         # Create a report-dir-name for each tests-run, consisting of a date-string, the Jira version, and the
         # Jira system default language.
-        self.out_base_dir_path = \
-            'runs/' + self.create_dir_name_starting_with_datetime(
-                [self.jira_application.version, self.jira_application.get_system_default_languange()])
+        self.out_base_dir_path = pathlib.Path('..', 'test_runs',
+                                              self.create_dir_name_starting_with_datetime(
+                                                  [self.jira_application.version,
+                                                   self.jira_application.get_system_default_languange()]))
 
     def tearDown(self):
         self.jira_application.admin_session.close()

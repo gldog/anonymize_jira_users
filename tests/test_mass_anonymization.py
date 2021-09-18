@@ -1,11 +1,8 @@
 import logging
-import os
 import pathlib
-import shutil
 
 import urllib3
 
-from atlassian import Jira
 from base_test_class import BaseTestClass
 
 log = logging.getLogger(__name__)
@@ -48,13 +45,13 @@ class TestMassAnonymization(BaseTestClass):
                 self.jira_application.user_activate(username, False)
                 usernames_for_user_list_file.append(username)
 
-            user_list_file_path = self.out_base_dir_path + '/users.cfg'
+            user_list_file_path = self.out_base_dir_path.joinpath('users.cfg')
             self.write_usernames_to_user_list_file(usernames_for_user_list_file, filepath=user_list_file_path)
-            self.config_file_path = self.out_base_dir_path + '/my-tests-config.cfg'
+            self.config_file_path = self.out_base_dir_path.joinpath('my-tests-config.cfg')
             self.write_config_file(filename=self.config_file_path, user_list_file=user_list_file_path)
 
             r = self.execute_anonymizer(
-                f'anonymize -c {self.config_file_path} -o {self.out_base_dir_path}',is_log_output=True,
+                f'anonymize -c {self.config_file_path} -o {self.out_base_dir_path}', is_log_output=True,
                 out_filepath=self.out_base_dir_path + '/log.out')
             # decoded_stdout = r.stdout.decode('Latin-1')
             # decoded_stderr = r.stderr.decode('Latin-1')

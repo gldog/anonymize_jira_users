@@ -15,6 +15,7 @@ dev/
 eval/
 tests/old
 tests/runs
+test_runs/
 tmp/
 reports/
 
@@ -39,7 +40,6 @@ venv/
 
 # Maven
 target/
-dist/
 
 # JetBrains IDE
 .idea/
@@ -66,3 +66,4 @@ Thumbs.db
 *.mov
 *.wmv
 
+/anonymize_jira_users.py
