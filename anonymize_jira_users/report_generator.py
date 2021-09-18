@@ -13,7 +13,8 @@ from tools import Tools
 class ReportGenerator:
     config: Config
     execution_logger: ExecutionLogger
-    users: List[JiraUser] = field(init=False)
+    overview_data: dict = field(init=False, default_factory=dict)
+    users: List[JiraUser] = field(init=False, default_factory=list)
 
     def __post_init__(self):
         self.log = self.config.log
@@ -49,22 +50,22 @@ class ReportGenerator:
                 'users': [user.asdict_for_detailed_report() for user in self.users]
             }
             # ensure_ascii=False: Write as chars, not as codes. With True, dump() would output
-            # something like \u00c3 in case of a non-ASCII char.
-            print(json.dumps(report_details_data, indent=4, ensure_ascii=False), file=f)
+            # something like \u00c3 in case of a non-ASCII char. But I like to output readable text in
+            # case the Anonymizer is used in a Jira instance set to non-EN-languages.
+            json.dump(report_details_data, indent=4, ensure_ascii=False, fp=f)
 
-    def write_report(self, overview_data):
-        self.set_script_finished_date_and_execution_time()
+    def write_report(self):
 
         report_dirpath = self.config.create_report_dir()
+        raw_report = self.create_report_data()
+
         file_path = report_dirpath.joinpath(self.config.effective_config['report_json_filename'])
         self.log.debug(f"as JSON to {file_path}")
-
-        raw_report = self.create_report_data(overview_data)
-
         with open(file_path, 'w') as f:
             # ensure_ascii=False: Write as chars, not as codes. With True, dump() would output
-            # something like \u00c3 in case of a non-ASCII char.
-            print(json.dumps(raw_report, indent=4, ensure_ascii=False), file=f)
+            # something like \u00c3 in case of a non-ASCII char. But I like to output readable text in
+            # case the Anonymizer is used in a Jira instance set to non-EN-languages.
+            json.dump(raw_report, indent=4, ensure_ascii=False, fp=f)
 
         file_path = report_dirpath.joinpath(self.config.effective_config['report_text_filename'])
         self.log.debug(f"as CSV to {file_path}")
@@ -79,19 +80,54 @@ class ReportGenerator:
             writer.writeheader()
             writer.writerows(raw_report['users'])
 
-    def create_report_data(self, overview_data):
+    def create_report_data(self):
+
+        # Shorten the overview-data. The format created by the ValidationCmdExecutor and AnonymizeCmdExecutor is e.g.:
+        #
+        #   [
+        #     {
+        #       "name": "Users in user-list-file",
+        #       "key": "number_of_users_in_user_list_file",
+        #       "value": 16
+        #     },
+        #     {
+        #       "name": "Skipped users",
+        #       "key": "number_of_skipped_users",
+        #       "value": 2
+        #     },
+        #     {
+        #       "name": "Anonymized user",
+        #       "key": "number_of_anonymized_users",
+        #       "value": 14
+        #     },
+        #     {
+        #       "name": "Background re-index triggered",
+        #       "key": "is_background_reindex_triggered",
+        #       "value": false
+        #     }
+        #   ]
+        #
+        # And the resulting format is:
+        #
+        #   {
+        #     "number_of_users_in_user_list_file": 16,
+        #     "number_of_skipped_users": 2,
+        #     "number_of_anonymized_users": 14,
+        #     "is_background_reindex_triggered": false
+        #   }
         overview = {}
-        for entry in overview_data:
+        for entry in self.overview_data:
             overview[entry['key']] = entry['value']
+
         report = {
             'overview': overview,
             'users': [user.asdict_for_report() for user in self.users]
         }
         return report
 
-    def print_overview(self, overview_data):
+    def print_overview(self):
         print("Result:")
-        for entry in overview_data:
+        for entry in self.overview_data:
             print(f"  {entry['name']}: {entry['value']}")
 
         if self.execution_logger.errors:

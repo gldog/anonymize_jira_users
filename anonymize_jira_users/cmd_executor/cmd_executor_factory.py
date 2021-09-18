@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from cmd_executor.anonymize_cmd_executor import AnonymizeCmdExecutor
 from cmd_executor.inactive_users_cmd_executor import InactiveUsersCmdExecutor
+from cmd_executor.recreate_report_cmd_executor import RecreateReportCmdExecutor
 from cmd_executor.validate_cmd_executor import ValidateCmdExecutor
 from cmd_executor.write_config_template_cmd_executor import WriteConfigTemplateCmdExecutor
 from config import Config
@@ -18,6 +19,11 @@ class CmdExecutorFactory:
             return WriteConfigTemplateCmdExecutor(self.config,
                                                   log=self.config.log,
                                                   exiting_error_handler=self.config.write_config_template_subparser.error)
+        elif self.config.args.subparser_name == self.config.RECREATE_REPORT_CMD:
+            return RecreateReportCmdExecutor(config=self.config,
+                                             log=self.config.log,
+                                             execution_logger=self.execution_logger,
+                                             exiting_error_handler=self.config.recreate_report_subparser.error)
         elif self.config.args.subparser_name in [self.config.INACTIVE_USERS_CMD,
                                                  self.config.VALIDATE_CMD,
                                                  self.config.ANONYMIZE_CMD]:

@@ -1,3 +1,4 @@
+import atexit
 import json
 import sys
 from abc import ABCMeta
@@ -25,6 +26,12 @@ class IVABaseCmdExecutor(BaseCmdExecutor, metaclass=ABCMeta):
 
         self.report_generator = ReportGenerator(config=self.config, execution_logger=self.execution_logger)
         self.users: List[JiraUser] = []
+        # Use
+        #   self.report_generator.users = self.users
+        # instead of
+        #   self.report_generator.users = []
+        # self.users is a reference. If self.users is update later on, also the
+        # self.report_generator.users is updated. And this is exactly what I want.
         self.report_generator.users = self.users
 
     def check_cmd_parameters(self):

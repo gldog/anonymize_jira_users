@@ -65,6 +65,7 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
 
         self.anonymize_users()
 
+        self.execution_logger.logs['is_background_reindex_triggered'] = False
         if self.config.effective_config['is_trigger_background_reindex']:
             is_any_user_anonymized = any((ReportGenerator.is_user_anonymized(user) for user in self.users))
             if is_any_user_anonymized:
@@ -156,10 +157,13 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
                 # For all other, not documented HTTP-problems:
                 r.raise_for_status()
 
-    def post_execute(self):
-        num_users = len(self.users)
-        num_skipped_users = len([user for user in self.users if user.action == 'skipped'])
-        num_anonymized_users = len([user for user in self.users if user.action == 'anonymized'])
+    @staticmethod
+    def get_num_anonymized_users(users):
+        return len([user for user in users if user.action == 'anonymized'])
+
+    @staticmethod
+    def get_overview_data(num_users, num_skipped_users, num_anonymized_users=None,
+                          is_background_reindex_triggered=None):
         overview_data = [
             {
                 'name': 'Users in user-list-file',
@@ -179,8 +183,21 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
             {
                 'name': 'Background re-index triggered',
                 'key': 'is_background_reindex_triggered',
-                'value': self.execution_logger.logs.get('is_background_reindex_triggered', False)
+                'value': is_background_reindex_triggered
             }
         ]
-        self.report_generator.write_report(overview_data)
-        self.report_generator.print_overview(overview_data)
+        return overview_data
+
+    @classmethod
+    def write_report_and_print_overview(cls, report_generator, is_background_reindex_triggered=None):
+        report_generator.overview_data = cls.get_overview_data(
+            num_users=len(report_generator.users),
+            num_skipped_users=cls.get_num_skipped_users(report_generator.users),
+            num_anonymized_users=cls.get_num_anonymized_users(report_generator.users),
+            is_background_reindex_triggered=is_background_reindex_triggered)
+        report_generator.write_report()
+        report_generator.print_overview()
+
+    def post_execute(self):
+        self.write_report_and_print_overview(self.report_generator,
+                                             self.execution_logger.logs.get('is_background_reindex_triggered', False))

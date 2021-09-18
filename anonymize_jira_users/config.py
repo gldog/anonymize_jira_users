@@ -21,12 +21,15 @@ class PathAction(argparse.Action):
     """Make a clean path: strip off trailing or multiple path-separators."""
 
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        # print(f"__init__; option_strings: {option_strings}, dest: {dest}, kwargs: {kwargs}")
+        # The following two lines are copied from elsewhere. Don't know if they are useful.
         if nargs is not None:
             raise ValueError("nargs not allowed")
+
         super(PathAction, self).__init__(option_strings, dest, **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None):
-        # print('%r %r %r' % (namespace, values, option_string))
+        # print(f"__call__; parser {parser}, namespace: {namespace}, values {values}, option_string: {option_string}")
         values = str(pathlib.Path(values))
         setattr(namespace, self.dest, values)
 
@@ -42,6 +45,7 @@ class Config:
     # the "anonymization"-reports.
     VALIDATE_CMD = 'validate'
     WRITE_CONFIG_TEMPLATE_CMD = 'write-config-template'
+    RECREATE_REPORT_CMD = 'recreate-report'
     LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
     PRETTY_PRINT_LOG_LEVELS = ', '.join(LOG_LEVELS)
     # These values for false and true are taken from the docs of Python
@@ -83,6 +87,7 @@ class Config:
     script_name: str = field(default=os.path.basename(__file__), init=False)
     args: argparse.Namespace = field(init=False)
     write_config_template_subparser: argparse.ArgumentParser = field(init=False)
+    recreate_report_subparser: argparse.ArgumentParser = field(init=False)
     # iva means Inactive users, Anonymize, Validate.
     iva_parent_parser: argparse.ArgumentParser = field(init=False)
     inactive_users_subparser: argparse.ArgumentParser = field(init=False)
@@ -253,6 +258,10 @@ class Config:
         self.write_config_template_subparser = sp.add_parser(self.WRITE_CONFIG_TEMPLATE_CMD,
                                                              parents=[parent_parser],
                                                              help="Write a configuration-template.")
+        self.recreate_report_subparser = sp.add_parser(self.RECREATE_REPORT_CMD,
+                                                       parents=[parent_parser],
+                                                       help="Recreate the report.json and the report.csv"
+                                                            " from the report_details.json of a previous run.")
 
         #
         # Add arguments special to command "anonymize".
@@ -277,6 +286,22 @@ class Config:
                                                           dest='config_template_filename',
                                                           help="Write a configuration-template."
                                                                f" Defaults to {self.TEMPLATE_FILENAME}.")
+
+        #
+        # Add arguments special to command "recreate-report".
+        #
+        self.recreate_report_subparser.add_argument('-i', '--recreate-report',
+                                                    metavar='REPORT_DETAILS_JSON',
+                                                    dest='report_details_json',
+                                                    help="report_details.json from a previous run to re-create"
+                                                         " the report.json and report.csv from.")
+        self.recreate_report_subparser.add_argument('-o', '--report-out-dir',
+                                                    action=PathAction,
+                                                    help="Output-directory to write the re-created reports into."
+                                                         " If it doesn't exist, it'll be created."
+                                                         " If it does exist, the Anonymizer aborts."
+                                                         " Defaults to"
+                                                         f" '{self.DEFAULT_CONFIG['report_out_dir']}'.")
 
         #
         # Part 2: Parse the arguments and return them.
@@ -309,7 +334,7 @@ class Config:
             # opened.
             with open(args.config_file) as f:
                 parser.read_file(f)
-            # Values from the [DEFAULTS] section. Only this section is used.
+            # Values from the [DEFAULTS] section. Only this section is used by the Anonymizer.
             defaults_section = parser.defaults()
             configfile_config = {}
             # parser.defaults() is documented as dict, but it is a collections.OrderedDict.

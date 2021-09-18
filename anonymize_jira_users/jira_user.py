@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class JiraUser:
+    user_json: dict = field(default=None)
     name: str = field(default=None)
     key: str = field(default=None)
     display_name: str = field(default=None)
@@ -20,6 +21,44 @@ class JiraUser:
     action: str = field(default=None)
     logs: dict = field(default_factory=dict)
 
+    def __post_init__(self):
+        if self.user_json:
+            # The user-name is allowed to consist of only digits, but it must be interpreted as string.
+            self.name = self.strvalue_or_none(self.user_json['name'])
+            # Same for the key for users created in Jira <8.4.
+            self.key = self.strvalue_or_none(self.user_json['key'])
+            # 'displayName' is the attribute in the REST response, and 'display_name' the one in
+            # the report_details.json.
+            self.display_name = self.find_first_attr(self.user_json, ['displayName', 'display_name'])
+            # 'emailAddress' is the attribute in the REST response, and 'email_address' the one in
+            # the report_details.json.
+            self.email_address = self.find_first_attr(self.user_json, ['emailAddress', 'email_address'], '')
+            self.active = self.user_json['active']
+            # 'deleted' Since Jira 8.10.
+            self.deleted = self.user_json.get('deleted')
+            self.filter_error_message = self.user_json.get('filter_error_message', '')
+            self.time_start = self.user_json.get('time_start', '')
+            self.time_finish = self.user_json.get('time_finish', '')
+            self.time_duration = self.user_json.get('time_duration', '')
+            self.anonymized_user_name = self.user_json.get('anonymized_user_name', '')
+            self.anonymized_user_key = self.user_json.get('anonymized_user_key', '')
+            self.anonymized_user_display_name = self.user_json.get('anonymized_user_display_name', '')
+            self.action = self.user_json.get('action', '')
+
+    @staticmethod
+    def strvalue_or_none(val):
+        return str(val) if val is not None else None
+
+    @staticmethod
+    def find_first_attr(user_json, attr_list, default=None):
+        for attr in attr_list:
+            try:
+                v = user_json[attr]
+                return str(v) if v is not None else None
+            except KeyError:
+                pass
+        return default
+
     def recreate_from_json(self, user_json):
         user = self.from_json(user_json)
         self.name = user.name
@@ -30,10 +69,8 @@ class JiraUser:
         self.deleted = user.deleted
 
     @staticmethod
-    def from_json(user_json):
+    def from_json(user_json: dict):
         user = JiraUser()
-        # These four could throw KeyError. But it is expected once given the proper
-        # REST-response-JSON, all four attributes are present.
         # The user-name is allowed to consist of only digits, but it must be interpreted as string.
         user.name = str(user_json['name'])
         # Same for the key for users created in Jira <8.4.
@@ -42,17 +79,21 @@ class JiraUser:
         user.email_address = user_json['emailAddress']
         user.active = user_json['active']
         # 'deleted' Since Jira 8.10.
-        user.deleted = user_json['deleted'] if 'deleted' in user_json else None
+        user.deleted = user_json.get('deleted')
 
         return user
 
     def asdict_for_detailed_report(self):
         """Return a dict comprising of almost all properties, but not 'from_json'."""
-        return {k: v for k, v in self.__dict__.items() if k not in ['from_json']}
+        return {k: v for k, v in self.__dict__.items()}
 
     def asdict_for_report(self):
         """
         Return a dict comprising of almost all properties, but not 'from_json', 'logs',
         'email_address'.
         """
-        return {k: v for k, v in self.__dict__.items() if k not in ['from_json', 'logs', 'email_address']}
+        return self.filter_dict_for_report(self.__dict__)
+
+    @staticmethod
+    def filter_dict_for_report(user_json):
+        return {k: v for k, v in user_json.items() if k not in ['user_json', 'logs', 'email_address']}

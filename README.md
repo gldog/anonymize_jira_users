@@ -113,8 +113,10 @@ The Anonymizer has the following commands:
 - `validate`: Validates user anonymization process. No anonymization is done.
 - `anonymize`: Anonymizes users.
 - `write-config-template`: Write a configuration-template.
+- `recreate-report`: Re-cerate the report.json and report.csv from 
+    the report_details.json.
 
-The above commands have different parameter-lists.
+These commands have different parameter-lists.
 
 ## Parameters without command
 
@@ -258,9 +260,21 @@ The above commands have different parameter-lists.
                             Write a configuration-template. Defaults to
                             my_bare_default_config.cfg.
 
+## Parameters for command "recreate-report"
+    -h, --help            show this help message and exit
+    -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
+                          Log-level. Defaults to INFO.
+    -i REPORT_DETAILS_JSON, --recreate-report REPORT_DETAILS_JSON
+                          report_details.json from a previous run to re-create
+                          the report.json and report.csv from.
+    -o REPORT_OUT_DIR, --report-out-dir REPORT_OUT_DIR
+                          Output-directory to write the re-created reports into.
+                          If it doesn't exist, it'll be created. If it does
+                          exist, the Anonymizer aborts. Defaults to '.'.
+
 ## The config-file
 
-Most of the command-line-options can be set in a config-file. A template for this file can
+Most of the command-line options can be set in a config-file. A template for this file can
 be generated with `python anonymize_jira_users.pyz write-config-template -f`.
 
 A minimal config-file consists of:
@@ -397,7 +411,7 @@ On Windows, this could be
 If the file was created on Windows and you execute the Anonymizer on a different platform,
 try e.g.:
 
-`python anonymize_jira_users.pyz validate --encoding cp1252 <your options goes here...>`
+`python anonymize_jira_users.pyz validate --encoding cp1252 <your options...>`
 
 or play around with other encodings.
 

@@ -191,9 +191,21 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
             if user not in self.remaining_users:
                 user.action = 'skipped'
 
-    def post_execute(self):
-        num_users = len(self.users)
-        num_skipped_users = len([user for user in self.users if user.action == 'skipped'])
+    @staticmethod
+    def get_num_skipped_users(users):
+        return len([user for user in users if user.action == 'skipped'])
+
+    @staticmethod
+    def get_overview_data(num_users, num_skipped_users):
+        """Create and return the overview-data.
+
+        This data comprises of information about the number of users in the user-list-file, the
+        number of skipped users, and the number of validated users.
+
+        Each data comprises of:
+            - name: Pritty-print name; used for command line output after the Anonymizer has been ran.
+            - key: Used in the reports.
+            - value: The value. """
         overview_data = [
             {
                 'name': 'Users in user-list-file',
@@ -211,5 +223,15 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
                 'value': num_users - num_skipped_users
             }
         ]
-        self.report_generator.write_report(overview_data)
-        self.report_generator.print_overview(overview_data)
+        return overview_data
+
+    @classmethod
+    def write_report_and_print_overview(cls, report_generator):
+        report_generator.overview_data = cls.get_overview_data(
+            num_users=len(report_generator.users),
+            num_skipped_users=cls.get_num_skipped_users(report_generator.users))
+        report_generator.write_report()
+        report_generator.print_overview()
+
+    def post_execute(self):
+        self.write_report_and_print_overview(self.report_generator)
