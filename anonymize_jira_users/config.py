@@ -104,7 +104,7 @@ class Config:
         self.args = self.parser.parse_args()
 
         # Make the effective config from a) the default-config, b) the config-file if given, and c) the
-        # command-line-parameters. This is not needed for command WRITE_CONFIG_TEMPLATE_CMD. But to not
+        # command-line-options. This is not needed for command WRITE_CONFIG_TEMPLATE_CMD. But to not
         # make an exception here, always make it.
         self.make_effective_config(self.args)
 
@@ -169,11 +169,11 @@ class Config:
                                             help="Config-file to pre-set command-line-options."
                                                  " You can generate a config-file-template with"
                                                  f" option '{self.WRITE_CONFIG_TEMPLATE_CMD} -f'."
-                                                 " There are parameters in the"
+                                                 " There are options in the"
                                                  " config-file not present on the command line."
-                                                 " Empty parameters in the config-file are ignored."
-                                                 " Parameters given on the command line overwrite"
-                                                 " parameters given in the config-file.")
+                                                 " Empty options in the config-file are ignored."
+                                                 " Options given on the command line overwrite"
+                                                 " options given in the config-file.")
         self.iva_parent_parser.add_argument('-b', '--jira-base-url',
                                             help="Jira base-URL.")
         self.iva_parent_parser.add_argument('-a', '--jira-auth',
@@ -210,7 +210,7 @@ class Config:
                                            " They must be prefixed by '#' and they must appear on"
                                            " their own line. The character-encoding is platform"
                                            " dependent Python suggests. If you have trouble with"
-                                           " the encoding, try out the parameter '--encoding'.")
+                                           " the encoding, try out the option '--encoding'.")
         va_parent_parser.add_argument('--encoding',
                                       metavar='ENCODING',
                                       help="Force a character-encoding for reading the"
@@ -310,11 +310,11 @@ class Config:
 
     def make_effective_config(self, args):
         """Make the effective config from a) the default-config, b) the config-file if given, and c) the
-        command-line-parameters.
+        command-line-options.
 
         The values within a ConfigParser are always strings. After a merge with a Python dict, the expected types could
         be gone. E.g. if a boolean is expected, but the ConfigParser delivers the string "false", this string is
-        True. This function converts all read parameters to Python-types.
+        True. This function converts all read options to Python-types.
 
         :param args: The arguments got from the command-line.
         :return: Nothing.
@@ -365,7 +365,7 @@ class Config:
 
             self.merge_dicts(self.effective_config, configfile_config)
 
-        # Merge the config-file-parameters and the command-line-arguments in and over the global config. No-None-values
+        # Merge the config-file-options and the command-line-options in and over the global config. No-None-values
         # overwrites the values present so far.
         self.merge_dicts(self.effective_config, vars(args))
 
@@ -445,7 +445,7 @@ class Config:
             #   File with user-names to be anonymized or just validated. One user-name per line. 
             #   Comments are allowed: They must be prefixed by '#' and they must appear on their own line.
             #   The character-encoding is platform dependent Python suggests.
-            #   If you have trouble with the encoding, try out the parameter '--encoding'.
+            #   If you have trouble with the encoding, try out the option '--encoding'.
             #   The given value is an example.
             #user_list_file = users.cfg
             #   Force a character-encoding for reading the user_list_file. Empty means platform dependent Python suggests.

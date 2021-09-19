@@ -16,41 +16,43 @@ User Manual
 - [General](#general)
 - [Quick-start](#quick-start)
 - [Command Line Options](#command-line-options)
-  * [Overview](#overview)
-  * [Parameters without command](#parameters-without-command)
-  * [Parameters for command "inactive-users"](#parameters-for-command--inactive-users-)
-  * [Parameters for command "validate"](#parameters-for-command--validate-)
-  * [Parameters for command "anonymize"](#parameters-for-command--anonymize-)
-  * [Parameters for command "write-config-template"](#parameters-for-command--write-config-template-)
-  * [The config-file](#the-config-file)
-  * [Combination of parameters from the config-file and the command-line](#combination-of-parameters-from-the-config-file-and-the-command-line)
-  * [Details about some options](#details-about-some-options)
-    + [--info](#--info)
-    + [--user-list-file and --encoding](#--user-list-file-and---encoding)
-    + [--background-reindex](#--background-reindex)
+    * [Overview](#overview)
+    * [Options without command](#options-without-command)
+    * [Options for command "inactive-users"](#options-for-command--inactive-users-)
+    * [Options for command "validate"](#options-for-command--validate-)
+    * [Options for command "anonymize"](#options-for-command--anonymize-)
+    * [Options for command "write-config-template"](#options-for-command--write-config-template-)
+    * [Options for command "recreate-report"](#options-for-command--recreate-report-)
+    * [The config-file](#the-config-file)
+    * [Combination of options from the config-file and the command-line](#combination-of-options-from-the-config-file-and-the-command-line)
+    * [Details about some options](#details-about-some-options)
+        + [--info](#--info)
+        + [--user-list-file and --encoding](#--user-list-file-and---encoding)
+        + [--background-reindex](#--background-reindex)
 - [How the Anonymizer works](#how-the-anonymizer-works)
 - [The reports](#the-reports)
 - [The commands in detail](#the-commands-in-detail)
-  * [Command "inactive-users"](#command--inactive-users-)
-  * [Command "validate"](#command--validate-)
-    + [Example 1: Validation succeeded for all users (no validation error at all)](#example-1--validation-succeeded-for-all-users--no-validation-error-at-all-)
-    + [Example 2: Validation failed for all users](#example-2--validation-failed-for-all-users)
-  * [Command "anonymize"](#command--anonymize-)
-    + [About](#about)
-    + [Example 1: Anonymization without errors](#example-1--anonymization-without-errors)
+    * [Command "inactive-users"](#command--inactive-users-)
+    * [Command "validate"](#command--validate-)
+        + [Example 1: Validation succeeded for all users (no validation error at all)](#example-1--validation-succeeded-for-all-users--no-validation-error-at-all-)
+        + [Example 2: Validation failed for all users](#example-2--validation-failed-for-all-users)
+    * [Command "anonymize"](#command--anonymize-)
+        + [About](#about)
+        + [Example 1: Anonymization without errors](#example-1--anonymization-without-errors)
 - [Example-Workflow](#example-workflow)
 - [My Workflow](#my-workflow)
 - [Anonymize deleted users](#anonymize-deleted-users)
 - [History of anonymization and related functions](#history-of-anonymization-and-related-functions)
 - [F. A. Q.](#f-a-q)
-  * [Can we Anonymize a user on JIRA Cloud?](#can-we-anonymize-a-user-on-jira-cloud-)
+    * [Can we Anonymize a user on JIRA Cloud?](#can-we-anonymize-a-user-on-jira-cloud-)
 - [Known issues](#known-issues)
-  * [Command inactive-users might return a max. of 1000 users](#command-inactive-users-might-return-a-max-of-1000-users)
-  * [Validation error-messages in unexpected language](#validation-error-messages-in-unexpected-language)
-  * [Anonymization slow in case Jira is connected to an Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-an-oracle-db)
-  * [Tickets at Atlassian](#tickets-at-atlassian)
+    * [Command inactive-users might return a max. of 1000 users](#command-inactive-users-might-return-a-max-of-1000-users)
+    * [Validation error-messages in unexpected language](#validation-error-messages-in-unexpected-language)
+    * [Anonymization slow in case Jira is connected to an Oracle-DB](#anonymization-slow-in-case-jira-is-connected-to-an-oracle-db)
+    * [Tickets at Atlassian](#tickets-at-atlassian)
 
-Table of contents generated with [markdown-toc](http://ecotrust-canada.github.io/markdown-toc).
+Table of contents generated
+with [markdown-toc](http://ecotrust-canada.github.io/markdown-toc).
 
 
 ---
@@ -65,7 +67,6 @@ versions >= 8.7.
 
 All information stated here is about Jira Server and Jira Data Center.
 
-
 Call latest main, in the project root-dir 'anonymize_jira_users':
 
     python anonymize_jira_users ...
@@ -74,8 +75,8 @@ You can also create a single zip-file with
 
     python zipapp anonymize_jira_users
 
-which creates `anonymize_jira_users.pyz`. You can copy this file elswhere
-and execute it as
+which creates `anonymize_jira_users.pyz`. You can copy this file elswhere and execute it
+as
 
     python anonymize_jira_users.pyz ...
 
@@ -85,7 +86,8 @@ and execute it as
 
 - Create the file `users.cfg` with the user-names to be anonymized, one user-name per
   line.
-- Create a config-file-template: `python anonymize_jira_users.pyz write-config-template -f`. The
+- Create a
+  config-file-template: `python anonymize_jira_users.pyz write-config-template -f`. The
   file `my_bare_default_config.cfg` has been created.
 - Rename the file, e.g. to `my_config.cfg`.
 - In that file, set the attributes `jira_base_url`,
@@ -113,16 +115,15 @@ The Anonymizer has the following commands:
 - `validate`: Validates user anonymization process. No anonymization is done.
 - `anonymize`: Anonymizes users.
 - `write-config-template`: Write a configuration-template.
-- `recreate-report`: Re-cerate the report.json and report.csv from 
-    the report_details.json.
+- `recreate-report`: Re-cerate report.json and report.csv from report_details.json.
 
-These commands have different parameter-lists.
+These commands have different option-lists.
 
-## Parameters without command
+## Options without command
 
     --version             show program's version number and exit
 
-## Parameters for command "inactive-users"
+## Options for command "inactive-users"
 
       -h, --help            show this help message and exit
       -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
@@ -130,11 +131,11 @@ These commands have different parameter-lists.
       -c CONFIG_FILE, --config-file CONFIG_FILE
                             Config-file to pre-set command-line-options. You can
                             generate a config-file-template with option 'write-
-                            config-template -f'. There are parameters in the
-                            config-file not present on the command line. Empty
-                            parameters in the config-file are ignored. Parameters
-                            given on the command line overwrite parameters given
-                            in the config-file.
+                            config-template -f'. There are options in the config-
+                            file not present on the command line. Empty options in
+                            the config-file are ignored. Options given on the
+                            command line overwrite options given in the config-
+                            file.
       -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
                             Jira base-URL.
       -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
@@ -154,7 +155,7 @@ These commands have different parameter-lists.
                             be space-separated. If a group contains spaces, the
                             group must be enclosed in single or double. quotes
 
-## Parameters for command "validate"
+## Options for command "validate"
 
       -h, --help            show this help message and exit
       -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
@@ -162,11 +163,11 @@ These commands have different parameter-lists.
       -c CONFIG_FILE, --config-file CONFIG_FILE
                             Config-file to pre-set command-line-options. You can
                             generate a config-file-template with option 'write-
-                            config-template -f'. There are parameters in the
-                            config-file not present on the command line. Empty
-                            parameters in the config-file are ignored. Parameters
-                            given on the command line overwrite parameters given
-                            in the config-file.
+                            config-template -f'. There are options in the config-
+                            file not present on the command line. Empty options in
+                            the config-file are ignored. Options given on the
+                            command line overwrite options given in the config-
+                            file.
       -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
                             Jira base-URL.
       -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
@@ -185,7 +186,7 @@ These commands have different parameter-lists.
                             must be prefixed by '#' and they must appear on their
                             own line. The character-encoding is platform dependent
                             Python suggests. If you have trouble with the
-                            encoding, try out the parameter '--encoding'.
+                            encoding, try out the option '--encoding'.
       --encoding ENCODING   Force a character-encoding for reading the user-list-
                             file. Empty means platform dependent Python suggests.
                             If you run on Win or the user-list-file was created on
@@ -199,7 +200,7 @@ These commands have different parameter-lists.
       --info                Print the effective config, and the character-encoding
                             Python suggests, then exit.
 
-## Parameters for command "anonymize"
+## Options for command "anonymize"
 
       -h, --help            show this help message and exit
       -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
@@ -207,11 +208,11 @@ These commands have different parameter-lists.
       -c CONFIG_FILE, --config-file CONFIG_FILE
                             Config-file to pre-set command-line-options. You can
                             generate a config-file-template with option 'write-
-                            config-template -f'. There are parameters in the
-                            config-file not present on the command line. Empty
-                            parameters in the config-file are ignored. Parameters
-                            given on the command line overwrite parameters given
-                            in the config-file.
+                            config-template -f'. There are options in the config-
+                            file not present on the command line. Empty options in
+                            the config-file are ignored. Options given on the
+                            command line overwrite options given in the config-
+                            file.
       -b JIRA_BASE_URL, --jira-base-url JIRA_BASE_URL
                             Jira base-URL.
       -a ADMIN_USER_AUTH, --jira-auth ADMIN_USER_AUTH
@@ -230,7 +231,7 @@ These commands have different parameter-lists.
                             must be prefixed by '#' and they must appear on their
                             own line. The character-encoding is platform dependent
                             Python suggests. If you have trouble with the
-                            encoding, try out the parameter '--encoding'.
+                            encoding, try out the option '--encoding'.
       --encoding ENCODING   Force a character-encoding for reading the user-list-
                             file. Empty means platform dependent Python suggests.
                             If you run on Win or the user-list-file was created on
@@ -250,8 +251,7 @@ These commands have different parameter-lists.
                             If at least one user was anonymized, trigger a
                             background re-index.
 
-
-## Parameters for command "write-config-template"
+## Options for command "write-config-template"
 
       -h, --help            show this help message and exit
       -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
@@ -260,17 +260,18 @@ These commands have different parameter-lists.
                             Write a configuration-template. Defaults to
                             my_bare_default_config.cfg.
 
-## Parameters for command "recreate-report"
-    -h, --help            show this help message and exit
-    -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
-                          Log-level. Defaults to INFO.
-    -i REPORT_DETAILS_JSON, --recreate-report REPORT_DETAILS_JSON
-                          report_details.json from a previous run to re-create
-                          the report.json and report.csv from.
-    -o REPORT_OUT_DIR, --report-out-dir REPORT_OUT_DIR
-                          Output-directory to write the re-created reports into.
-                          If it doesn't exist, it'll be created. If it does
-                          exist, the Anonymizer aborts. Defaults to '.'.
+## Options for command "recreate-report"
+
+      -h, --help            show this help message and exit
+      -l {DEBUG,INFO,WARNING,ERROR,CRITICAL}, --loglevel {DEBUG,INFO,WARNING,ERROR,CRITICAL}
+                            Log-level. Defaults to INFO.
+      -i REPORT_DETAILS_JSON, --report-details-json REPORT_DETAILS_JSON
+                            report_details.json from a previous run to re-create
+                            the report.json and report.csv from.
+      -o REPORT_OUT_DIR, --report-out-dir REPORT_OUT_DIR
+                            Output-directory to write the re-created reports into.
+                            If it doesn't exist, it'll be created. If it does
+                            exist, the Anonymizer aborts. Defaults to '.'.
 
 ## The config-file
 
@@ -353,19 +354,19 @@ The full set of parameters are:
     #   The given value is the default.
     #is_trigger_background_reindex = False
 
-## Combination of parameters from the config-file and the command-line
+## Combination of options from the config-file and the command-line
 
 The Anonymizer has up to three places where configurations could exist:
 
 1. The internal default-configuration.
-2. Your settings from the config-file (which overwrites the internal
+2. Your settings from your config-file (which overwrites the internal
    default-configuration).
-3. Your parameters given on the command line (which overwrites the settings from the
+3. Your options given on the command line (which overwrites the settings from the
    config-file).
 
 The anonymizer builds an effective configuration from the above configurations.
 
-You can combine parameters from a config-file and the command-line. E.g. if you don't want
+You can combine options from a config-file and the command-line. E.g. if you don't want
 your auth-settings stay in a file because you like to check-in this, you can set them at
 the command-line using environment-variables:
 
@@ -379,7 +380,7 @@ the command-line using environment-variables:
 
 Print the effective config, and the character-encoding Python suggests, then exit.
 
-You can combine this parameter with parameters of `validate` and `anonymize`
+You can combine this option with options of `validate` and `anonymize`
 If `--info` is given in these cases, these commands won't be executed.
 
 ### --user-list-file and --encoding
@@ -436,7 +437,7 @@ From [Search indexing](https://confluence.atlassian.com/adminjiraserver/search-i
 The Anonymizer executes the following steps for the `validation` and the `anonymization`
 command:
 
-- Parse and check the parameters.
+- Parse and check the options.
 - Read the user-names from the user-list-file.
 - Filter-out duplicate users in user-list-file.
 - For each user: Get user-data from
@@ -548,7 +549,7 @@ If you like to anonymize users in bulk you first need a list of users. Without t
 Anonymizer, you retrieve this list somehow. The command `inactive-users` could ease this.
 It retrieves a list of inactive, not yet anonymized users.
 
-You can give groups with users to be excluded by parameter `--exclude-groups`.
+You can give groups with users to be excluded by option `--exclude-groups`.
 
 This command cannot retrieve deleted users.
 
@@ -1294,11 +1295,11 @@ If the list of users in the out-file of command `inactive-users` is exact 1000, 
 likely you ran into the bug. The Anonymizer logs a warning to the command line in that
 case.
 
-The anonymizer calls the API with following parameters:
+The anonymizer calls the API with following options:
 
 `/rest/api/2/user/search?username=.&includeInactive=true&includeActive=false&startAt=...`
 
-Unfortunately the REST API itself hasn't an exclude-parameter, so the amount of users will
+Unfortunately the REST API itself hasn't an exclude-option, so the amount of users will
 grow over time (the users anonymized so far still counts to the users the API delivers).
 
 ## Validation error-messages in unexpected language

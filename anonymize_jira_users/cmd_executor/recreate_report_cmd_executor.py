@@ -68,8 +68,6 @@ class RecreateReportCmdExecutor(BaseCmdExecutor):
                     num_anonymized_users=AnonymizeCmdExecutor.get_num_anonymized_users(report_generator.users),
                     is_background_reindex_triggered=is_background_reindex_triggered)
                 report_generator.write_report()
-
-            self.log.debug(f"self.effective_config['report_out_dir']: {self.config.effective_config['report_out_dir']}")
         else:
             self.log.warning(
                 f"Found command {command}, but expect '{self.config.VALIDATE_CMD}' or '{self.config.ANONYMIZE_CMD}'"
