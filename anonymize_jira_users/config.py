@@ -290,7 +290,7 @@ class Config:
         #
         # Add arguments special to command "recreate-report".
         #
-        self.recreate_report_subparser.add_argument('-i', '--recreate-report',
+        self.recreate_report_subparser.add_argument('-i', '--report-details-json',
                                                     metavar='REPORT_DETAILS_JSON',
                                                     dest='report_details_json',
                                                     help="report_details.json from a previous run to re-create"
