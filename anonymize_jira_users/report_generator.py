@@ -73,7 +73,7 @@ class ReportGenerator:
             fieldnames = ['name', 'key', 'display_name', 'active', 'deleted',
                           'filter_error_message',
                           'action',
-                          'time_start', 'time_finish', 'time_duration',
+                          'anonymization_start_time', 'anonymization_finish_time', 'anonymization_duration',
                           'anonymized_user_name', 'anonymized_user_key', 'anonymized_user_display_name']
 
             writer = csv.DictWriter(f, fieldnames=fieldnames)

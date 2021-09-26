@@ -318,7 +318,7 @@ class TestCmdAnonymize(BaseTestClass):
         with open(out_dir.joinpath('report.json'), 'r') as f:
             got_anonymizing_report_json = json.loads(f.read())
 
-        exclude_regex_paths = [r"root\['users'\]\[\d+\]\['time_(start|finish|duration)'\]"]
+        exclude_regex_paths = [r"root\['users'\]\[\d+\]\['anonymization_(start_time|finish_time|duration)'\]"]
         ddiff = DeepDiff(expected_anonymizing_report_json, got_anonymizing_report_json,
                          exclude_regex_paths=exclude_regex_paths)
         self.assertFalse(ddiff,

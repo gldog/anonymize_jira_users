@@ -1,4 +1,5 @@
 import dataclasses
+import itertools
 import json
 import logging
 import pathlib
@@ -190,6 +191,16 @@ class JiraApplication:
         data = {'active': active, 'name': user_name}
         r = self.admin_session.user_update(user_name, data)
         return r
+
+    def rename_user(self, username, display_name, num_renames=None):
+        for i in itertools.count(start=1):
+            if num_renames is not None and i > num_renames:
+                break
+            new_display_name = f'{display_name} {i}'
+            print(f"Renaming {username} to {new_display_name}")
+            self.admin_session.user_update(username=username, data={
+                'displayName': new_display_name
+            })
 
     def unassign_all_issues_in_project(self, project_name):
         r_json = self.admin_session.jql('project = "{}"'.format(project_name), 'key')
