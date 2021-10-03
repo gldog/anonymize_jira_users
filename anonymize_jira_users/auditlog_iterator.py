@@ -116,7 +116,6 @@ class AuditLogIterator:
         return self.entries()
 
     def get_current_page(self):
-        self.log.warning("*******************")
         return {self.current_page_num: self.execution_logger.logs['auditlog_iterator']['current_page'].copy()}
 
     def clear_current_page(self):

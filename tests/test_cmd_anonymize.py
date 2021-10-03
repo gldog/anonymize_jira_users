@@ -66,7 +66,6 @@ class TestCmdAnonymize(BaseTestClass):
                                key=user_name.lower(),
                                display_name=display_name,
                                active=True,
-                               deleted=False,
                                filter_error_message='Is an active user.',
                                anonymized_user_name='',
                                anonymized_user_key='',
@@ -158,7 +157,6 @@ class TestCmdAnonymize(BaseTestClass):
                            key=json.loads(r.text)['key'],
                            display_name=display_name,
                            active=True,
-                           deleted=False,
                            filter_error_message='Is an active user.',
                            anonymized_user_name='',
                            anonymized_user_key='',
@@ -289,8 +287,8 @@ class TestCmdAnonymize(BaseTestClass):
         self.expected_report_generator.generate()
 
         expected_anonymizing_report_json = dataclasses.asdict(self.expected_report_generator)['report']
-        log.info("expected_anonymizing_report_json after update:\n"
-                 f"{json.dumps(expected_anonymizing_report_json, indent=4, ensure_ascii=False)}")
+        # log.info("expected_anonymizing_report_json after update:\n"
+        #         f"{json.dumps(expected_anonymizing_report_json, indent=4, ensure_ascii=False)}")
 
         # The following file is for documenting the tests.
         with open(self.out_base_dir_path.joinpath('predicted_anonymized_userdata.json'), 'w') as f:

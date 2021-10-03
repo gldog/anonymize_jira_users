@@ -10,6 +10,8 @@ class JiraUser:
     email_address: str = field(default=None)
     active: bool = field(default=None)
     # deleted: Since Jira 8.10.
+    # The value is None in Jira versions before 8.10. Since 8.10, the value is False for existing
+    # users and True for deleted users.
     deleted: bool = field(default=None)
     filter_error_message: str = field(default=None)
     anonymization_start_time: str = field(default=None)
@@ -97,3 +99,27 @@ class JiraUser:
     @staticmethod
     def filter_dict_for_report(user_json):
         return {k: v for k, v in user_json.items() if k not in ['user_json', 'logs', 'email_address']}
+
+    def is_anonymized_data_complete(self):
+        """Check if all three anonymized items user-name, -key, and display-name are given.
+         If so, this user is anonymized.
+
+         In Jira versions before 8.10 all values except the .name are None for deleted users. In
+         Jira versions starting with 8.10 the .deleted is either False for an existing user or
+         True for a deleted user. Deleted users doesn't have a display-name and won't have an
+         anonymized display-name.
+         Since Jira 8.10, the data of deleted users still exist and have a name and a key, but no
+         display-name.
+         """
+
+        #   >= 8.10 |   is user     |   attr.   |   attr.   ||  rule for is_complete
+        #           |   deleted?    |   deleted |   key     ||
+        #       N           N           None        <key>       name & key & display_name
+        #       N           Y           None        None        True
+        #       Y           N           False       <key>       name & key & display_name
+        #       Y           Y           True        <key>       name & key & True
+        is_complete = self.key is None \
+                      or \
+                      self.anonymized_user_name and self.anonymized_user_key \
+                      and (True if self.deleted else self.anonymized_user_display_name)
+        return is_complete

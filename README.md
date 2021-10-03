@@ -1218,7 +1218,7 @@ The following SQL statement gets the user-names of deleted, not yet anonymized u
     AND au.lower_user_name NOT IN (SELECT u.lower_user_name 
                                    FROM   cwd_user u) 
 
-Put these users in the user_list_file.cfg and run the anonymization.
+Put these users in the users.cfg and run the anonymization.
 
 ---
 
@@ -1264,7 +1264,7 @@ _The user named 'jojo' does not exist_.
 **References:**
 
 - [1] [Preparing for Jira 8.7 | GDPR: Anonymizing users](https://confluence.atlassian.com/jiracore/gdpr-anonymizing-users-983503046.html)
-- [2] [Audit log improvements for developers](https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html)
+- [2] [Audit log improvements for developers (since 8.8)](https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html)
 - [3] [Jira Software 8.10.x release notes | User anonymization (GDPR) improvements](https://confluence.atlassian.com/jirasoftware/jira-software-8-10-x-release-notes-1004948108.html#JiraSoftware8.10.xreleasenotes-gdpr)
 - [4] [REST API GET /rest/api/2/auditing/record](https://docs.atlassian.com/software/jira/docs/api/REST/8.10.0/#api/2/user-getUser)
 - [5] [GET /rest/api/2/auditing/record deprecated](https://docs.atlassian.com/software/jira/docs/api/REST/8.12.0/#api/2/auditing-getRecords)
