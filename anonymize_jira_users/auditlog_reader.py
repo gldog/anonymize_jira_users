@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass
 from logging import Logger
 
@@ -11,6 +10,7 @@ from jira_user import JiraUser
 
 @dataclass
 class AuditlogReader:
+    # TODO Remove config
     config: Config
     log: Logger
     jira: Jira
@@ -104,7 +104,7 @@ class AuditlogReader:
 
     def get_anonymized_userdata_from_audit_events_for_user(self, user: JiraUser, auditlog_iterator, anonymized_data):
 
-        for entry in auditlog_iterator:
+        for entry in auditlog_iterator.entries():
 
             if user.is_anonymized_data_complete():
                 break
@@ -114,53 +114,59 @@ class AuditlogReader:
                 #
                 # Get the anonymized user-name and user-key.
                 #
+                # The affectedObjects contains the new user-name and user-key at list-index 0 and the old ones in
+                # list-index 1. Checked in Jira 8.10 - 8.19.
+                #
+                #   "affectedObjects": [
+                #       {
+                #           "name": "jirauser10401",
+                #           "type": "USER",
+                #           "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=jirauser10401",
+                #           "id": "JIRAUSER10401"
+                #       },
+                #       {
+                #           "name": "User1Post84",
+                #           "type": "USER",
+                #           "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=User1Post84",
+                #           "id": "JIRAUSER10401"
+                #       }
+                #
                 # actionI18nKey was added in Jira 8.10.
-
                 if entry['type']['actionI18nKey'] == 'jira.auditing.user.anonymized':
+                    # Check for the anonymized user. It is expected this is the right one because only one anonymization
+                    # at time is possible and the Anonymizer requests the audit-logs just between anonymization-start-
+                    # and end-time. But just to be sure.
+                    current_name = entry['affectedObjects'][1]['name']
+                    if current_name != user.name:
+                        self.log.warning(f"Saw unexpected user '{current_name}' in audit log event entry"
+                                         f" 'jira.auditing.user.anonymized'. Expected '{user.name}'")
+                        continue
+
                     user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
-                    for extra_attribute in entry['extraAttributes']:
-                        # In Jira 8.10 the "nameI18nKey" was added.
-                        # In Jira 8.10, 8.11, and 8.12 the key to look for is "description".
-                        # Starting with Jira 8.13, it is
-                        # "jira.auditing.extra.parameters.event.description".
-                        # Note, these keys "description" and
-                        # "jira.auditing.extra.parameters.event.description" are also used in the
-                        # event with key "jira.auditing.user.anonymization.started", so that key
-                        # is not unique. Therefore the path "event/type/actionI18nKey" is used to
-                        # identify the event of interest.
-                        # The jira.auditing.extra.parameters.event.long.description rarely cames up
-                        # in my tests, but is also possible. See Jira-code
-                        #   jira-project/jira-components/jira-core/src/main/java/com/atlassian/
-                        #   jira/auditing/spis/migration/mapping/
-                        #   AuditExtraAttributesConverter.java:
-                        #   String EVENT_DESCRIPTION_I18N_KEY =
-                        #       "jira.auditing.extra.parameters.event.description"
-                        #   String EVENT_LONG_DESCRIPTION_I18N_KEY =
-                        #       "jira.auditing.extra.parameters.event.long.description"
-                        if extra_attribute['nameI18nKey'] in ['description',
-                                                              'jira.auditing.extra.parameters.event.description',
-                                                              'jira.auditing.extra.parameters.event.long.description']:
-                            anonymized_data['description'] = extra_attribute['value']
-                            # The 'value' is something like:
-                            #   "User with username 'jirauser10104' (was: 'user4pre84') and key
-                            #       >> 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
-                            # The parts of interest are 'jirauser10104', 'user4pre84',
-                            # 'JIRAUSER10104', 'user4pre84'. All given in single quotes.
-                            parts = re.findall(r"'(.*?)'", extra_attribute['value'])
-                            anonymized_data['user_name'] = parts[0]
-                            anonymized_data['user_key'] = parts[2]
-                            user.anonymized_user_name = parts[0]
-                            user.anonymized_user_key = parts[2]
-                            break
+
+                    anonymized_data['user_name'] = entry['affectedObjects'][0]['name']
+                    anonymized_data['user_key'] = entry['affectedObjects'][0]['id']
+                    user.anonymized_user_name = entry['affectedObjects'][0]['name']
+                    user.anonymized_user_key = entry['affectedObjects'][0]['id']
 
                 #
                 # Get the anonymized user-display-name.
                 #
                 elif entry['type']['actionI18nKey'] == 'jira.auditing.user.updated':
+                    # There can be other 'jira.auditing.user.updated' events then for the anonymized user.
+                    # This is the case if some other user e. g. is renamed during anonymization.
+                    # Check if this entry is for the anonymized user.
+                    # The affectedObjects contains exact one list-entry and the key "name". Checked in Jira 8.10 - 8.19.
+                    if entry['affectedObjects'][0]['name'] != user.name:
+                        continue
+
                     user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
 
                     #
-                    # The lang-setting (enUS, deDE) is the default system language at anonymizing.
+                    # The changedValues content changed over time. The following data shows the contents for the
+                    # Jira-versions and the system default languages.
+                    # The lang-setting (enUS, deDE) is the system default language at anonymizing (not at requesting
+                    # nor the lang-setting of the rquesting user).
                     #
                     # 8.10; enUS, deDE:
                     #             "changedValues": [
@@ -223,10 +229,20 @@ class AuditlogReader:
                     #                     "to": "user-04cab"
                     #                 }
                     #             ],
+                    #
                     for changed_value in entry['changedValues']:
                         try:
                             # First look for the 'key' because it is always present. Then look for
-                            # the 'i18nKey'. This could lead to a KeyError.
+                            # the 'i18nKey'. The latter could lead to a KeyError.
+                            #
+                            #   key             i18nKey                 continue with
+                            #                                           next entry
+                            #  --------------+------------------------+-----------
+                            #   'Full name'     KeyError                    No
+                            #   'Full name'     'common.words.fullname'     No
+                            #   other           KeyError                    Yes
+                            #   other           'common.words.fullname'     No
+                            #
                             if not (changed_value['key'] == 'Full name'
                                     or changed_value['i18nKey'] == 'common.words.fullname'):
                                 continue
@@ -256,7 +272,7 @@ class AuditlogReader:
         :return:
         """
 
-        for entry in auditlog_iterator:
+        for entry in auditlog_iterator.entries():
 
             #
             # About the actions
@@ -292,26 +308,92 @@ class AuditlogReader:
                 # of anonymization. E. g. in DE it is "Benutzer anonymisiert". But this
                 # API "/rest/api/2/auditing/record" is used by the Anonymizer only for Jira-version
                 # before 8.10.
+                #
+                # An entry looks like:
+                #
+                #         {
+                #             "id": 10648,
+                #             "summary": "User anonymized",
+                #             "authorKey": "admin",
+                #             "created": "2021-10-02T19:05:18.052+0000",
+                #             "category": "Benutzerverwaltung",
+                #             "eventSource": "",
+                #             "description": "User with username 'jirauser10103' (was: 'User1Pre84') and key 'JIRAUSER10103' (was: 'user1pre84') has been anonymized.",
+                #             "objectItem": {
+                #                 "id": "JIRAUSER10103",
+                #                 "name": "jirauser10103",
+                #                 "typeName": "USER"
+                #             },
+                #             "associatedItems": [
+                #                 {
+                #                     "id": "user1pre84",
+                #                     "name": "User1Pre84",
+                #                     "typeName": "USER"
+                #                 }
+                #             ]
+                #         },
+                #
                 if entry['summary'] == 'User anonymized':
+                    # Check for the anonymized user. It is expected this is the right one because only one anonymization
+                    # at time is possible and the Anonymizer requests the audit-logs just between anonymization-start-
+                    # and end-time. But just to be sure.
+                    # The associatedItems contains exact one list-entry and the key "name". Checked in Jira 8.7 - 8.9.
+                    current_name = entry['associatedItems'][0]['name']
+                    if current_name != user.name:
+                        self.log.warning(f"Saw unexpected user '{current_name}' in audit log event entry"
+                                         f" 'jira.auditing.user.anonymized'. Expected '{user.name}'")
+                        continue
+
                     user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
-                    anonymized_data['description'] = entry['description']
-                    # The 'description' is something like the following string and in EN:
-                    #   "User with username 'jirauser10104' (was: 'user4pre84') and key
-                    #       >> 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
-                    # The parts of interest are 'jirauser10104', 'user4pre84', 'JIRAUSER10104',
-                    # 'user4pre84'. All given in single quotes.
-                    parts = re.findall(r"'(.*?)'", entry['description'])
-                    anonymized_data['user_name'] = parts[0]
-                    anonymized_data['user_key'] = parts[2]
-                    user.anonymized_user_name = parts[0]
-                    user.anonymized_user_key = parts[2]
+
+                    anonymized_data['user_name'] = entry['objectItem']['name']
+                    anonymized_data['user_key'] = entry['objectItem']['id']
+                    user.anonymized_user_name = entry['objectItem']['name']
+                    user.anonymized_user_key = entry['objectItem']['id']
 
                 #
                 # Get the anonymized user-display-name.
                 #
-                # Until at least Jira 8.9 the "summary" is always EN and is "User updated".
+                # Until at least Jira 8.9 the "summary" is always EN and is "User updated". An entry looks like:
+                #
+                #         {
+                #             "id": 10645,
+                #             "summary": "User updated",
+                #             "authorKey": "admin",
+                #             "created": "2021-10-02T19:05:17.751+0000",
+                #             "category": "Benutzerverwaltung",
+                #             "eventSource": "",
+                #             "objectItem": {
+                #                 "id": "user1pre84",
+                #                 "name": "User1Pre84",
+                #                 "typeName": "USER",
+                #                 "parentId": "1",
+                #                 "parentName": "Jira Internal Directory"
+                #             },
+                #             "changedValues": [
+                #                 {
+                #                     "fieldName": "Full name",
+                #                     "changedFrom": "User 1 Pre 84",
+                #                     "changedTo": "user-57690"
+                #                 },
+                #                 {
+                #                     "fieldName": "Email",
+                #                     "changedFrom": "User1Pre84@example.com",
+                #                     "changedTo": "JIRAUSER10103@jira.invalid"
+                #                 }
+                #             ]
+                #         }
+                #
                 elif entry['summary'] == 'User updated':
+                    # There can be other 'jira.auditing.user.updated' events then for the anonymized user.
+                    # This is the case if some other user e. g. is renamed during anonymization.
+                    # Check if this entry is for the anonymized user.
+                    # The affectedObjects contains one list-entry and the key "name". Checked in Jira 8.10 - 8.19.
+                    if entry['objectItem']['name'] != user.name:
+                        continue
+
                     user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
+
                     for changed_value in entry['changedValues']:
                         if changed_value['fieldName'] == 'Full name':
                             anonymized_data['display_name'] = changed_value['changedTo']
