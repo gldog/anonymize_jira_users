@@ -114,16 +114,6 @@ class AuditlogReader:
         self.log.debug(f"for user '{user.name}' between anonymization_start_time {user.anonymization_start_time}"
                        f" and anonymization_finish_time {user.anonymization_finish_time}")
 
-        # For the log.
-        user.logs['anonymized_data_from_rest'] = {
-            'user_name': None,
-            'user_key': None,
-            'display_name': None,
-            # The description is for development and documentation, not to extract data.
-            'description': None
-        }
-        anonymized_data = user.logs['anonymized_data_from_rest']
-
         user.logs['rest_auditing'] = {
             'doc': "The date in the URL-param is UTC.",
             'searched_pages': 0,
@@ -137,19 +127,19 @@ class AuditlogReader:
                                                  use_deprecated_records_api=True,
                                                  start_time=user.anonymization_start_time,
                                                  finish_time=user.anonymization_finish_time)
-            self.get_anonymized_userdata_from_audit_records_for_user(user, auditlog_iterator, anonymized_data)
+            self.get_anonymized_userdata_from_audit_records_for_user(user, auditlog_iterator)
         else:
             auditlog_iterator = AuditLogIterator(log=self.log, jira=self.jira,
                                                  execution_logger=self.execution_logger,
                                                  user_logger_rest_auditing=user.logs['rest_auditing'],
                                                  start_time=user.anonymization_start_time,
                                                  finish_time=user.anonymization_finish_time)
-            self.get_anonymized_userdata_from_audit_events_for_user(user, auditlog_iterator, anonymized_data)
+            self.get_anonymized_userdata_from_audit_events_for_user(user, auditlog_iterator)
 
         user.logs['rest_auditing']['searched_pages'] = auditlog_iterator.current_page_num + 1
         auditlog_iterator.clear_current_page()
 
-    def get_anonymized_userdata_from_audit_events_for_user(self, user: JiraUser, auditlog_iterator, anonymized_data):
+    def get_anonymized_userdata_from_audit_events_for_user(self, user: JiraUser, auditlog_iterator):
 
         #
         # About the events
@@ -319,13 +309,12 @@ class AuditlogReader:
                         continue
 
                     # Found the entry with the renamed user-display-name.
-                    anonymized_data['display_name'] = changed_value['to']
                     user.anonymized_user_display_name = changed_value['to']
                     break
 
-        self.set_original_values_for_non_anonymized_values(user)
+        self.set_values_for_non_anonymized_items(user)
 
-    def get_anonymized_userdata_from_audit_records_for_user(self, user: JiraUser, auditlog_iterator, anonymized_data):
+    def get_anonymized_userdata_from_audit_records_for_user(self, user: JiraUser, auditlog_iterator):
         """
         Until at least Jira 8.9.x the value of the attribute "summary" is always EN and is
         e. g. "User anonymized". Starting with Jira 8.10, the language of the value of "summary"
@@ -372,7 +361,6 @@ class AuditlogReader:
                 if entry['summary'] == 'User renamed':
                     for changed_value in entry['changedValues']:
                         if changed_value['changedFrom'] == user.name:
-                            anonymized_data['user_name'] = changed_value['changedTo']
                             user.anonymized_user_name = changed_value['changedTo']
                             user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
 
@@ -386,7 +374,6 @@ class AuditlogReader:
                         continue
 
                     user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
-                    anonymized_data['user_key'] = entry['objectItem']['id']
                     user.anonymized_user_key = entry['objectItem']['id']
 
                 #
@@ -434,18 +421,18 @@ class AuditlogReader:
 
                     for changed_value in entry['changedValues']:
                         if changed_value['fieldName'] == 'Full name':
-                            anonymized_data['display_name'] = changed_value['changedTo']
                             user.anonymized_user_display_name = changed_value['changedTo']
                             break
 
             except KeyError:
                 pass
 
-        self.set_original_values_for_non_anonymized_values(user)
+        self.set_values_for_non_anonymized_items(user)
 
-    def set_original_values_for_non_anonymized_values(self, user):
-        # If there was no entry for name, key, or display name, the item was not changed.
-        # Keep the original as anonymized item.
+    def set_values_for_non_anonymized_items(self, user):
+        # If there was no entry for name, key, or display name in the audit-logs, the item was not
+        # changed. Keep the original as anonymized item.
+        # But there is one exception: If a user was deleted. In that case, Jira TODO
         if not user.anonymized_user_name:
             user.anonymized_user_name = user.name
             self.log.info(f"hasen't found the anonymized user-name for user '{user.name}'"
@@ -461,3 +448,42 @@ class AuditlogReader:
             user.anonymized_user_display_name = user.display_name
             self.log.info(f"hasen't found the anonymized user-display-name for user '{user.name}'"
                           f" in the audit-log. Kept the display-name '{user.display_name}' ")
+
+        # Set user-name and -display-name to the user-key for deleted users. This is how the
+        # REST API /rest/api/2/user behaves.
+        #
+        #   User User7Pre84:
+        #
+        #       Before deletion:
+        #           user-name:      User7Pre84
+        #           user-key:       user7pre84
+        #           display-name:   User 7 Pre 84
+        #       After deletion:
+        #           user-name:      user7pre84          <-- now in lower case
+        #           user-key:       user7pre84
+        #           display-name:   user8post84
+        #       After anonymization:
+        #           user-name:      jirauser10109       <-- lower case
+        #           user-key:       JIRAUSER10109
+        #           display-name:   jirauser10109
+        #
+        #   User User8Post84:
+        #
+        #       Before deletion:
+        #           user-name:      User8Post84
+        #           user-key:       JIRAUSER10400
+        #           display-name:   User 8 Post 84
+        #       After deletion:
+        #           user-name:      user8post84         <-- now in lower case
+        #           user-key:       JIRAUSER10400
+        #           display-name:   user8post84
+        #       After anonymization:
+        #           user-name:      jirauser10400       <-- lower case
+        #           user-key:       JIRAUSER10400
+        #           display-name:   jirauser10400
+        #
+        if user.deleted is True:
+            # The anonymized user-key is in upper case JIRAUSER12345, but the user-name shall be
+            # in lower case.
+            user.anonymized_user_name = user.anonymized_user_key.lower()
+            user.anonymized_user_display_name = user.anonymized_user_name
