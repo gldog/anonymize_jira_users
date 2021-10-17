@@ -1,0 +1,87 @@
+{
+    "offset": 0,
+    "limit": 1000,
+    "total": 257,
+    "records": [
+        {
+            "id": 226,
+            "summary": "Benutzer anonymisiert",
+            "authorKey": "admin",
+            "created": "2021-10-02T23:20:24.747+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "Task",
+            "description": "User with username 'jirauser10401' (was: 'User1Post84') and key 'JIRAUSER10401' (was: 'JIRAUSER10401') has been anonymized.",
+            "objectItem": {
+                "id": "JIRAUSER10401",
+                "name": "jirauser10401",
+                "typeName": "USER"
+            },
+            "associatedItems": [
+                {
+                    "id": "JIRAUSER10401",
+                    "name": "User1Post84",
+                    "typeName": "USER"
+                }
+            ]
+        },
+        {
+            "id": 225,
+            "summary": "Benutzer umbenannt",
+            "authorKey": "admin",
+            "created": "2021-10-02T23:20:24.738+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "Task",
+            "objectItem": {
+                "id": "JIRAUSER10401",
+                "name": "jirauser10401",
+                "typeName": "USER"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "Benutzername",
+                    "changedFrom": "User1Post84",
+                    "changedTo": "jirauser10401"
+                }
+            ]
+        },
+        {
+            "id": 224,
+            "summary": "Benutzer aktualisiert",
+            "authorKey": "admin",
+            "created": "2021-10-02T23:20:24.716+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "Task",
+            "objectItem": {
+                "id": "JIRAUSER10401",
+                "name": "User1Post84",
+                "typeName": "USER"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "E-Mail",
+                    "changedFrom": "User1Post84@example.com",
+                    "changedTo": "JIRAUSER10401@jira.invalid"
+                },
+                {
+                    "fieldName": "Vollständiger Name",
+                    "changedFrom": "User 1 Post 84",
+                    "changedTo": "user-04cab"
+                }
+            ]
+        },
+        {
+            "id": 223,
+            "summary": "Benutzeranonymisierung begonnen",
+            "authorKey": "admin",
+            "created": "2021-10-02T23:20:24.694+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "Task",
+            "description": "Anonymization started for user with username 'User1Post84' and key 'JIRAUSER10401'.",
+            "objectItem": {
+                "id": "JIRAUSER10401",
+                "name": "User1Post84",
+                "typeName": "USER"
+            }
+        }
+    ]
+}

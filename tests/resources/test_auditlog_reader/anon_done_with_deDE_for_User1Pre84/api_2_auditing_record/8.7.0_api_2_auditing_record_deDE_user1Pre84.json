@@ -1,0 +1,118 @@
+{
+    "offset": 0,
+    "limit": 1000,
+    "total": 226,
+    "records": [
+        {
+            "id": 10648,
+            "summary": "User anonymized",
+            "authorKey": "admin",
+            "created": "2021-10-02T19:05:18.052+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "",
+            "description": "User with username 'jirauser10103' (was: 'User1Pre84') and key 'JIRAUSER10103' (was: 'user1pre84') has been anonymized.",
+            "objectItem": {
+                "id": "JIRAUSER10103",
+                "name": "jirauser10103",
+                "typeName": "USER"
+            },
+            "associatedItems": [
+                {
+                    "id": "user1pre84",
+                    "name": "User1Pre84",
+                    "typeName": "USER"
+                }
+            ]
+        },
+        {
+            "id": 10647,
+            "summary": "User renamed",
+            "authorKey": "admin",
+            "created": "2021-10-02T19:05:18.001+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "",
+            "objectItem": {
+                "id": "JIRAUSER10103",
+                "name": "jirauser10103",
+                "typeName": "USER",
+                "parentId": "1",
+                "parentName": "Jira Internal Directory"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "Username",
+                    "changedFrom": "User1Pre84",
+                    "changedTo": "jirauser10103"
+                }
+            ]
+        },
+        {
+            "id": 10646,
+            "summary": "User's key changed",
+            "authorKey": "admin",
+            "created": "2021-10-02T19:05:17.783+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "",
+            "objectItem": {
+                "id": "JIRAUSER10103",
+                "name": "user1pre84",
+                "typeName": "USER"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "Key",
+                    "changedFrom": "user1pre84",
+                    "changedTo": "JIRAUSER10103"
+                }
+            ],
+            "associatedItems": [
+                {
+                    "id": "user1pre84",
+                    "name": "user1pre84",
+                    "typeName": "USER"
+                }
+            ]
+        },
+        {
+            "id": 10645,
+            "summary": "User updated",
+            "authorKey": "admin",
+            "created": "2021-10-02T19:05:17.751+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "",
+            "objectItem": {
+                "id": "user1pre84",
+                "name": "User1Pre84",
+                "typeName": "USER",
+                "parentId": "1",
+                "parentName": "Jira Internal Directory"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "Full name",
+                    "changedFrom": "User 1 Pre 84",
+                    "changedTo": "user-57690"
+                },
+                {
+                    "fieldName": "Email",
+                    "changedFrom": "User1Pre84@example.com",
+                    "changedTo": "JIRAUSER10103@jira.invalid"
+                }
+            ]
+        },
+        {
+            "id": 10644,
+            "summary": "User anonymization started",
+            "authorKey": "admin",
+            "created": "2021-10-02T19:05:17.736+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "",
+            "description": "Anonymization started for user with username 'User1Pre84' and key 'user1pre84'.",
+            "objectItem": {
+                "id": "user1pre84",
+                "name": "User1Pre84",
+                "typeName": "USER"
+            }
+        }
+    ]
+}

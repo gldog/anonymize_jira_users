@@ -1,0 +1,140 @@
+{
+    "offset": 0,
+    "limit": 1000,
+    "total": 136,
+    "records": [
+        {
+            "id": 10605,
+            "summary": "User anonymized",
+            "authorKey": "admin",
+            "created": "2021-10-12T20:30:59.576+0000",
+            "category": "user management",
+            "eventSource": "",
+            "description": "User with username 'jirauser10105' (was: 'User3Pre84_renamed') and key 'JIRAUSER10105' (was: 'user3pre84') has been anonymized.",
+            "objectItem": {
+                "id": "JIRAUSER10105",
+                "name": "jirauser10105",
+                "typeName": "USER"
+            },
+            "associatedItems": [
+                {
+                    "id": "user3pre84",
+                    "name": "User3Pre84_renamed",
+                    "typeName": "USER"
+                }
+            ]
+        },
+        {
+            "id": 10604,
+            "summary": "User renamed",
+            "authorKey": "admin",
+            "created": "2021-10-12T20:30:59.534+0000",
+            "category": "user management",
+            "eventSource": "",
+            "objectItem": {
+                "id": "JIRAUSER10105",
+                "name": "jirauser10105",
+                "typeName": "USER",
+                "parentId": "1",
+                "parentName": "Jira Internal Directory"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "Username",
+                    "changedFrom": "User3Pre84_renamed",
+                    "changedTo": "jirauser10105"
+                }
+            ]
+        },
+        {
+            "id": 10603,
+            "summary": "User's key changed",
+            "authorKey": "admin",
+            "created": "2021-10-12T20:30:59.300+0000",
+            "category": "user management",
+            "eventSource": "",
+            "objectItem": {
+                "id": "JIRAUSER10105",
+                "name": "user3pre84_renamed",
+                "typeName": "USER"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "Key",
+                    "changedFrom": "user3pre84",
+                    "changedTo": "JIRAUSER10105"
+                }
+            ],
+            "associatedItems": [
+                {
+                    "id": "user3pre84",
+                    "name": "user3pre84_renamed",
+                    "typeName": "USER"
+                }
+            ]
+        },
+        {
+            "id": 10602,
+            "summary": "User updated",
+            "authorKey": "admin",
+            "created": "2021-10-12T20:30:59.166+0000",
+            "category": "user management",
+            "eventSource": "",
+            "objectItem": {
+                "id": "user3pre84",
+                "name": "User3Pre84_renamed",
+                "typeName": "USER",
+                "parentId": "1",
+                "parentName": "Jira Internal Directory"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "Full name",
+                    "changedFrom": "User 3 Pre 84 (renamed)",
+                    "changedTo": "user-e175a"
+                },
+                {
+                    "fieldName": "Email",
+                    "changedFrom": "User3Pre84@example.com",
+                    "changedTo": "JIRAUSER10105@jira.invalid"
+                }
+            ]
+        },
+        {
+            "id": 10601,
+            "summary": "User updated",
+            "authorKey": "admin",
+            "created": "2021-10-12T20:30:59.145+0000",
+            "category": "user management",
+            "eventSource": "",
+            "objectItem": {
+                "id": "user3pre84",
+                "name": "User3Pre84_renamed",
+                "typeName": "USER",
+                "parentId": "1",
+                "parentName": "Jira Internal Directory"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "Active / Inactive",
+                    "changedFrom": "Active",
+                    "changedTo": "Inactive"
+                }
+            ]
+        },
+        {
+            "id": 10600,
+            "summary": "User anonymization started",
+            "authorKey": "admin",
+            "created": "2021-10-12T20:30:59.071+0000",
+            "category": "user management",
+            "eventSource": "",
+            "description": "Anonymization started for user with username 'User3Pre84_renamed' and key 'user3pre84'.",
+            "objectItem": {
+                "id": "user3pre84",
+                "name": "User3Pre84_renamed",
+                "typeName": "USER"
+            }
+        }
+    ]
+}

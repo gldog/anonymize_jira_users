@@ -1,0 +1,158 @@
+{
+    "entities": [
+        {
+            "timestamp": "2021-10-02T12:49:31.589Z",
+            "author": {
+                "name": "admin",
+                "type": "ApplicationUser",
+                "id": "10000",
+                "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=admin",
+                "avatarUri": ""
+            },
+            "type": {
+                "categoryI18nKey": "jira.auditing.category.usermanagement",
+                "category": "user management",
+                "actionI18nKey": "jira.auditing.user.anonymized",
+                "action": "User anonymized"
+            },
+            "affectedObjects": [
+                {
+                    "name": "jirauser10401",
+                    "type": "USER",
+                    "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=jirauser10401",
+                    "id": "JIRAUSER10401"
+                },
+                {
+                    "name": "User1Post84",
+                    "type": "USER",
+                    "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=User1Post84",
+                    "id": "JIRAUSER10401"
+                }
+            ],
+            "changedValues": [],
+            "system": "http://localhost:2990/jira",
+            "method": "Task",
+            "extraAttributes": [
+                {
+                    "nameI18nKey": "description",
+                    "name": "description",
+                    "value": "User with username 'jirauser10401' (was: 'User1Post84') and key 'JIRAUSER10401' (was: 'JIRAUSER10401') has been anonymized."
+                }
+            ]
+        },
+        {
+            "timestamp": "2021-10-02T12:49:31.539Z",
+            "author": {
+                "name": "admin",
+                "type": "ApplicationUser",
+                "id": "10000",
+                "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=admin",
+                "avatarUri": ""
+            },
+            "type": {
+                "categoryI18nKey": "jira.auditing.category.usermanagement",
+                "category": "user management",
+                "actionI18nKey": "jira.auditing.user.renamed",
+                "action": "User renamed"
+            },
+            "affectedObjects": [
+                {
+                    "name": "jirauser10401",
+                    "type": "USER",
+                    "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=jirauser10401",
+                    "id": "JIRAUSER10401"
+                }
+            ],
+            "changedValues": [
+                {
+                    "key": "Username",
+                    "i18nKey": "Username",
+                    "from": "User1Post84",
+                    "to": "jirauser10401"
+                }
+            ],
+            "system": "http://localhost:2990/jira",
+            "method": "Task",
+            "extraAttributes": []
+        },
+        {
+            "timestamp": "2021-10-02T12:49:31.476Z",
+            "author": {
+                "name": "admin",
+                "type": "ApplicationUser",
+                "id": "10000",
+                "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=admin",
+                "avatarUri": ""
+            },
+            "type": {
+                "categoryI18nKey": "jira.auditing.category.usermanagement",
+                "category": "user management",
+                "actionI18nKey": "jira.auditing.user.updated",
+                "action": "User updated"
+            },
+            "affectedObjects": [
+                {
+                    "name": "User1Post84",
+                    "type": "USER",
+                    "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=User1Post84",
+                    "id": "JIRAUSER10401"
+                }
+            ],
+            "changedValues": [
+                {
+                    "key": "Email",
+                    "i18nKey": "Email",
+                    "from": "User1Post84@example.com",
+                    "to": "JIRAUSER10401@jira.invalid"
+                },
+                {
+                    "key": "Full name",
+                    "i18nKey": "Full name",
+                    "from": "User 1 Post 84",
+                    "to": "user-04cab"
+                }
+            ],
+            "system": "http://localhost:2990/jira",
+            "method": "Task",
+            "extraAttributes": []
+        },
+        {
+            "timestamp": "2021-10-02T12:49:31.421Z",
+            "author": {
+                "name": "admin",
+                "type": "ApplicationUser",
+                "id": "10000",
+                "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=admin",
+                "avatarUri": ""
+            },
+            "type": {
+                "categoryI18nKey": "jira.auditing.category.usermanagement",
+                "category": "user management",
+                "actionI18nKey": "jira.auditing.user.anonymization.started",
+                "action": "User anonymization started"
+            },
+            "affectedObjects": [
+                {
+                    "name": "User1Post84",
+                    "type": "USER",
+                    "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=User1Post84",
+                    "id": "JIRAUSER10401"
+                }
+            ],
+            "changedValues": [],
+            "system": "http://localhost:2990/jira",
+            "method": "Task",
+            "extraAttributes": [
+                {
+                    "nameI18nKey": "description",
+                    "name": "description",
+                    "value": "Anonymization started for user with username 'User1Post84' and key 'JIRAUSER10401'."
+                }
+            ]
+        }
+    ],
+    "pagingInfo": {
+        "size": 4,
+        "lastPage": true
+    }
+}
