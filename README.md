@@ -656,9 +656,9 @@ The report.json is:
                 "active": false,
                 "deleted": false,
                 "filter_error_message": "",
-                "time_start": null,
-                "time_finish": null,
-                "time_duration": null,
+                "anonymization_start_time": null,
+                "anonymization_finish_time": null,
+                "anonymization_duration": null,
                 "anonymized_user_name": "",
                 "anonymized_user_key": "",
                 "anonymized_user_display_name": "",
@@ -671,9 +671,9 @@ The report.json is:
                 "active": false,
                 "deleted": false,
                 "filter_error_message": "",
-                "time_start": null,
-                "time_finish": null,
-                "time_duration": null,
+                "anonymization_start_time": null,
+                "anonymization_finish_time": null,
+                "anonymization_duration": null,
                 "anonymized_user_name": "",
                 "anonymized_user_key": "",
                 "anonymized_user_display_name": "",
@@ -743,9 +743,9 @@ Have a look at the attribute `filter_error_message` in the report.json:
                 "active": null,
                 "deleted": null,
                 "filter_error_message": "The user named 'missplled-user' does not exist",
-                "time_start": null,
-                "time_finish": null,
-                "time_duration": null,
+                "anonymization_start_time": null,
+                "anonymization_finish_time": null,
+                "anonymization_duration": null,
                 "anonymized_user_name": "",
                 "anonymized_user_key": "",
                 "anonymized_user_display_name": "",
@@ -758,9 +758,9 @@ Have a look at the attribute `filter_error_message` in the report.json:
                 "active": true,
                 "deleted": false,
                 "filter_error_message": "Is an active user.",
-                "time_start": null,
-                "time_finish": null,
-                "time_duration": null,
+                "anonymization_start_time": null,
+                "anonymization_finish_time": null,
+                "anonymization_duration": null,
                 "anonymized_user_name": "",
                 "anonymized_user_key": "",
                 "anonymized_user_display_name": "",
@@ -773,9 +773,9 @@ Have a look at the attribute `filter_error_message` in the report.json:
                 "active": false,
                 "deleted": false,
                 "filter_error_message": "There is at least one validation error message.",
-                "time_start": null,
-                "time_finish": null,
-                "time_duration": null,
+                "anonymization_start_time": null,
+                "anonymization_finish_time": null,
+                "anonymization_duration": null,
                 "anonymized_user_name": "",
                 "anonymized_user_key": "",
                 "anonymized_user_display_name": "",
@@ -938,9 +938,9 @@ The `report.json` is:
                 "active": false,
                 "deleted": false,
                 "filter_error_message": "",
-                "time_start": "2021-04-05T18:34:05.827+0200",
-                "time_finish": "2021-04-05T18:34:07.496+0200",
-                "time_duration": "00:01",
+                "anonymization_start_time": "2021-04-05T18:34:05.827+0200",
+                "anonymization_finish_time": "2021-04-05T18:34:07.496+0200",
+                "anonymization_duration": "00:01",
                 "anonymized_user_name": "jirauser10103",
                 "anonymized_user_key": "JIRAUSER10103",
                 "anonymized_user_display_name": "user-57690",
@@ -953,9 +953,9 @@ The `report.json` is:
                 "active": false,
                 "deleted": false,
                 "filter_error_message": "",
-                "time_start": "2021-04-05T18:34:09.090+0200",
-                "time_finish": "2021-04-05T18:34:09.235+0200",
-                "time_duration": "00:01",
+                "anonymization_start_time": "2021-04-05T18:34:09.090+0200",
+                "anonymization_finish_time": "2021-04-05T18:34:09.235+0200",
+                "anonymization_duration": "00:01",
                 "anonymized_user_name": "jirauser10104",
                 "anonymized_user_key": "JIRAUSER10104",
                 "anonymized_user_display_name": "user-2127b",
@@ -968,9 +968,9 @@ The `report.json` is:
                 "active": false,
                 "deleted": false,
                 "filter_error_message": "",
-                "time_start": "2021-04-05T18:34:12.190+0200",
-                "time_finish": "2021-04-05T18:34:12.274+0200",
-                "time_duration": "00:01",
+                "anonymization_start_time": "2021-04-05T18:34:12.190+0200",
+                "anonymization_finish_time": "2021-04-05T18:34:12.274+0200",
+                "anonymization_duration": "00:01",
                 "anonymized_user_name": "jirauser10301",
                 "anonymized_user_key": "JIRAUSER10301",
                 "anonymized_user_display_name": "user-7b85e",
@@ -983,9 +983,9 @@ The `report.json` is:
                 "active": false,
                 "deleted": false,
                 "filter_error_message": "",
-                "time_start": "2021-04-05T18:34:15.271+0200",
-                "time_finish": "2021-04-05T18:34:15.353+0200",
-                "time_duration": "00:01",
+                "anonymization_start_time": "2021-04-05T18:34:15.271+0200",
+                "anonymization_finish_time": "2021-04-05T18:34:15.353+0200",
+                "anonymization_duration": "00:01",
                 "anonymized_user_name": "jirauser10302",
                 "anonymized_user_key": "JIRAUSER10302",
                 "anonymized_user_display_name": "user-faf6e",
@@ -1102,14 +1102,20 @@ The commands are:
 .
 
     #
-    # 1. Let the Anonymizer create a list of users potentially to be anonymized. This 
-    #   command creates the file inactive_users.cfg in the report-dir.
-    #
-    # First create the report dir. The Anonymizer creates this by itself, but it is
+    # Create the report dirs. The Anonymizer creates them by itself, but they are
     # needed for the tee-command, which starts copying the Anonymizer's output before
     # the Anonymizer has created that directory.
     #
-    mkdir -p $REPORTS_BASE_DIR/1_inactive_users
+    mkdir -p $REPORTS_BASE_DIR/1_inactive_users \
+             $REPORTS_BASE_DIR/2_validate \
+             $REPORTS_BASE_DIR/3_anonymize
+
+.
+
+    #
+    # Let the Anonymizer create a list of users potentially to be anonymized. This 
+    # command creates the file inactive_users.cfg in the report-dir.
+    #
     python anonymize_jira_users.pyz inactive-users -c $CONFIG_FILE \
         --exclude-groups technical_users do_not_anonymize \
         -o $REPORTS_BASE_DIR/1_inactive_users 2>&1
@@ -1118,16 +1124,16 @@ The commands are:
 .
 
     #
-    # 2. Assess and filter the users in inactive_users.cfg manually. Create a new 
-    #   user-list inactive_users_assessed.cfg.
+    # Copy inactive_users.cfg to inactive_users_assessed.cfg and assess and filter the 
+    # users in that copy.
     #   ...
     #
 
 .
 
     #
-    # 3. Let the Anonymizer validate the users in assessed_inactive_users.cfg.
-    #   Have a look at anonymizing_report.json/.csv afterwards.
+    # Let the Anonymizer validate the users in inactive_users_assessed.cfg.
+    # Have a look at report.json or report.csv afterwards.
     #
     mkdir -p $REPORTS_BASE_DIR/2_validate
     python anonymize_jira_users.pyz validate -c $CONFIG_FILE \
@@ -1138,7 +1144,7 @@ The commands are:
 .
 
     #
-    # 4. Let the Anonymizer anonymize the users in assessed_inactive_users.cfg.
+    # Let the Anonymizer anonymize the users in inactive_users_assessed.cfg.
     #
     mkdir -p $REPORTS_BASE_DIR/3_anonymize
     python anonymize_jira_users.pyz anonymize -c $CONFIG_FILE \
@@ -1157,7 +1163,7 @@ The commands are:
 # My Workflow
 
 I maintain 3 Jira instances B, C, and O. Instance C is connected to a MS Active Directory,
-and B and O have local user-management maintained by a specific department.
+B and O have local user-management maintained by a specific department.
 
 Instance C:
 
@@ -1165,7 +1171,7 @@ The workflow is according to the steps in "Example Workflow", but assessing the 
 supported by Python-script `assess_ad_users.py` located in the tools-directory.
 
 I my company, employees going to leave will get an expire-date in the near future in AD.
-Two weeks after that expire-date, the user is automatically removed from AD.
+Two weeks after that expire-date, a user is automatically removed from AD.
 
 Employees who have left for parental leave, sabbatical leave, or other similar reasons
 will return. These employees get a placeholder expire-date of e.g. 01.01.3000 and will be
@@ -1176,39 +1182,37 @@ have left the company and shall be anonymized.
 
 The steps are:
 
-1. Let the Anonymizer create a list of users potentially to be anonymized.
-2. Assess the users:
-    1. Call
+1. I let the Anonymizer create a list of users potentially to be anonymized.
+2. I assess the users:
+    1. In a Windows CMD-Shell, I call
        `python assess_ad_users.py %REPORTS_BASE_DIR%\1_inactive_users\inactive_users.cfg`
        . This will check each user for existance in AD. The script writes the new
        file `inactive_users_assessed.cfg`. This file is basically `inactive_users.cfg`.
        But it is extended with data from AD. If a user is still in AD, the user is
        commented out.
-    2. Assess the users manually afterwards. Mayby you know something about them. E.g. if
+    2. I assess the users manually afterwards. Mayby I know something about them. E.g. if
        they have new AD-accounts and they have filters or dashboards thay want to switch
        from the former account to the new one, and so forth.
-3. Let the Anonymizer validate the users in inactive_users_assessed.cfg.
-4. Let the Anonymizer anonymize the users in assessed_inactive_users.cfg.
-5. Archive the data of the anonymized users: The mapping of the user-name to the
+3. I let the Anonymizer validate the users in inactive_users_assessed.cfg.
+4. I let the Anonymizer anonymize the users in inactive_users_assessed.cfg.
+5. I archive the data of the anonymized users: The mapping of the user-name to the
    anonymized user-name/key and -display-name is archived for legal- and revision-
    department. This is done on a restricted Confluence page. To put the data in the page,
-   the report.csv is imported to a MS Excel sheet, and copied from there to the page (this
-   is the only way I know to let Confluence detect the 'table format').
+   I import the report.csv to a MS Excel sheet, mark all cells, copy them to the
+   clopboardthat, and paste them to a Confluence table.
 
 Instance B and O:
 
 As instance C, but with a different step 2:
 
-Assess the users: Send the list to the department responsible for the user-management and
-let them comment out users to not anoymize.
+Assess the users: I send the list to the department responsible for the user-management
+and let them comment out users to not anoymize.
 
 ---
 
 # Anonymize deleted users
 
 Deleted users aren't anymore in DB table `cwd_user`, but still in table `app_user`.
-
-Anonymized users have a lower_user_name of format jirauser12345.
 
 The following SQL statement gets the user-names of deleted, not yet anonymized users:
 
@@ -1218,7 +1222,7 @@ The following SQL statement gets the user-names of deleted, not yet anonymized u
     AND au.lower_user_name NOT IN (SELECT u.lower_user_name 
                                    FROM   cwd_user u) 
 
-Put these users in the users.cfg and run the anonymization.
+Asses those suers, put them in the users.cfg and run the anonymization.
 
 ---
 
