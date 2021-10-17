@@ -113,30 +113,33 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
         user.logs['rest_post_anonymization'] = Jira.serialize_response(r)
         self.log.debug(f"for '{user.name}' returned {user.logs['rest_post_anonymization']}")
         if r.status_code == 202:
-            self.log.debug(f": Waiting the initial delay of {self.config.effective_config['initial_delay']}s.")
+            self.log.debug(f"is waiting the initial delay of {self.config.effective_config['initial_delay']}s.")
             time.sleep(self.config.effective_config['initial_delay'])
             is_timed_out = self.wait_until_anonymization_is_finished_or_timedout(user_num, user)
 
             try:
                 # startTime should always be present.
-                time_start = user.logs['rest_get_anonymization_progress']['json']['startTime']
-                user.time_start = time_start
+                user.anonymization_start_time = user.logs['rest_get_anonymization_progress']['json']['startTime']
                 # In case the anonymization has been aborted, finishTime could be absent.
                 # In this case, a KeyError is raised, and no diff is calculated.
-                time_finish = user.logs['rest_get_anonymization_progress']['json']['finishTime']
-                user.time_finish = time_finish
-                diff = Tools.time_diff(user.time_start, user.time_finish)
-                user.time_duration = Tools.get_formatted_timediff_mmss(diff)
+                user.anonymization_finish_time = user.logs['rest_get_anonymization_progress']['json']['finishTime']
+                diff = Tools.time_diff(user.anonymization_start_time, user.anonymization_finish_time)
+                user.anonymization_duration = Tools.get_formatted_timediff_mmss(diff)
             except KeyError:
                 pass
 
-            # Collecting the anonymized user-data is done before handling the timeout to
+            self.log.debug(f"finished with following metrics: is_timed_out  {is_timed_out}"
+                           f", anonymization_start_time {user.anonymization_start_time}"
+                           f", anonymization_finish_time {user.anonymization_finish_time}"
+                           f", anonymization_duration {user.anonymization_duration}")
+
+            # Collecting the anonymized user-data is done before handling the timeout of the anonymization-API to
             # save what still can be saved.
             self.auditlog_reader.get_anonymized_user_data_from_audit_log(user)
             # TODO check for completeness. This is at least the anonymized user-name and user-key. If the user
             # was not deleted, this is also the user-display-name.
             if is_timed_out:
-                error_message = f"Anonymizing of user '{user.name}' took longer than the" \
+                error_message = f"got a timeout at anonymizing user '{user.name}'; took longer than the" \
                                 f" configured timeout of {self.config.effective_config['timeout']}" \
                                 " seconds. Aborting."
                 self.execution_logger.logs['errors'].append(error_message)
@@ -150,9 +153,9 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
             #  - 409 Returned if another user anonymization process is already in progress.
             if r.status_code == 400 or r.status_code == 403 or r.status_code == 409:
                 self.log.error(
-                    f": A problem occurred scheduling anonymization for user {user.name}."
-                    f" See report {self.config.effective_config['report_details_filename']}"
-                    " for details.")
+                    f"detected a problem at scheduling anonymization for user {user.name}:"
+                    f" Got REST status-code {r.status_code}, but expected 202."
+                    f" See report {self.config.effective_config['report_details_filename']} for details.")
             else:
                 # For all other, not documented HTTP-problems:
                 r.raise_for_status()
@@ -176,7 +179,7 @@ class AnonymizeCmdExecutor(ValidateCmdExecutor):
                 'value': num_skipped_users
             },
             {
-                'name': 'Anonymized user',
+                'name': 'Anonymized users',
                 'key': 'number_of_anonymized_users',
                 'value': num_anonymized_users
             },

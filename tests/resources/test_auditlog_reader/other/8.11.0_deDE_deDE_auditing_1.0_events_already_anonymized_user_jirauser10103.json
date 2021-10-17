@@ -1,0 +1,76 @@
+{
+    "entities": [
+        {
+            "timestamp": "2021-10-16T20:33:33.717Z",
+            "author": {
+                "name": "admin",
+                "type": "ApplicationUser",
+                "id": "10000",
+                "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=admin",
+                "avatarUri": ""
+            },
+            "type": {
+                "categoryI18nKey": "jira.auditing.category.usermanagement",
+                "category": "Benutzerverwaltung",
+                "actionI18nKey": "jira.auditing.user.anonymized",
+                "action": "Benutzer anonymisiert"
+            },
+            "affectedObjects": [
+                {
+                    "name": "jirauser10103",
+                    "type": "USER",
+                    "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=jirauser10103",
+                    "id": "JIRAUSER10103"
+                }
+            ],
+            "changedValues": [],
+            "system": "http://localhost:2990/jira",
+            "method": "Task",
+            "extraAttributes": [
+                {
+                    "nameI18nKey": "description",
+                    "name": "description",
+                    "value": "User with username 'jirauser10103' (was: 'jirauser10103') and key 'JIRAUSER10103' (was: 'JIRAUSER10103') has been anonymized."
+                }
+            ]
+        },
+        {
+            "timestamp": "2021-10-16T20:33:33.627Z",
+            "author": {
+                "name": "admin",
+                "type": "ApplicationUser",
+                "id": "10000",
+                "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=admin",
+                "avatarUri": ""
+            },
+            "type": {
+                "categoryI18nKey": "jira.auditing.category.usermanagement",
+                "category": "Benutzerverwaltung",
+                "actionI18nKey": "jira.auditing.user.anonymization.started",
+                "action": "Benutzeranonymisierung begonnen"
+            },
+            "affectedObjects": [
+                {
+                    "name": "jirauser10103",
+                    "type": "USER",
+                    "uri": "http://localhost:2990/jira/secure/ViewProfile.jspa?name=jirauser10103",
+                    "id": "JIRAUSER10103"
+                }
+            ],
+            "changedValues": [],
+            "system": "http://localhost:2990/jira",
+            "method": "Task",
+            "extraAttributes": [
+                {
+                    "nameI18nKey": "description",
+                    "name": "description",
+                    "value": "Anonymization started for user with username 'jirauser10103' and key 'JIRAUSER10103'."
+                }
+            ]
+        }
+    ],
+    "pagingInfo": {
+        "size": 2,
+        "lastPage": true
+    }
+}

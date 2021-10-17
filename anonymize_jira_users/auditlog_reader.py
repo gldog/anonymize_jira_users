@@ -1,8 +1,8 @@
-import re
-import time
+import json
 from dataclasses import dataclass
 from logging import Logger
 
+from auditlog_iterator import AuditLogIterator
 from config import Config
 from execution_logger import ExecutionLogger
 from jira import Jira
@@ -11,6 +11,7 @@ from jira_user import JiraUser
 
 @dataclass
 class AuditlogReader:
+    # TODO Remove config
     config: Config
     log: Logger
     jira: Jira
@@ -20,340 +21,469 @@ class AuditlogReader:
         """
         Get the anonymized user-data from the audit-log.
 
-        Use either the audit-records API or the newer audit-events API, depending on the Jira-version.
+        Use either the deprecated audit-records API or the newer audit-events API, depending on the
+        Jira-version.
+
+        Atlassian introduced anonymization in Jira 8.7.
+        The Anonymizer queries the anonymized user-data from the audit-log.
+
+        Jira supports two auditing REST-APIs:
+
+          1. GET /rest/api/2/auditing/record, deprecated since 8.12 (the older one).
+              https://docs.atlassian.com/software/jira/docs/api/REST/8.12.0/#api/2/auditing-getRecords
+          2. "Audit log improvements for developers", introduced in 8.8 (the newer one).
+              https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html
+
+        A switch in this function get_anonymized_user_data_from_audit_log() delegates calls to
+        one of these audit REST-APIs depending on the Jira-version:
+        Until 8.9.x, the API 1) is used. For 8.10 and later, the new API 2) is used.
+
+        Investigated Jira-versions from 8.7 to 8.19.
+
+        The data in the responses depends on:
+
+            1. Jira-version.
+                1.1 /rest/api/2/auditing/record:
+                    Until 8.9, the summary is always in EN:
+                        "summary": "User anonymized"
+                    Starting with 8.10, the summary depends on the system default lang. E.g. if
+                    the setting was DE, the summary is:
+                        "summary": "Benutzer anonymisiert"
+                1.2 /rest/auditing/1.0/events.
+                    Evolved over time. in 8.10 i18n-keys were introduced, but were not present in
+                    all objects.
+
+                    Version     JSON-path                       Lang     example
+                    8.10        type.actionI18nKey              All     "jira.auditing.user.anonymized"
+                    8.11        changedValues[n].i18nKey        All     "Full name"
+                    8.13        extraAttributes[n].nameI18nKey  All         *1), =>
+                                            before:
+                                                "description"
+                                            since 8.13:
+                                                "jira.auditing.extra.parameters.event.description"
+                    8.14        changedValues[n].i18nKey        All         =>
+                                            before:
+                                                "Full name"
+                                            since 8.14:
+                                                "common.words.fullname
+                    8.15 - 8.19 no structure changes.
+
+                    Re 1):
+                    In additin to jira.auditing.extra.parameters.event.description there is also the
+                    jira.auditing.extra.parameters.event.long.description. This rarely came up
+                    in my tests, but is also possible. See Jira-code
+                    jira-project/jira-components/jira-core/src/main/java/com/atlassian/
+                        jira/auditing/spis/migration/mapping/AuditExtraAttributesConverter.java:
+                            String EVENT_DESCRIPTION_I18N_KEY =
+                                "jira.auditing.extra.parameters.event.description"
+                            String EVENT_LONG_DESCRIPTION_I18N_KEY =
+                                "jira.auditing.extra.parameters.event.long.description"
+
+            2. API: /rest/api/2/auditing/record or /rest/auditing/1.0/events.
+                The structure of the responses are different.
+
+            3. System default language at anonymization.
+                See 1.
+
+            4. Languange setting at the time of the request of the anonymizing admin.
+
+            5. Jira-version the anonymized user was created: <8.4 or >=8.4.
+
+            6. Jira user-name format: If the username looks like an anonymized user like
+                jirauser12345 or not.
+
+                In case the user-name is of format username12345, the user-name and the user-key
+                won't be anonymized. It seems Jira "thinks" those user has been anonymized.
+
+            7. If the user was already anonymized.
+
+
+        Why is Jira 8.10 the border?
+            - In the API /rest/api/2/auditing/record until 8.9 the summary is always in EN.
+            - In the API /rest/auditing/1.0/events since 8.10 the i18n-keys can be used.
+
+        The functions get_anonymized_userdata_from_audit_records_for_user() and
+        get_anonymized_userdata_from_audit_events_for_user() works in the following way:
+        They look for a) the anonymized user-name, b) the anonymized user-key, and c) the anonymized
+        user-display-name. For each of them: If not found it is assumed to not have been
+        anonymized and the un-anonymized value is taken.
 
         :param user: The user to search for in the audit-log
         """
 
-        # Atlassian introduced anonymization in Jira 8.7.
-        # The Anonymizer queries the anonymized user-data from the audit-log.
-        #
-        # Jira supports two auditing REST-APIs:
-        #
-        #   1. GET /rest/api/2/auditing/record, deprecated since 8.12.
-        #       https://docs.atlassian.com/software/jira/docs/api/REST/8.12.0/#api/2/auditing-getRecords
-        #   2. "Audit log improvements for developers", introduced in 8.8.
-        #       https://confluence.atlassian.com/jiracore/audit-log-improvements-for-developers-990552469.html
-        #
-        # A switch in this function get_anonymized_user_data_from_audit_log() delegates calls to
-        # the audit REST-APIs depending on the Jira-version:
-        # Until 8.9.x, the API 1) is used. For 8.10 and later, the new API 2) is used.
-        #
-        # Why is Jira 8.10 the border?
-        # The language used in parts of the audit-logs depends on the system default language. This
-        # affects attributes. Attributes are an easy way to identify the content the Analyzer shall
-        # read. But if attributes occur in different languages, this isn't possible.
-        #
-        # API 1): Until Jira 8.9.x the summary is always EN and 'User anonymized'. Starting with
-        # Jira 8.10, the summary language depends on the system default language. E.g. in DE it is
-        # 'Benutzer anonymisiert'.
-        #
-        # API 2) has i18n-keys. These keys are not consistent across the Jira-versions. But
-        # starting with Jira 8.10, they can be used. See
-        # get_anonymized_user_data_from_audit_events() for more details.
-        #
-        # Reading the audit-log user by user, or for all users in one go?
-        # Collecting the anonymized user-data could be done in one go after all users have
-        # been anonymized. But that is not as easy as it sounds: Both APIs are limited in output.
-        # The API 1) is limited to 1000 records, and the API 2) is paged with a default of 200
-        # events/page. That could be fiddly. I'm confident there is not really a downside in
-        # execution-time if the anonymized data is called for each user one by one, so I do
-        # it this way.
+        self.log.debug(f"for user '{user.name}' between anonymization_start_time {user.anonymization_start_time}"
+                       f" and anonymization_finish_time {user.anonymization_finish_time}")
+
+        user.logs['rest_auditing'] = {
+            'doc': "The date in the URL-param is UTC.",
+            'searched_pages': 0,
+            'pages': {}
+        }
+
         if self.jira.is_jira_version_less_then(8, 10):
-            self.get_anonymized_userdata_from_audit_records_for_user(user)
+            auditlog_iterator = AuditLogIterator(log=self.log, jira=self.jira,
+                                                 execution_logger=self.execution_logger,
+                                                 user_logger_rest_auditing=user.logs['rest_auditing'],
+                                                 use_deprecated_records_api=True,
+                                                 start_time=user.anonymization_start_time,
+                                                 finish_time=user.anonymization_finish_time)
+            self.get_anonymized_userdata_from_audit_records_for_user(user, auditlog_iterator)
         else:
-            self.get_anonymized_userdata_from_audit_events_for_user(user)
+            auditlog_iterator = AuditLogIterator(log=self.log, jira=self.jira,
+                                                 execution_logger=self.execution_logger,
+                                                 user_logger_rest_auditing=user.logs['rest_auditing'],
+                                                 start_time=user.anonymization_start_time,
+                                                 finish_time=user.anonymization_finish_time)
+            self.get_anonymized_userdata_from_audit_events_for_user(user, auditlog_iterator)
 
-    def get_anonymized_userdata_from_audit_events_for_user(self, user: JiraUser):
-        anonymization_start_date = user.logs['rest_post_anonymization']['json']['submittedTime']
-        anonymization_start_date_utc = self.date_str_to_utc_str(anonymization_start_date)
-        self.log.debug(f"'{user.name}': anonymization_start_date local {anonymization_start_date}"
-                       f", UTC {anonymization_start_date_utc}")
+        user.logs['rest_auditing']['searched_pages'] = auditlog_iterator.current_page_num + 1
+        auditlog_iterator.clear_current_page()
 
-        user.logs['rest_auditing'] = {'doc': "The date in the URL-param is UTC."}
-        user.logs['rest_auditing'].update({'entries_after_seconds_msg': ''})
+    def get_anonymized_userdata_from_audit_events_for_user(self, user: JiraUser, auditlog_iterator):
 
-        # Jira writes the audit log entries asynchronously. It is unclear how long this takes.
-        waited_seconds_so_far = 0
-        intervals_seconds = [1, 2, 2, 5, 5]
-        # To suppress PyCharm-message "Local variable 'r' might be referenced before assignment".
-        r = {}
-        num_audit_entries = 0
-        for interval in intervals_seconds:
-            time.sleep(interval)
-            waited_seconds_so_far += interval
-            # Include the from-date, to not include e.g. previous renamings which has nothing to
-            # do with the anonymization, and to limit the amount of response-data. The date must
-            # be given in UTC with format "2020-12-30T13:53:17.996Z". The response-JSON is sorted
-            # by date descending.
-            r = self.jira.get_audit_events_since(anonymization_start_date_utc)
-            r.raise_for_status()
-            num_audit_entries = r.json()['pagingInfo']['size']
-            message = f"'{user.name}' returned audit log entries" \
-                      f" after {waited_seconds_so_far} seconds: {num_audit_entries}."
-            self.log.debug(message)
-            user.logs['rest_auditing']['entries_after_seconds_msg'] = message
-            if num_audit_entries > 0:
+        #
+        # About the events
+        #
+        # The order of events after an anonymization is:
+        #   1. type actionI18nKey: "jira.auditing.user.anonymization.started"
+        #   2. type actionI18nKey: "jira.auditing.user.updated"
+        #   3. type actionI18nKey: "jira.auditing.user.key.changed"
+        #   4. type actionI18nKey: "jira.auditing.user.renamed"
+        #   5. type actionI18nKey: "jira.auditing.user.anonymized"
+        #
+        # In the REST response the events are sorted by date descending. This means, the above
+        # events come in the order 5 to 1.
+        #
+        # Jira allows anonymizing an already anonymized user. In this case only 1 und 5 are
+        # present (in the order 5, 1)
+        #
+        # A special case is anonymizing a user that looks like an anonymized user. E. g. the
+        # user with name jirauser12345. But this is just the name set at user-creation.
+        #
+        for entry in auditlog_iterator.entries():
+
+            if user.is_anonymized_data_complete():
                 break
 
-        if num_audit_entries > 0:
-            user.logs['rest_auditing'].update({'request': Jira.serialize_response(r)})
-            auditing_events = r.json()
-        else:
-            error_message = f"'{user.name}': The GET {r.request.url} didn't return any audit log" \
-                            f" entry within {waited_seconds_so_far} seconds." \
-                            " No anonymized user-name/key/display-name could be retrieved."
-            self.log.error(error_message)
-            self.execution_logger.logs['errors'].append(error_message)
-            return
-
-        user.logs['anonymized_data_from_rest'] = {
-            'user_name': None,
-            'user_key': None,
-            'display_name': None,
-            # The description is more for development and documentation, not to extract data in
-            # advance.
-            'description': None
-        }
-        anonymized_data = user.logs['anonymized_data_from_rest']
-
-        for entity in auditing_events['entities']:
-
             #
-            # Similar to get_anonymized_user_data_from_audit_records()
+            # Get the anonymized user-name.
             #
-
-            if self.is_anonymized_userdata_complete_for_user(user):
-                break
-
-            try:
-                # actionI18nKey was added in Jira 8.10.
-                if entity['type']['actionI18nKey'] == 'jira.auditing.user.anonymized':
-                    for extra_attribute in entity['extraAttributes']:
-                        # In Jira 8.10 the 'nameI18nKey' was added.
-                        # In Jira 8.10, 8.11, and 8.12 the key to look for is 'description'.
-                        # Starting with Jira 8.13, it is
-                        # 'jira.auditing.extra.parameters.event.description'.
-                        # Note, these keys 'description' and
-                        # 'jira.auditing.extra.parameters.event.description' are also used in the
-                        # event with key 'jira.auditing.user.anonymization.started', so that key
-                        # is not unique. Therefore the path 'event/type/actionI18nKey' is used to
-                        # identify the event of interest.
-                        # The jira.auditing.extra.parameters.event.long.description rarely cames up
-                        # in my tests, but is also possible. See Jira-code
-                        #   jira-project/jira-components/jira-core/src/main/java/com/atlassian/
-                        #   jira/auditing/spis/migration/mapping/
-                        #   AuditExtraAttributesConverter.java:
-                        #   String EVENT_DESCRIPTION_I18N_KEY =
-                        #       "jira.auditing.extra.parameters.event.description"
-                        #   String EVENT_LONG_DESCRIPTION_I18N_KEY =
-                        #       "jira.auditing.extra.parameters.event.long.description"
-                        key = extra_attribute['nameI18nKey']
-                        if key in ['description',
-                                   'jira.auditing.extra.parameters.event.description',
-                                   'jira.auditing.extra.parameters.event.long.description']:
-                            anonymized_data['description'] = extra_attribute['value']
-                            # The 'value' is something like:
-                            #   "User with username 'jirauser10104' (was: 'user4pre84') and key
-                            #       >> 'JIRAUSER10104' (was: 'user4pre84') has been anonymized."
-                            # The parts of interest are 'jirauser10104', 'user4pre84',
-                            # 'JIRAUSER10104', 'user4pre84'. All given in single quotes.
-                            parts = re.findall(r"'(.*?)'", extra_attribute['value'])
-                            anonymized_data['user_name'] = parts[0]
-                            anonymized_data['user_key'] = parts[2]
-                            user.anonymized_user_name = parts[0]
-                            user.anonymized_user_key = parts[2]
-                            if user.logs['rest_get_user__before_anonymization']['json']['emailAddress'] == '?':
-                                # This is a deleted user. There is no display-name to look for in
-                                # subsequent logs.
-                                break
-                            else:
-                                continue
-            except KeyError:
-                pass
-
-            # Not each record has the changedValues, so use try/except.
-            try:
-                changed_values = entity['changedValues']
-            except KeyError:
-                continue
-
-            display_name_to_search_for = \
-                user.logs['rest_get_user__before_anonymization']['json']['displayName']
-            for changed_value in changed_values:
-                # Not all changedValues-entries have a 'from' and a 'to' key.
+            if entry['type']['actionI18nKey'] == 'jira.auditing.user.renamed':
+                # try/except: Check for expected format.
                 try:
-                    if str(changed_value['to']).lower().startswith('jirauser'):
-                        # This is the changedValues-entry either for the user-name (jirauser12345)
-                        # or the user-key (JIRAUSER12345).
-                        continue
-                    if changed_value['from'] == display_name_to_search_for:
-                        # Found the changedValues-entry with the user-display-name.
-                        # Note, this could be equal to the user-name. And in Jira < 8.4, the
-                        # user-name could also be equal to the user-key.
-                        anonymized_data['display_name'] = changed_value['to']
-                        user.anonymized_user_display_name = changed_value['to']
+                    # Expect only one entry.
+                    for changed_value in entry['changedValues']:
+                        if changed_value['from'] == user.name:
+                            user.anonymized_user_name = changed_value['to']
+                            user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
                 except KeyError:
+                    user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
+                    self.log.error(
+                        f"'{user.name}' couldn't read the user-name '{user.name}' or the"
+                        " anonymized user-name because the expected format of the audit log "
+                        " format has changed. Expect the 'changedValues' with 'from'-key and"
+                        f" 'to'-key. The current audit entry is: {json.dumps(entry)}")
+
+            #
+            # Get the anonymized user-key.
+            #
+            elif entry['type']['actionI18nKey'] == 'jira.auditing.user.key.changed':
+                # try/except: Check for expected format.
+                try:
+                    # Expect only one entry.
+                    for changed_value in entry['changedValues']:
+                        if changed_value['from'] == user.key:
+                            user.anonymized_user_key = changed_value['to']
+                            user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
+                except KeyError:
+                    user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
+                    self.log.error(
+                        f"'{user.name}' couldn't read the user-key '{user.key}' or the"
+                        " anonymized user-key because the expected format of the audit log "
+                        " format has changed. Expect the 'changedValues' with 'from'-key and"
+                        f" 'to'-key. The current audit entry is: {json.dumps(entry)}")
+
+            #
+            # Get the anonymized user-display-name.
+            #
+            elif entry['type']['actionI18nKey'] == 'jira.auditing.user.updated':
+                # There can be other 'jira.auditing.user.updated' events then for the anonymized
+                # user. This is the case if some other user's e.g. display-name is renamed
+                # during anonymization.
+                # Check if this entry is for the anonymized user.
+                # The affectedObjects contains exact one list-entry and the key "name". Checked
+                # in Jira 8.10 - 8.19.
+                # TODO Format-check.
+                if entry['affectedObjects'][0]['name'] != user.name:
                     continue
 
-    def get_anonymized_userdata_from_audit_records_for_user(self, user: JiraUser):
-        # user_name_to_search_for = user.name
+                user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
 
-        anonymization_start_date = user.logs['rest_post_anonymization']['json']['submittedTime']
-        anonymization_start_date_utc = self.date_str_to_utc_str(anonymization_start_date)
-        self.log.debug(f"'{user.name}': anonymization_start_date local {anonymization_start_date}"
-                       f", UTC {anonymization_start_date_utc}")
+                #
+                # The changedValues content changed over time. The following data shows the
+                # contents for the Jira-versions and the system default languages.
+                # The lang-setting (enUS, deDE) is the system default language at anonymizing
+                # time (not at requesting time nor the lang-setting of the rquesting user).
+                #
+                # 8.10; enUS, deDE:
+                #             "changedValues": [
+                #                 {
+                #                     "key": "Email",
+                #                     "from": "User1Post84@example.com",
+                #                     "to": "JIRAUSER10401@jira.invalid"
+                #                 },
+                #                 {
+                #                     "key": "Full name",
+                #                     "from": "User 1 Post 84",
+                #                     "to": "user-04cab"
+                #                 }
+                #             ],
+                #
+                # 8.11, 8.12, 8.13; enUS, deDE:
+                #             "changedValues": [
+                #                 {
+                #                     "key": "Email",
+                #                     "i18nKey": "Email",
+                #                     "from": "User1Post84@example.com",
+                #                     "to": "JIRAUSER10401@jira.invalid"
+                #                 },
+                #                 {
+                #                     "key": "Full name",
+                #                     "i18nKey": "Full name",
+                #                     "from": "User 1 Post 84",
+                #                     "to": "user-04cab"
+                #                 }
+                #             ],
+                #
+                # 8.14, 8.15, 8.16, 8.17, 8.18, 8.19; enUS:
+                #             "changedValues": [
+                #                 {
+                #                     "key": "Email",
+                #                     "i18nKey": "common.words.email",
+                #                     "from": "User1Post84@example.com",
+                #                     "to": "JIRAUSER10401@jira.invalid"
+                #                 },
+                #                 {
+                #                     "key": "Full name",
+                #                     "i18nKey": "common.words.fullname",
+                #                     "from": "User 1 Post 84",
+                #                     "to": "user-04cab"
+                #                 }
+                #             ],
+                #
+                # 8.14, 8.15, 8.16, 8.17, 8.18, 8.19; deDE:
+                #             "changedValues": [
+                #                 {
+                #                     "key": "E-Mail",
+                #                     "i18nKey": "common.words.email",
+                #                     "from": "User1Post84@example.com",
+                #                     "to": "JIRAUSER10401@jira.invalid"
+                #                 },
+                #                 {
+                #                     "key": "Vollständiger Name",
+                #                     "i18nKey": "common.words.fullname",
+                #                     "from": "User 1 Post 84",
+                #                     "to": "user-04cab"
+                #                 }
+                #             ],
+                #
+                for changed_value in entry['changedValues']:
+                    try:
+                        # First look for the 'key' because it is always present. But the key is
+                        # onyl the fixed value 'Full name' until before 8.14. If the key is not
+                        # 'Full name', it is expected there is the i18nKey with value
+                        # 'common.words.fullname'.
+                        #
+                        #   key             i18nKey                 continue with
+                        #                                           next entry
+                        #  --------------+------------------------+-----------
+                        #   'Full name'     KeyError                    No
+                        #   'Full name'     'common.words.fullname'     No
+                        #   other           KeyError                    Yes
+                        #   other           'common.words.fullname'     No
+                        #
+                        if not (changed_value['key'] == 'Full name'
+                                or changed_value['i18nKey'] == 'common.words.fullname'):
+                            continue
+                    except KeyError:
+                        continue
 
-        user.logs['rest_auditing'] = {'doc': "The date in the URL-param is UTC."}
-        user.logs['rest_auditing'].update({'entries_after_seconds_msg': ''})
-
-        # Jira writes the audit log entries asynchronously. It is unclear how long this takes.
-        # Try immediately after the anonymization to read team. If the number of audit logs is 0,
-        # wait the seconds goven as list in the following for-loop.
-        waited_seconds_so_far = 0
-        intervals_seconds = [1, 2, 2, 5, 5]
-        # To suppress: Local variable 'r' might be referenced before assignment.
-        r = {}
-        num_audit_entries = 0
-        for interval in intervals_seconds:
-            time.sleep(interval)
-            waited_seconds_so_far = 0
-            waited_seconds_so_far += interval
-            # Include the from-date, to not include e.g. previous renamings which has nothing to
-            # do with the anonymization, and to limit the amount of response-data. The date must
-            # be given in UTC with format "2020-12-30T13:53:17.996Z". The response-JSON is sorted
-            # by date descending.
-            r = self.jira.get_audit_records_since(anonymization_start_date_utc)
-            r.raise_for_status()
-            num_audit_entries = len(r.json()['records'])
-            message = f"'{user.name}' returned audit log entries" \
-                      f" after {waited_seconds_so_far} seconds: {num_audit_entries}."
-            self.log.debug(message)
-            user.logs['rest_auditing']['entries_after_seconds_msg'] = message
-            if num_audit_entries > 0:
-                break
-
-        if num_audit_entries > 0:
-            user.logs['rest_auditing'].update({'request': Jira.serialize_response(r)})
-            auditing_records = r.json()
-        else:
-            error_message = f"'{user.name}': The GET {r.request.url} didn't return any audit log" \
-                            f" entry within {waited_seconds_so_far} seconds." \
-                            " No anonymized user-name/key/display-name could be retrieved."
-            self.log.error(error_message)
-            self.execution_logger.logs['errors'].append(error_message)
-            return
-
-        user.logs['anonymized_data_from_rest'] = {
-            'user_name': None,
-            'user_key': None,
-            'display_name': None,
-            # The description is more for development and documentation, not to extract data in
-            # advance.
-            'description': None
-        }
-        anonymized_data = user.logs['anonymized_data_from_rest']
-
-        for record in auditing_records['records']:
-            #
-            # About the actions
-            #
-            # The order of actions after an anonymization is:
-            #   1. record.summary: "User anonymization started"
-            #   2. record.summary: "User updated"
-            #   3. record.summary: "User's key changed"
-            #   4. record.summary: "User renamed"
-            #   5. record.summary: "User anonymized"
-            #
-            # The events are sorted by date descending. This means, the above actions come in the
-            # order 5 to 1.
-            #
-            # We're looking here for the new user-name, the new user-key (if the user is
-            # pre-Jira-8.4-user), and the new display-name. It is sufficient to look into
-            # 'User renamed' and 'User updated' to get these data.
-            #
-            # Unfortunately, the summaries depend on the system-default-language. So we can't
-            # check for them. We have to look in to the changedValues directly.
-            #
-
-            if self.is_anonymized_userdata_complete_for_user(user):
-                break
-
-            try:
-                # Until Jira 8.9.x the summary is always EN and 'User anonymized'. Starting with
-                # Jira 8.10, the summary language depends on the system default language. E. g.
-                # in DE it is 'Benutzer anonymisiert'. But this API '/rest/api/2/auditing/record'
-                # is used by the Anonymizer only for Jira-version before 8.10,
-                # if record['summary'] == 'User anonymized':
-                anonymized_data['description'] = record['description']
-                # The 'description' is something like:
-                #   "User with username 'jirauser10104' (was: 'user4pre84') and key 'JIRAUSER10104'
-                #       >> (was: 'user4pre84') has been anonymized."
-                # The parts of interest are 'jirauser10104', 'user4pre84', 'JIRAUSER10104',
-                # 'user4pre84'. All given in single quotes.
-                parts = re.findall(r"'(.*?)'", record['description'])
-                anonymized_data['user_name'] = parts[0]
-                anonymized_data['user_key'] = parts[2]
-                user.anonymized_user_name = parts[0]
-                user.anonymized_user_key = parts[2]
-                if user.logs['rest_get_user__before_anonymization']['json']['emailAddress'] == '?':
-                    # This is a deleted user. There is no display-name to look for in subsequent
-                    # logs.
+                    # Found the entry with the renamed user-display-name.
+                    user.anonymized_user_display_name = changed_value['to']
                     break
-                else:
-                    continue
+
+        self.set_values_for_non_anonymized_items(user)
+
+    def get_anonymized_userdata_from_audit_records_for_user(self, user: JiraUser, auditlog_iterator):
+        """
+        Until at least Jira 8.9.x the value of the attribute "summary" is always EN and is
+        e. g. "User anonymized". Starting with Jira 8.10, the language of the value of "summary"
+        depends on the system default language at the time of anonymization. E.g. in EN it is
+        "User anonymized", but in DE it is "Benutzer anonymisiert". So the audit log entry
+        containing the information of "User anonymized" could only be identified by the term
+        "User anonymized" until Jira 8.9.x.
+        """
+
+        lower_case_user_name = user.name.lower()
+
+        #
+        # About the actions
+        #
+        # The order of actions after an anonymization is:
+        #   1. record.summary: "User anonymization started"
+        #   2. record.summary: "User updated"
+        #   3. record.summary: "User's key changed"
+        #   4. record.summary: "User renamed"
+        #   5. record.summary: "User anonymized"
+        #
+        # In the REST response the actions are sorted by date descending. This means, the above
+        # actions come in the order 5 to 1.
+        #
+        # Jira allows anonymizing an already anonymized user. In this case only 1 und 5 are
+        # present (in the order 5, 1)
+        #
+        # A special case is anonymizing a user that looks like an anonymized user. E. g. the
+        # user with name jirauser12345.
+        #
+        # There are no format checks with try/except as in
+        # get_anonymized_userdata_from_audit_events_for_user() because the audit-record-API is used
+        # only until before 8.10, and the format is well-known and won't change.
+        for entry in auditlog_iterator.entries():
+
+            if user.is_anonymized_data_complete():
+                break
+
+            # try: Just a lifeline. It is expected all used keys are present..
+            try:
+                #
+                # Get the anonymized user-name.
+                #
+                if entry['summary'] == 'User renamed':
+                    for changed_value in entry['changedValues']:
+                        if changed_value['changedFrom'] == user.name:
+                            user.anonymized_user_name = changed_value['changedTo']
+                            user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
+
+                #
+                # Get the anonymized user-key.
+                #
+                elif entry['summary'] == 'User\'s key changed':
+                    # Don't know if there could be other 'User's key changed' events then for the
+                    # anonymized user.
+                    if entry['objectItem']['name'] != lower_case_user_name:
+                        continue
+
+                    user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
+                    user.anonymized_user_key = entry['objectItem']['id']
+
+                #
+                # Get the anonymized user-display-name.
+                #
+                # Until at least Jira 8.9 the "summary" is always EN and is "User updated". An
+                # entry looks like:
+                #
+                #         {
+                #             "id": 10645,
+                #             "summary": "User updated",
+                #             "authorKey": "admin",
+                #             "created": "2021-10-02T19:05:17.751+0000",
+                #             "category": "Benutzerverwaltung",
+                #             "eventSource": "",
+                #             "objectItem": {
+                #                 "id": "user1pre84",
+                #                 "name": "User1Pre84",
+                #                 "typeName": "USER",
+                #                 "parentId": "1",
+                #                 "parentName": "Jira Internal Directory"
+                #             },
+                #             "changedValues": [
+                #                 {
+                #                     "fieldName": "Full name",
+                #                     "changedFrom": "User 1 Pre 84",
+                #                     "changedTo": "user-57690"
+                #                 },
+                #                 {
+                #                     "fieldName": "Email",
+                #                     "changedFrom": "User1Pre84@example.com",
+                #                     "changedTo": "JIRAUSER10103@jira.invalid"
+                #                 }
+                #             ]
+                #         }
+                #
+                elif entry['summary'] == 'User updated':
+                    # There can be other 'User updated' entries then for the anonymized user. This
+                    # is the case if some other user e. g. is renamed during anonymization. Check
+                    # if this entry is for the anonymized user.
+                    if entry['objectItem']['name'] != user.name:
+                        continue
+
+                    user.logs['rest_auditing']['pages'].update(auditlog_iterator.get_current_page())
+
+                    for changed_value in entry['changedValues']:
+                        if changed_value['fieldName'] == 'Full name':
+                            user.anonymized_user_display_name = changed_value['changedTo']
+                            break
+
             except KeyError:
                 pass
 
-            # Not each record has the changesValues, so use try/except.
-            try:
-                changed_values = record['changedValues']
-            except KeyError:
-                continue
+        self.set_values_for_non_anonymized_items(user)
 
-            display_name_to_search_for = \
-                user.logs['rest_get_user__before_anonymization']['json']['displayName']
-            for changed_value in changed_values:
-                # Not all changedValues-entries have a 'changedFrom' and a 'changedTo' key.
-                try:
-                    if str(changed_value['changedTo']).lower().startswith('jirauser'):
-                        # This is the tuple either for the user-name (jirauser12345) or the
-                        # user-key (JIRAUSER12345).
-                        continue
-                    if changed_value['changedFrom'] == display_name_to_search_for:
-                        # Found the tuple with the user-display-name. This could be equal to the
-                        # user-name. And in Jira < 8.4, the user-name could also be equal to the
-                        # user-key.
-                        anonymized_data['display_name'] = changed_value['changedTo']
-                        user.anonymized_user_display_name = changed_value['changedTo']
-                except KeyError:
-                    continue
+    def set_values_for_non_anonymized_items(self, user):
+        # If there was no entry for name, key, or display name in the audit-logs, the item was not
+        # changed. Keep the original as anonymized item.
+        # But there is one exception: If a user was deleted. In that case, Jira TODO
+        if not user.anonymized_user_name:
+            user.anonymized_user_name = user.name
+            self.log.info(f"hasen't found the anonymized user-name for user '{user.name}'"
+                          f" in the audit-log. Kept the name '{user.name}' ")
+        if not user.anonymized_user_key:
+            user.anonymized_user_key = user.key
+            # Do not print the following message. Users created in Jira-versions >= 8.4
+            # have keys of format JIRAUSER12345, and those keys won't be anonymized.
+            # The following message would be printed for all users created >= 8.4.
+            # self.log.info(f"hasen't found the anonymized user-key for user '{user.name}'"
+            #              f" in the audit-log. Kept the key '{user.key}' ")
+        if not user.anonymized_user_display_name:
+            user.anonymized_user_display_name = user.display_name
+            self.log.info(f"hasen't found the anonymized user-display-name for user '{user.name}'"
+                          f" in the audit-log. Kept the display-name '{user.display_name}' ")
 
-    def is_anonymized_userdata_complete_for_user(self, user: JiraUser):
-        """Check if all three items user-name, -key, and display-name are collected so far.
-         If so, we're done with this user.
-         """
-
-        anonymized_data = user.logs['anonymized_data_from_rest']
-        is_complete = anonymized_data['user_name'] \
-                      and anonymized_data['user_key'] \
-                      and anonymized_data['display_name']
-        self.log.debug(f"'{user.name}': {is_complete}. anonymized_data so far is {anonymized_data}")
-        return is_complete
-
-    @staticmethod
-    def date_str_to_utc_str(date_str):
-        """Convert date/time-string of format "2020-12-29T23:17:35.399+0100" to UTC in format
-        2020-12-29T23:16:35.399Z.
-
-        :param date_str: Expect format "2020-12-29T23:17:35.399+0100"
-        :return: String UTC in format 2020-12-29T23:16:35.399Z
-        """
-        # Split string in "2020-12-29T23:17:35" and ".399+0100".
-        date_parts = date_str.split('.')
-        # Convert to UTC. The conversion respects DST.
-        date_utc = time.strftime("%Y-%m-%dT%H:%M:%S",
-                                 time.gmtime(time.mktime(time.strptime(date_parts[0],
-                                                                       '%Y-%m-%dT%H:%M:%S'))))
-        date_utc += f'.{date_parts[1][:3]}Z'
-        return date_utc
+        # Set user-name and -display-name to the user-key for deleted users. This is how the
+        # REST API /rest/api/2/user behaves.
+        #
+        #   User User7Pre84:
+        #
+        #       Before deletion:
+        #           user-name:      User7Pre84
+        #           user-key:       user7pre84
+        #           display-name:   User 7 Pre 84
+        #       After deletion:
+        #           user-name:      user7pre84          <-- now in lower case
+        #           user-key:       user7pre84
+        #           display-name:   user8post84
+        #       After anonymization:
+        #           user-name:      jirauser10109       <-- lower case
+        #           user-key:       JIRAUSER10109
+        #           display-name:   jirauser10109
+        #
+        #   User User8Post84:
+        #
+        #       Before deletion:
+        #           user-name:      User8Post84
+        #           user-key:       JIRAUSER10400
+        #           display-name:   User 8 Post 84
+        #       After deletion:
+        #           user-name:      user8post84         <-- now in lower case
+        #           user-key:       JIRAUSER10400
+        #           display-name:   user8post84
+        #       After anonymization:
+        #           user-name:      jirauser10400       <-- lower case
+        #           user-key:       JIRAUSER10400
+        #           display-name:   jirauser10400
+        #
+        if user.deleted is True:
+            # The anonymized user-key is in upper case JIRAUSER12345, but the user-name shall be
+            # in lower case.
+            user.anonymized_user_name = user.anonymized_user_key.lower()
+            user.anonymized_user_display_name = user.anonymized_user_name

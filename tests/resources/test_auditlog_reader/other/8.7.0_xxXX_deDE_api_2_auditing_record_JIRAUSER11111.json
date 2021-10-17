@@ -1,0 +1,62 @@
+{
+    "offset": 0,
+    "limit": 1000,
+    "total": 192,
+    "records": [
+        {
+            "id": 10661,
+            "summary": "User anonymized",
+            "authorKey": "admin",
+            "created": "2021-10-02T19:05:23.732+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "",
+            "description": "User with username 'JIRAUSER11111' (was: 'JIRAUSER11111') and key 'jirauser11111' (was: 'jirauser11111') has been anonymized.",
+            "objectItem": {
+                "id": "jirauser11111",
+                "name": "JIRAUSER11111",
+                "typeName": "USER"
+            }
+        },
+        {
+            "id": 10660,
+            "summary": "User updated",
+            "authorKey": "admin",
+            "created": "2021-10-02T19:05:23.718+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "",
+            "objectItem": {
+                "id": "jirauser11111",
+                "name": "JIRAUSER11111",
+                "typeName": "USER",
+                "parentId": "1",
+                "parentName": "Jira Internal Directory"
+            },
+            "changedValues": [
+                {
+                    "fieldName": "Full name",
+                    "changedFrom": "JIRAUSER11111",
+                    "changedTo": "user-438f1"
+                },
+                {
+                    "fieldName": "Email",
+                    "changedFrom": "jirauser11111@example.com",
+                    "changedTo": "JIRAUSER10101@jira.invalid"
+                }
+            ]
+        },
+        {
+            "id": 10659,
+            "summary": "User anonymization started",
+            "authorKey": "admin",
+            "created": "2021-10-02T19:05:23.713+0000",
+            "category": "Benutzerverwaltung",
+            "eventSource": "",
+            "description": "Anonymization started for user with username 'JIRAUSER11111' and key 'jirauser11111'.",
+            "objectItem": {
+                "id": "jirauser11111",
+                "name": "JIRAUSER11111",
+                "typeName": "USER"
+            }
+        }
+    ]
+}

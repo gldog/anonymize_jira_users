@@ -508,26 +508,6 @@ class Jira:
         r = self.session.post(url=url, json=body)
         return r
 
-    def get_audit_records_since(self, date_utc):
-        """
-        :param date_utc: The date given in UTC with format "2020-12-30T13:53:17.996Z".
-        """
-        rel_url = '/rest/api/2/auditing/record'
-        url = self.base_url + rel_url
-        url_params = {'from': date_utc}
-        r = self.session.get(url=url, params=url_params)
-        return r
-
-    def get_audit_events_since(self, date_utc):
-        """
-        :param date_utc: The date given in UTC with format "2020-12-30T13:53:17.996Z".
-        """
-        rel_url = '/rest/auditing/1.0/events'
-        url = self.base_url + rel_url
-        url_params = {'from': date_utc}
-        r = self.session.get(url=url, params=url_params)
-        return r
-
     def trigger_reindex(self):
         """Trigger a background reindex.
 

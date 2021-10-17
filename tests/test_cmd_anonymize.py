@@ -66,7 +66,6 @@ class TestCmdAnonymize(BaseTestClass):
                                key=user_name.lower(),
                                display_name=display_name,
                                active=True,
-                               deleted=False,
                                filter_error_message='Is an active user.',
                                anonymized_user_name='',
                                anonymized_user_key='',
@@ -92,20 +91,28 @@ class TestCmdAnonymize(BaseTestClass):
                                display_name=display_name))
 
             # User with only lower-case letter in name, deleted.
+            # The user-name and -display-name are as the user-key for deleted users, and this is
+            # also the case for anonymized deleted users.
             # TODO Create different data for Jira < 8.10
             user_name = 'user9pre84'
-            display_name = 'user9pre84'
             self.usernames_for_user_list_file.append(user_name)
             self.expected_report_generator.add_user(
-                AnonymizedUser(name=user_name,
-                               key=user_name.lower(),
-                               display_name=display_name,
+                # The user-name and -display-name are the ones after deleting this user.
+                AnonymizedUser(name='user9pre84',
+                               key='user9pre84',
+                               display_name='user9pre84',
                                deleted=True,
-                               anonymized_user_display_name=''))
+                               anonymized_user_name='jirauser10111',
+                               anonymized_user_key='JIRAUSER10111',
+                               anonymized_user_display_name='jirauser10111'))
 
             # A user with a name (and key) looking like an anonymized user, but isn't anonymized.
             # Jira doesn't anonymize such user-name. And in versions less than 8.10 the user-key neither.
             # But it anonymizes the user display-name.
+            # Additional to the test an evaluation is done:
+            # Normally, the anonymized user-name is in lower case, and the anonymized user-key is in
+            # upper case. The current user has an upper case user-name, and a lower case user-key.
+            # Event the cases are invertet, Jira doesn't anonymize the user-name and -key.
             user_name = 'JIRAUSER11111'
             display_name = 'JIRAUSER11111'
             self.usernames_for_user_list_file.append(user_name)
@@ -158,7 +165,6 @@ class TestCmdAnonymize(BaseTestClass):
                            key=json.loads(r.text)['key'],
                            display_name=display_name,
                            active=True,
-                           deleted=False,
                            filter_error_message='Is an active user.',
                            anonymized_user_name='',
                            anonymized_user_key='',
@@ -176,20 +182,24 @@ class TestCmdAnonymize(BaseTestClass):
                            display_name=display_name))
 
         # User with only lower-case letter in name; deleted.
-        user_name = 'user9post84'
-        display_name = 'user9post84'
+        user_name = 'User9Post84'
+        display_name = 'User 9 Post 84'
         r = self.jira_application.create_user_if_absent(user_name, display_name=display_name)
         r.raise_for_status()
         self.usernames_for_user_list_file.append(user_name)
         # In Jira version <8.10, deleted users won't be anonymized, because the REST API won't find them.
         # The user-key is None in this case. But in version >= 8.10 the API do find them.
         # TODO Create different data for Jira < 8.10
+        user_key = json.loads(r.text)['key']
         self.expected_report_generator.add_user(
+            # The user-name and -display-name are the ones after deleting this user.
             AnonymizedUser(name='user9post84',
-                           key=json.loads(r.text)['key'],
-                           display_name=display_name,
+                           key=user_key,
+                           display_name='user9post84',
                            deleted=True,
-                           anonymized_user_display_name=''))
+                           anonymized_user_name=user_key.lower(),
+                           anonymized_user_key=user_key,
+                           anonymized_user_display_name=user_key.lower()))
 
         # A user with a name looking like an anonymized user, but isn't anonymized.
         # Jira doesn't anonymize such user-name. And in versions less than 8.10 the user-key neither.
@@ -255,7 +265,7 @@ class TestCmdAnonymize(BaseTestClass):
             # Un-assign issue in case of users to be deleted. A user can only be deleted if not an assignee.
             if user.name.lower() in ['user9pre84', 'user9post84']:
                 issue_key = r.json()['key']
-                self.jira_application.admin_session.assign_issue(issue=issue_key, assignee=None)
+                self.jira_application.admin_session.assign_issue(issue=issue_key, account_id=None)
 
         # Make most users inactive users.
         for user in self.expected_report_generator.users:
@@ -289,8 +299,8 @@ class TestCmdAnonymize(BaseTestClass):
         self.expected_report_generator.generate()
 
         expected_anonymizing_report_json = dataclasses.asdict(self.expected_report_generator)['report']
-        log.info("expected_anonymizing_report_json after update:\n"
-                 f"{json.dumps(expected_anonymizing_report_json, indent=4, ensure_ascii=False)}")
+        # log.info("expected_anonymizing_report_json after update:\n"
+        #         f"{json.dumps(expected_anonymizing_report_json, indent=4, ensure_ascii=False)}")
 
         # The following file is for documenting the tests.
         with open(self.out_base_dir_path.joinpath('predicted_anonymized_userdata.json'), 'w') as f:
@@ -305,7 +315,11 @@ class TestCmdAnonymize(BaseTestClass):
         r.raise_for_status()
 
         user_list_file_path = self.out_base_dir_path.joinpath('users.cfg')
-        self.write_usernames_to_user_list_file(self.usernames_for_user_list_file, filepath=user_list_file_path)
+
+        self.write_usernames_to_user_list_file(
+            # Use lower names to check if the Anonymizer can handle those.
+            [user_name.lower() for user_name in self.usernames_for_user_list_file],
+            filepath=user_list_file_path)
         self.config_file_path = self.out_base_dir_path.joinpath('my-tests-config.cfg')
         self.write_config_file(filename=self.config_file_path, user_list_file=user_list_file_path)
 
@@ -318,7 +332,7 @@ class TestCmdAnonymize(BaseTestClass):
         with open(out_dir.joinpath('report.json'), 'r') as f:
             got_anonymizing_report_json = json.loads(f.read())
 
-        exclude_regex_paths = [r"root\['users'\]\[\d+\]\['time_(start|finish|duration)'\]"]
+        exclude_regex_paths = [r"root\['users'\]\[\d+\]\['anonymization_(start_time|finish_time|duration)'\]"]
         ddiff = DeepDiff(expected_anonymizing_report_json, got_anonymizing_report_json,
                          exclude_regex_paths=exclude_regex_paths)
         self.assertFalse(ddiff,

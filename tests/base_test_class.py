@@ -1,4 +1,5 @@
 import dataclasses
+import itertools
 import json
 import logging
 import pathlib
@@ -146,16 +147,20 @@ class JiraApplication:
 
     def get_system_default_languange(self):
         """Get the system defajlt language.
+
         This is achieved by requesting the Jira startpage without being logged in.
+        The lang-setting is present in the <meta>-Tag.
+        Examples:
+            1. <meta name="ajs-user-locale" content="en_US">
+            2. <meta name="ajs-user-locale" content="de_DE">
+
+        :return String with the lang-setting in the format 'enUS', 'deDE', ...
         """
         url = self.base_url + '/secure/Dashboard.jspa'
         r = requests.get(url)
         html = r.text
-        # Examples:
-        #   1. <meta name="ajs-user-locale" content="en_US">
-        #   2. <meta name="ajs-user-locale" content="de_DE">
         results = re.findall('<meta name="ajs-user-locale" content="(.+?)">', html)
-        return results[0]
+        return results[0].replace('_', '')
 
     def is_jiraversion_ge810(self):
         """Check if Jira-version is greater or equal than 8.10. """
@@ -190,6 +195,16 @@ class JiraApplication:
         data = {'active': active, 'name': user_name}
         r = self.admin_session.user_update(user_name, data)
         return r
+
+    def rename_user(self, username, display_name, num_renames=None):
+        for i in itertools.count(start=1):
+            if num_renames is not None and i > num_renames:
+                break
+            new_display_name = f'{display_name} {i}'
+            print(f"Renaming {username} to {new_display_name}")
+            self.admin_session.user_update(username=username, data={
+                'displayName': new_display_name
+            })
 
     def unassign_all_issues_in_project(self, project_name):
         r_json = self.admin_session.jql('project = "{}"'.format(project_name), 'key')
@@ -299,28 +314,28 @@ class JiraApplication:
         # Got from 8.7.0. Checked list for completeness in 8.15.0 (but not for the messages itself).
         error_message_missing_user = {
             # Also en_UK
-            'en_US': f"The user named '{user_name}' does not exist",
-            'cs_CZ': f"Uživatel se jménem '{user_name}' neexistuje",
-            'da_DK': f"Brugernavnet '{user_name}' eksisterer ikke",
-            'de_DE': f"Der Benutzer namens '{user_name}' existiert nicht",
-            'es_ES': f"El usuario con nombre '{user_name}'no existe",
-            'et_EE': f"'{user_name}' nimelist kasutajanime pole olemas",
-            'fi_FI': f"Käyttäjää nimeltään '{user_name}' ei ole olemassa",
-            'fr_FR': f"L'utilisateur '{user_name}' n'existe pas",
-            'hu_HU': f"A(z) '{user_name}' nevű felhasználó nem létezik.",
-            'is_IS': f"Notandi með nafnið '{user_name}' er ekki til",
-            'it_IT': f"L'utente di nome '{user_name}' non esiste",
-            'ja_JP': f"ユーザー名 '{user_name}' は存在しません。",
-            'ko_KR': f"이름이 '{user_name}'인 사용자가 존재하지 않습니다.",
-            'nl_NL': f"De gebruikersnaam '{user_name}' bestaat niet",
-            'no_NO': f"Finner ikke brukernavn '{user_name}'",
-            'pl_PL': f"Użytkownik o nazwie \"{user_name}\" nie istnieje",
-            'pt_BR': f"O usuário com nome '{user_name}' não existe",
-            'ro_RO': f"Utilizatorul numit '{user_name}' nu există",
-            'ru_RU': f"Пользователь с именем \"{user_name}\" не существует",
-            'sk_SK': f"Používateľ s menom '{user_name}' neexistuje.",
-            'sv_SE': f"Användaren med namnet '{user_name}' finns inte",
-            'zh_CN': f"用户“{user_name}”不存在"
+            'enUS': f"The user named '{user_name}' does not exist",
+            'csCZ': f"Uživatel se jménem '{user_name}' neexistuje",
+            'daDK': f"Brugernavnet '{user_name}' eksisterer ikke",
+            'deDE': f"Der Benutzer namens '{user_name}' existiert nicht",
+            'esES': f"El usuario con nombre '{user_name}'no existe",
+            'etEE': f"'{user_name}' nimelist kasutajanime pole olemas",
+            'fiFI': f"Käyttäjää nimeltään '{user_name}' ei ole olemassa",
+            'frFR': f"L'utilisateur '{user_name}' n'existe pas",
+            'huHU': f"A(z) '{user_name}' nevű felhasználó nem létezik.",
+            'isIS': f"Notandi með nafnið '{user_name}' er ekki til",
+            'itIT': f"L'utente di nome '{user_name}' non esiste",
+            'jaJP': f"ユーザー名 '{user_name}' は存在しません。",
+            'koKR': f"이름이 '{user_name}'인 사용자가 존재하지 않습니다.",
+            'nlNL': f"De gebruikersnaam '{user_name}' bestaat niet",
+            'noNO': f"Finner ikke brukernavn '{user_name}'",
+            'plPL': f"Użytkownik o nazwie \"{user_name}\" nie istnieje",
+            'ptBR': f"O usuário com nome '{user_name}' não existe",
+            'roRO': f"Utilizatorul numit '{user_name}' nu există",
+            'ruRU': f"Пользователь с именем \"{user_name}\" не существует",
+            'skSK': f"Používateľ s menom '{user_name}' neexistuje.",
+            'svSE': f"Användaren med namnet '{user_name}' finns inte",
+            'zhCN': f"用户“{user_name}”不存在"
         }
         try:
             return error_message_missing_user[self.system_default_languange]
