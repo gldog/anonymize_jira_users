@@ -1,6 +1,7 @@
 import logging
 import tempfile
 import textwrap
+import unittest
 
 import urllib3
 
@@ -11,6 +12,7 @@ logging.basicConfig(level=logging.DEBUG)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+@unittest.skip("This is not a test. It is to create samples for the user manual.")
 class Test01(BaseTestClass):
     """Create the reports needed for the user-manual."""
 

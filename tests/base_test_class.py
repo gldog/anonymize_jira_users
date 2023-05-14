@@ -2,6 +2,7 @@ import dataclasses
 import itertools
 import json
 import logging
+import os
 import pathlib
 import re
 import subprocess
@@ -13,7 +14,6 @@ from typing import List, Any
 
 import requests
 import urllib3
-
 from atlassian import Jira
 
 log = logging.getLogger(__name__)
@@ -45,9 +45,11 @@ class BaseTestClass(unittest.TestCase):
         self.initial_delay = 2
         self.regular_delay = 2
 
+        self.base_test_path = pathlib.Path(os.path.dirname(os.path.realpath(__file__)))
+
         # Create a report-dir-name for each tests-run, consisting of a date-string, the Jira version, and the
         # Jira system default language.
-        self.out_base_dir_path = pathlib.Path('..', 'test_runs',
+        self.out_base_dir_path = pathlib.Path(self.base_test_path, '..', 'test_runs',
                                               self.create_dir_name_starting_with_datetime(
                                                   [self.jira_application.version,
                                                    self.jira_application.get_system_default_languange()]))
@@ -56,10 +58,11 @@ class BaseTestClass(unittest.TestCase):
         self.jira_application.admin_session.close()
         pass
 
-    @classmethod
-    def execute_anonymizer(cls, cmd, is_log_output=False, out_filepath=None):
-        zipapp.create_archive(f'../{cls.ANONYMIZER_NAME}')
-        cmd = f'{cls.PYTHON_BINARY} ../{cls.ANONYMIZER_NAME}.pyz {cmd}'
+    def execute_anonymizer(self, cmd, is_log_output=False, out_filepath=None):
+        path = pathlib.Path(self.base_test_path, '..', self.ANONYMIZER_NAME)
+        log.info(f"path: {path}")
+        zipapp.create_archive(path)
+        cmd = f'{self.PYTHON_BINARY} {path}.pyz {cmd}'
         # OLD: cmd = f'{cls.PYTHON_BINARY} ../anonymize_jira_users.py {cmd}'
         log.info(f"execute: {cmd}")
         r = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

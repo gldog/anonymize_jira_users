@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import pathlib
 import re
 import unittest
@@ -49,12 +50,13 @@ class TestAuditlogReader(unittest.TestCase):
 
         mock = Mock()
         self.reader = AuditlogReader(config=mock, log=log, jira=mock, execution_logger=mock)
+        self.current_path = pathlib.Path(os.path.dirname(os.path.realpath(__file__)))
 
     def tearDown(self):
         super(TestAuditlogReader, self).tearDown()
 
     def test_8_7_0_with_deDE_deDE_with_auditing_record_api_with_additional_dummy_entries_for_User1Post84(self):
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.7.0_deDE_deDE_api_2_auditing_record_user1Pre84_with_additional_dummy_entries.json')
@@ -73,7 +75,7 @@ class TestAuditlogReader(unittest.TestCase):
 
     def test_8_7_0_with_enUS_enUS_with_auditing_record_api_for_user_q_1(self):
         # Q means Quote, as a file containing a ' can't be checked-out in Git in Windows.
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  "8.7.0_enUS_enUS_api_2_auditing_record_userQ1.json")
@@ -93,7 +95,7 @@ class TestAuditlogReader(unittest.TestCase):
     def test_8_7_0_with_enUS_enUS_with_auditing_record_api_for_user_dq_2(self):
         # dq means double quote because the double quote is an invalid character for function names.
         # DQ means Double Quote, as the " can't be checked-out in Git in Windows.
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.7.0_enUS_enUS_api_2_auditing_record_userDQ2.json')
@@ -114,7 +116,7 @@ class TestAuditlogReader(unittest.TestCase):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has fewer entries in this case."""
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.7.0_deDE_deDE_api_2_auditing_record_already_anonymized_jirauser10103.json')
@@ -135,7 +137,7 @@ class TestAuditlogReader(unittest.TestCase):
         """xxXX: Don't know what lang was setting at time of anonymization.
         The user looks like an anonymized user regarding the user-name and user-key, but it
         isn't."""
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.7.0_xxXX_deDE_api_2_auditing_record_JIRAUSER11111.json')
@@ -155,7 +157,7 @@ class TestAuditlogReader(unittest.TestCase):
     def test_8_7_0_with_enUS_enUS_with_auditing_record_api_for_user3pre84_renamed(self):
         """The user was initially created with user-name user3pre84 in Jira version <8.4,
         and then renamed to user3pre84_renamed. The user-key is still user3pre84. """
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.7.0_enUS_enUS_api_2_auditing_record_user3pre84_renamed.json')
@@ -174,7 +176,7 @@ class TestAuditlogReader(unittest.TestCase):
 
     def test_8_10_0_with_deDE_enUS_with_auditing_events_api_for_JIRAUSER11111(self):
         """The name and key looks like an anonymized user, but it isn't. """
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.10.0_deDE_enUS_auditing_1.0_events_JIRAUSER11111.json')
@@ -195,7 +197,7 @@ class TestAuditlogReader(unittest.TestCase):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.10.0_enUS_enUS_auditing_1.0_events_already_anonymized_user_jirauser10114.json')
@@ -216,7 +218,7 @@ class TestAuditlogReader(unittest.TestCase):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.10.0_deDE_deDE_auditing_1.0_events_already_anonymized_user_jirauser10103.json')
@@ -237,7 +239,7 @@ class TestAuditlogReader(unittest.TestCase):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.11.0_enUS_enUS_auditing_1.0_events_already_anonymized_user_jirauser10114.json')
@@ -258,7 +260,7 @@ class TestAuditlogReader(unittest.TestCase):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.11.0_deDE_deDE_auditing_1.0_events_already_anonymized_user_jirauser10103.json')
@@ -276,7 +278,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('not_given_in_audit_log', user.anonymized_user_display_name, file_path)
 
     def test_8_13_0_with_deDE_deDE_with_auditing_events_api_with_additional_dummy_entries_for_User1Pre84(self):
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.13.0_deDE_deDE_auditing_1.0_events_User1Pre84_with_additional_dummy_entries.json')
@@ -297,7 +299,7 @@ class TestAuditlogReader(unittest.TestCase):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.14.0_enUS_enUS_auditing_1.0_events_already_anonymized_user_jirauser10114.json')
@@ -318,7 +320,7 @@ class TestAuditlogReader(unittest.TestCase):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
-        file_path = pathlib.Path('resources',
+        file_path = pathlib.Path(self.current_path, 'resources',
                                  'test_auditlog_reader',
                                  'other',
                                  '8.14.0_deDE_deDE_auditing_1.0_events_already_anonymized_user_jirauser10103.json')
@@ -336,7 +338,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('not_given_in_audit_log', user.anonymized_user_display_name, file_path)
 
     def test_with_deDE_xx_with_auditing_record_api_for_User1Post84(self):
-        path = pathlib.Path('resources',
+        path = pathlib.Path(self.current_path, 'resources',
                             'test_auditlog_reader',
                             'anon_done_with_deDE_for_User1Post84',
                             'api_2_auditing_record')
@@ -367,7 +369,7 @@ class TestAuditlogReader(unittest.TestCase):
             self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
 
     def test_with_deDE_xx_with_auditing_events_api_for_User1Post84(self):
-        path = pathlib.Path('resources',
+        path = pathlib.Path(self.current_path, 'resources',
                             'test_auditlog_reader',
                             'anon_done_with_deDE_for_User1Post84',
                             'auditing_1.0_events')
@@ -391,7 +393,7 @@ class TestAuditlogReader(unittest.TestCase):
             self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
 
     def test_with_deDE_xx_with_auditing_record_api_for_User1Pre84(self):
-        path = pathlib.Path('resources',
+        path = pathlib.Path(self.current_path, 'resources',
                             'test_auditlog_reader',
                             'anon_done_with_deDE_for_User1Pre84',
                             'api_2_auditing_record')
@@ -414,7 +416,7 @@ class TestAuditlogReader(unittest.TestCase):
             self.assertEqual('user-57690', user.anonymized_user_display_name, file_path)
 
     def test_with_deDE_xx_with_auditing_events_api_for_User1Pre84(self):
-        path = pathlib.Path('resources',
+        path = pathlib.Path(self.current_path, 'resources',
                             'test_auditlog_reader',
                             'anon_done_with_deDE_for_User1Pre84',
                             'auditing_1.0_events')
@@ -438,7 +440,7 @@ class TestAuditlogReader(unittest.TestCase):
             self.assertEqual('user-57690', user.anonymized_user_display_name, file_path)
 
     def test_with_enUS_xx_with_auditing_record_api_for_User1Post84(self):
-        path = pathlib.Path('resources',
+        path = pathlib.Path(self.current_path, 'resources',
                             'test_auditlog_reader',
                             'anon_done_with_enUS_for_User1Post84',
                             'api_2_auditing_record')
@@ -460,7 +462,7 @@ class TestAuditlogReader(unittest.TestCase):
             self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
 
     def test_with_enUS_xx_with_auditing_events_api_for_User1Post84(self):
-        path = pathlib.Path('resources',
+        path = pathlib.Path(self.current_path, 'resources',
                             'test_auditlog_reader',
                             'anon_done_with_enUS_for_User1Post84',
                             'auditing_1.0_events')
@@ -483,7 +485,7 @@ class TestAuditlogReader(unittest.TestCase):
             self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
 
     def test_with_enUS_xx_with_auditing_record_api_for_User1Pre84(self):
-        path = pathlib.Path('resources',
+        path = pathlib.Path(self.current_path, 'resources',
                             'test_auditlog_reader',
                             'anon_done_with_enUS_for_User1Pre84',
                             'api_2_auditing_record')

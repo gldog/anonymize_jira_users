@@ -36,8 +36,7 @@ class Test01(BaseTestClass):
     """
 
     def setUp(self):
-        # super(Test01, self).setUp()
-        pass
+        super(Test01, self).setUp()
 
     def tearDown(self):
         # super(Test01, self).tearDown()
