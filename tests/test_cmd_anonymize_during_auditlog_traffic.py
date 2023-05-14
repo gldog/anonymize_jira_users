@@ -12,6 +12,10 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class TestCmdAnonymize(BaseTestClass):
+    """
+    This test needs a running Jira instance.
+    This test can be repeated without restarting Jira.
+    """
 
     def setUp(self):
         super(TestCmdAnonymize, self).setUp()
@@ -21,14 +25,15 @@ class TestCmdAnonymize(BaseTestClass):
 
     def test_01(self):
         """
+        Test if the Anonymizer is able to filter the audit-events for the current user to be anonymized.
+        In the background some different user is renamed multiple times to generate a lot of audit-logs.
+
         Setting up these tests is quite specific to these tests, so all set-up stuff is placed here.
         """
+
         self.is_include_users_from_generated_test_resources = False
-
         self.out_base_dir_path.mkdir(parents=True)
-
         self.usernames_for_user_list_file = []
-
         self.expected_report_generator = ExpectedReportGenerator(self.jira_application)
         self.expected_report_generator.jira_version = self.jira_application.version_numbers
 
@@ -109,7 +114,7 @@ class TestCmdAnonymize(BaseTestClass):
         # t = Thread(target=self.jira_application.rename_user, args=(username, display_name))
         # t.start()
 
-        proc = Process(target=self.jira_application.rename_user, args=(username, display_name))
+        proc = Process(target=self.jira_application.rename_user_n_times, args=(username, display_name))
         proc.start()
 
         r = self.execute_anonymizer(f'anonymize -c {self.config_file_path} -o {out_dir}', is_log_output=True,

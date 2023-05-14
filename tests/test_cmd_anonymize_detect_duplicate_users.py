@@ -11,6 +11,10 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class TestCmdAnonymize(BaseTestClass):
+    """
+    This test needs a running Jira instance.
+    This test can be repeated without restarting Jira.
+    """
 
     def setUp(self):
         super(TestCmdAnonymize, self).setUp()
@@ -23,13 +27,16 @@ class TestCmdAnonymize(BaseTestClass):
 
     def test_01(self):
         """
+        Test if duplicate user-names are detected and filtered-out.
+        Jira-users must be unique regardless of upper or lowercase letters: The user-names 'user1' and 'User1' are
+        the same user. If such equal user-names are in the Anonymizer's usernames-infile, they have to be detected and
+        reported to not trigger multiple anonymizations for the same user.
+
         Setting up these tests is quite specific to these tests, so all set-up stuff is placed here.
         """
 
         self.out_base_dir_path.mkdir(parents=True)
-
         self.usernames_for_user_list_file = []
-
         self.expected_report_generator = ExpectedReportGenerator(self.jira_application)
         self.expected_report_generator.jira_version = self.jira_application.version_numbers
 

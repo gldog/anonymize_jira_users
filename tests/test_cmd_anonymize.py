@@ -11,6 +11,10 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class TestCmdAnonymize(BaseTestClass):
+    """
+    This test(s) needs a running Jira instance.
+    his test CAN NOT be repeated. Jira has to be restarted.
+    """
 
     def setUp(self):
         super(TestCmdAnonymize, self).setUp()
@@ -19,15 +23,11 @@ class TestCmdAnonymize(BaseTestClass):
         super(TestCmdAnonymize, self).tearDown()
 
     def test_01(self):
-        """
-        Setting up these tests is quite specific to these tests, so all set-up stuff is placed here.
-        """
+        """Setting up these tests is quite specific to these tests, so all set-up stuff is placed here. """
+
         self.is_include_users_from_generated_test_resources = True
-
         self.out_base_dir_path.mkdir(parents=True)
-
         self.usernames_for_user_list_file = []
-
         self.expected_report_generator = ExpectedReportGenerator(self.jira_application)
         self.expected_report_generator.jira_version = self.jira_application.version_numbers
 

@@ -12,6 +12,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class TestCmdRecreateReport(BaseTestClass):
+    """No Jira instance needed. """
 
     def setUp(self):
         super(TestCmdRecreateReport, self).setUp()

@@ -9,6 +9,10 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class TestCmdInactiveUsers(BaseTestClass):
+    """
+    This test(s) needs a running Jira instance.
+    This test(s) can be repeated without restarting Jira.
+    """
 
     def setUp(self):
         super(TestCmdInactiveUsers, self).setUp()
@@ -19,7 +23,7 @@ class TestCmdInactiveUsers(BaseTestClass):
         # for user_name in self.usernames_for_user_list_file:
         #    self.user_activate(user_name)
 
-    def test_01(self):
+    def test_exclude_groups(self):
 
         self.jira_application.admin_session.user_create(
             username='new_owner',
@@ -31,6 +35,7 @@ class TestCmdInactiveUsers(BaseTestClass):
 
         users_for_user_list_file = []
 
+        # Abbreviation 'eg' means 'exclude group'.
         users_to_be_created = [
             JiraUser(name='u01', display_name='U 01',
                      email_address='u01@example.com'),
@@ -49,6 +54,7 @@ class TestCmdInactiveUsers(BaseTestClass):
         ]
 
         for user in users_to_be_created:
+            # First remove the user, it could exist from previous test-runs.
             self.jira_application.admin_session.user_remove(user.name)
             # No r.raise_for_status() here as that user might not exist.
             r = self.jira_application.admin_session.user_create(

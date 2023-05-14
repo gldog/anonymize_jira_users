@@ -196,7 +196,7 @@ class JiraApplication:
         r = self.admin_session.user_update(user_name, data)
         return r
 
-    def rename_user(self, username, display_name, num_renames=None):
+    def rename_user_n_times(self, username, display_name, num_renames=None):
         for i in itertools.count(start=1):
             if num_renames is not None and i > num_renames:
                 break

@@ -1,5 +1,6 @@
 import logging
 import pathlib
+import unittest
 
 import urllib3
 
@@ -10,8 +11,14 @@ logging.basicConfig(level=logging.DEBUG)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
+@unittest.skip("Test under construction!")
 class TestMassAnonymization(BaseTestClass):
-    """Under construction. """
+    """
+    Test under construction!
+
+    This test(s) needs a running Jira instance.
+    This test(s) can be repeated without restarting Jira.
+    """
 
     def setUp(self):
         super(TestMassAnonymization, self).setUp()
@@ -52,7 +59,7 @@ class TestMassAnonymization(BaseTestClass):
 
             r = self.execute_anonymizer(
                 f'anonymize -c {self.config_file_path} -o {self.out_base_dir_path}', is_log_output=True,
-                out_filepath=self.out_base_dir_path + '/log.out')
+                out_filepath=self.out_base_dir_path.joinpath('/log.out'))
             # decoded_stdout = r.stdout.decode('Latin-1')
             # decoded_stderr = r.stderr.decode('Latin-1')
             # print("r.returncode {}".format(r.returncode))
