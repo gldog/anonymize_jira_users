@@ -1,12 +1,17 @@
 Testing the Anonymizer
 =
 
-# Jira Application
+# General
 
-The tests need this running
-[Jira application](https://bitbucket.org/jheger/jira-anonymizinghelper/src/master/).
+Tests are divided into unit- and integration-tests.
 
-At starting, Jira performs an upgrade task. It is important to start the tests
+
+# Integration tests
+
+The tests need a running
+[Jira test application](https://bitbucket.org/jheger/jira-anonymizinghelper/src/master/).
+
+At starting, Jira performs an upgrade task. It is important to start the integration tests
 **after the upgrade task** has been finished.
 
 This is how this looks like in the atlassian-jira.log:
