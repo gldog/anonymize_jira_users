@@ -1,6 +1,7 @@
 import json
 import logging
 import pathlib
+import re
 import unittest
 from dataclasses import dataclass
 from os import listdir
@@ -14,10 +15,34 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class TestAuditlogReader(unittest.TestCase):
+    """ Test the auditlog_reader.py.
+
+    Test test-function's naming is (mostly):
+    <jira-version>_with_<system-default-language>_<user-settings-language>_with_<api-type>_<test-description>.
+
+    In hindsight the user-settings-language seems not of interest.
+
+    The tests are ordered:
+    - specific tests with a single JSON-resource
+    - batch-tests with a folder of JSON-resources
+
+    They are devided in:
+    - API: deprecated record-API and new event-API
+
+    """
+
     log = logging.getLogger()
     logging.basicConfig(level=logging.DEBUG)
 
     versions_less_than_8_10 = ['8.7.0', '8.8.0', '8.9.0']
+
+    @staticmethod
+    def is_version_less_than_8_10(version):
+        """Check if the version given as string in the format <major>.<minor>.<patch> is less than 8.10.
+        See also jira.is_jira_version_less_then().
+        """
+        version_numbers = re.split('[.]', version)
+        return int(version_numbers[0]) < 8 or (int(version_numbers[0]) == 8 and int(version_numbers[1]) < 10)
 
     def setUp(self):
         super(TestAuditlogReader, self).setUp()
@@ -28,32 +53,7 @@ class TestAuditlogReader(unittest.TestCase):
     def tearDown(self):
         super(TestAuditlogReader, self).tearDown()
 
-    #
-    # Test get_anonymized_userdata_from_audit_records_for_user()
-    #
-
-    def test_with_deDE_xx_with_api_2_auditing_record_api_for_User1Post84(self):
-        path = pathlib.Path('resources',
-                            'test_auditlog_reader',
-                            'anon_done_with_deDE_for_User1Post84',
-                            'api_2_auditing_record')
-        files = [f for f in listdir(path) if f.split('_')[0] in self.versions_less_than_8_10]
-        for file in sorted(files):
-            file_path = path.joinpath(file)
-            with open(file_path) as f:
-                jsn = json.load(f)
-
-            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['records'])
-
-            user = JiraUser(name='User1Post84', key='JIRAUSER10401')
-            user.logs['rest_auditing'] = {'pages': {}}
-            self.reader.get_anonymized_userdata_from_audit_records_for_user(user=user,
-                                                                            auditlog_iterator=auditlog_iterator)
-            self.assertEqual('jirauser10401', user.anonymized_user_name, file_path)
-            self.assertEqual('JIRAUSER10401', user.anonymized_user_key, file_path)
-            self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
-
-    def test_8_7_0_with_deDE_deDE_with_api_2_auditing_record_api_with_additional_dummy_entries_for_User1Post84(self):
+    def test_8_7_0_with_deDE_deDE_with_auditing_record_api_with_additional_dummy_entries_for_User1Post84(self):
         file_path = pathlib.Path('resources',
                                  'test_auditlog_reader',
                                  'other',
@@ -71,12 +71,12 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
         self.assertEqual('user-57690', user.anonymized_user_display_name, file_path)
 
-    def test_8_7_0_with_enUS_enUS_with_api_2_auditing_record_for_user_q_1(self):
-        # q means quote because the quote is an invalid character for function names.
+    def test_8_7_0_with_enUS_enUS_with_auditing_record_api_for_user_q_1(self):
+        # Q means Quote, as a file containing a ' can't be checked-out in Git in Windows.
         file_path = pathlib.Path('resources',
                                  'test_auditlog_reader',
                                  'other',
-                                 "8.7.0_enUS_enUS_api_2_auditing_record_user'1.json")
+                                 "8.7.0_enUS_enUS_api_2_auditing_record_userQ1.json")
         with open(file_path) as f:
             jsn = json.load(f)
 
@@ -90,12 +90,13 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10400', user.anonymized_user_key, file_path)
         self.assertEqual('user-14aa9', user.anonymized_user_display_name, file_path)
 
-    def test_8_7_0_with_enUS_enUS_with_api_2_auditing_record_for_user_dq_2(self):
+    def test_8_7_0_with_enUS_enUS_with_auditing_record_api_for_user_dq_2(self):
         # dq means double quote because the double quote is an invalid character for function names.
+        # DQ means Double Quote, as the " can't be checked-out in Git in Windows.
         file_path = pathlib.Path('resources',
                                  'test_auditlog_reader',
                                  'other',
-                                 '8.7.0_enUS_enUS_api_2_auditing_record_user"2.json')
+                                 '8.7.0_enUS_enUS_api_2_auditing_record_userDQ2.json')
         with open(file_path) as f:
             jsn = json.load(f)
 
@@ -109,10 +110,10 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10401', user.anonymized_user_key, file_path)
         self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
 
-    def test_8_7_0_with_deDE_deDE_with_api_2_auditing_record_for_already_anonymized_jirauser10103(self):
+    def test_8_7_0_with_deDE_deDE_with_auditing_record_api_for_already_anonymized_jirauser10103(self):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
-        The audit log has less entries in this case."""
+        The audit log has fewer entries in this case."""
         file_path = pathlib.Path('resources',
                                  'test_auditlog_reader',
                                  'other',
@@ -130,7 +131,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
         self.assertEqual('not_given_in_audit_log', user.anonymized_user_display_name, file_path)
 
-    def test_8_7_0_with_xxXX_deDE_with_api_2_auditing_record_for_jirauser11111(self):
+    def test_8_7_0_with_xxXX_deDE_with_auditing_record_api_for_jirauser11111(self):
         """xxXX: Don't know what lang was setting at time of anonymization.
         The user looks like an anonymized user regarding the user-name and user-key, but it
         isn't."""
@@ -151,7 +152,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('jirauser11111', user.anonymized_user_key, file_path)
         self.assertEqual('user-438f1', user.anonymized_user_display_name, file_path)
 
-    def test_8_7_0_with_enUS_enUS_with_api_2_auditing_record_for_user3pre84_renamed(self):
+    def test_8_7_0_with_enUS_enUS_with_auditing_record_api_for_user3pre84_renamed(self):
         """The user was initially created with user-name user3pre84 in Jira version <8.4,
         and then renamed to user3pre84_renamed. The user-key is still user3pre84. """
         file_path = pathlib.Path('resources',
@@ -171,96 +172,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10105', user.anonymized_user_key, file_path)
         self.assertEqual('user-e175a', user.anonymized_user_display_name, file_path)
 
-    #
-    # Test get_anonymized_userdata_from_audit_events_for_user()
-    #
-
-    def test_with_deDE_xx_with_auditing_1_0_events_api_for_User1Pre84(self):
-        path = pathlib.Path('resources',
-                            'test_auditlog_reader',
-                            'anon_done_with_deDE_for_User1Pre84',
-                            'auditing_1.0_events')
-        # Exclude some test-files. The function under test is for Jira-versions starting at 8.10.
-        files = [f for f in listdir(path) if f.split('_')[0] not in self.versions_less_than_8_10]
-        for file in sorted(files):
-            # log.info(f"Test_file: {file}")
-            file_path = path.joinpath(file)
-            with open(file_path) as f:
-                jsn = json.load(f)
-
-            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['entities'])
-
-            user = JiraUser(name='User1Pre84', key='user1pre84', display_name='User 1 Pre 84')
-            user.logs['rest_auditing'] = {'pages': {}}
-            self.reader.get_anonymized_userdata_from_audit_events_for_user(user=user,
-                                                                           auditlog_iterator=auditlog_iterator)
-            self.assertEqual('jirauser10103', user.anonymized_user_name, file_path)
-            self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
-            self.assertEqual('user-57690', user.anonymized_user_display_name, file_path)
-
-    def test_with_deDE_xx_with_auditing_1_0_events_api_for_User1Post84(self):
-        path = pathlib.Path('resources',
-                            'test_auditlog_reader',
-                            'anon_done_with_deDE_for_User1Post84',
-                            'auditing_1.0_events')
-        # Exclude some test-files. The function under test is for Jira-versions starting at 8.10.
-        files = [f for f in listdir(path) if f.split('_')[0] not in self.versions_less_than_8_10]
-        for file in sorted(files):
-            # log.info(f"Test_file: {file}")
-            file_path = path.joinpath(file)
-            with open(file_path) as f:
-                jsn = json.load(f)
-
-            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['entities'])
-
-            user = JiraUser(name='User1Post84', key='JIRAUSER10401')
-            user.logs['rest_auditing'] = {'pages': {}}
-            self.reader.get_anonymized_userdata_from_audit_events_for_user(user=user,
-                                                                           auditlog_iterator=auditlog_iterator)
-            self.assertEqual('jirauser10401', user.anonymized_user_name, file_path)
-            self.assertEqual('JIRAUSER10401', user.anonymized_user_key, file_path)
-            self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
-
-    def test_with_enUS_xx_with_auditing_1_0_events_api_for_User1Post84(self):
-        path = pathlib.Path('resources',
-                            'test_auditlog_reader',
-                            'anon_done_with_enUS_for_User1Post84',
-                            'auditing_1.0_events')
-        files = [f for f in listdir(path) if f.split('_')[0] not in self.versions_less_than_8_10]
-        for file in sorted(files):
-            file_path = path.joinpath(file)
-            with open(file_path) as f:
-                jsn = json.load(f)
-
-            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['entities'])
-
-            user = JiraUser(name='User1Post84', key='JIRAUSER10401')
-            user.logs['rest_auditing'] = {'pages': {}}
-            self.reader.get_anonymized_userdata_from_audit_events_for_user(user=user,
-                                                                           auditlog_iterator=auditlog_iterator)
-            self.assertEqual('jirauser10401', user.anonymized_user_name, file_path)
-            self.assertEqual('JIRAUSER10401', user.anonymized_user_key, file_path)
-            self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
-
-    def test_8_13_0_with_deDE_deDE_with_auditing_1_0_events_with_additional_dummy_entries_for_User1Pre84(self):
-        file_path = pathlib.Path('resources',
-                                 'test_auditlog_reader',
-                                 'other',
-                                 '8.13.0_deDE_deDE_auditing_1.0_events_User1Pre84_with_additional_dummy_entries.json')
-        with open(file_path) as f:
-            jsn = json.load(f)
-
-        auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['entities'])
-
-        user = JiraUser(name='User1Pre84', key='user1pre84')
-        user.logs['rest_auditing'] = {'pages': {}}
-        self.reader.get_anonymized_userdata_from_audit_events_for_user(user=user,
-                                                                       auditlog_iterator=auditlog_iterator)
-        self.assertEqual('jirauser10103', user.anonymized_user_name, file_path)
-        self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
-        self.assertEqual('user-57690', user.anonymized_user_display_name, file_path)
-
-    def test_8_10_0_with_deDE_enUS_with_auditing_1_0_events_for_JIRAUSER11111(self):
+    def test_8_10_0_with_deDE_enUS_with_auditing_events_api_for_JIRAUSER11111(self):
         """The name and key looks like an anonymized user, but it isn't. """
         file_path = pathlib.Path('resources',
                                  'test_auditlog_reader',
@@ -279,7 +191,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('jirauser11111', user.anonymized_user_key, file_path)
         self.assertEqual('user-438f1', user.anonymized_user_display_name, file_path)
 
-    def test_8_10_0_with_enUS_enUS_with_auditing_1_0_events_for_already_anonymized_jirauser10114(self):
+    def test_8_10_0_with_enUS_enUS_with_auditing_events_api_for_already_anonymized_jirauser10114(self):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
@@ -300,7 +212,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10114', user.anonymized_user_key, file_path)
         self.assertEqual('not_given_in_audit_log', user.anonymized_user_display_name, file_path)
 
-    def test_8_10_0_with_deDE_deDE_with_auditing_1_0_events_for_already_anonymized_jirauser10103(self):
+    def test_8_10_0_with_deDE_deDE_with_auditing_events_api_for_already_anonymized_jirauser10103(self):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
@@ -321,7 +233,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
         self.assertEqual('not_given_in_audit_log', user.anonymized_user_display_name, file_path)
 
-    def test_8_11_0_with_enUS_enUS_with_auditing_1_0_events_for_already_anonymized_jirauser10114(self):
+    def test_8_11_0_with_enUS_enUS_with_auditing_events_api_for_already_anonymized_jirauser10114(self):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
@@ -342,7 +254,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10114', user.anonymized_user_key, file_path)
         self.assertEqual('not_given_in_audit_log', user.anonymized_user_display_name, file_path)
 
-    def test_8_11_0_with_deDE_deDE_with_auditing_1_0_events_for_already_anonymized_jirauser10103(self):
+    def test_8_11_0_with_deDE_deDE_with_auditing_events_api_for_already_anonymized_jirauser10103(self):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
@@ -363,7 +275,25 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
         self.assertEqual('not_given_in_audit_log', user.anonymized_user_display_name, file_path)
 
-    def test_8_14_0_with_enUS_enUS_with_auditing_1_0_events_for_already_anonymized_jirauser10114(self):
+    def test_8_13_0_with_deDE_deDE_with_auditing_events_api_with_additional_dummy_entries_for_User1Pre84(self):
+        file_path = pathlib.Path('resources',
+                                 'test_auditlog_reader',
+                                 'other',
+                                 '8.13.0_deDE_deDE_auditing_1.0_events_User1Pre84_with_additional_dummy_entries.json')
+        with open(file_path) as f:
+            jsn = json.load(f)
+
+        auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['entities'])
+
+        user = JiraUser(name='User1Pre84', key='user1pre84')
+        user.logs['rest_auditing'] = {'pages': {}}
+        self.reader.get_anonymized_userdata_from_audit_events_for_user(user=user,
+                                                                       auditlog_iterator=auditlog_iterator)
+        self.assertEqual('jirauser10103', user.anonymized_user_name, file_path)
+        self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
+        self.assertEqual('user-57690', user.anonymized_user_display_name, file_path)
+
+    def test_8_14_0_with_enUS_enUS_with_auditing_events_api_for_already_anonymized_jirauser10114(self):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
@@ -384,7 +314,7 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('JIRAUSER10114', user.anonymized_user_key, file_path)
         self.assertEqual('not_given_in_audit_log', user.anonymized_user_display_name, file_path)
 
-    def test_8_14_0_with_deDE_deDE_with_auditing_1_0_events_for_already_anonymized_jirauser10103(self):
+    def test_8_14_0_with_deDE_deDE_with_auditing_events_api_for_already_anonymized_jirauser10103(self):
         """The user is already anonymized. Jira allows anonymizing already anonymized user, but
         doesn't do anything. The anonymized user keeps as is.
         The audit log has only 2 entries in this case."""
@@ -404,6 +334,175 @@ class TestAuditlogReader(unittest.TestCase):
         self.assertEqual('jirauser10103', user.anonymized_user_name, file_path)
         self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
         self.assertEqual('not_given_in_audit_log', user.anonymized_user_display_name, file_path)
+
+    def test_with_deDE_xx_with_auditing_record_api_for_User1Post84(self):
+        path = pathlib.Path('resources',
+                            'test_auditlog_reader',
+                            'anon_done_with_deDE_for_User1Post84',
+                            'api_2_auditing_record')
+
+        # is_version_less_than_8_10
+
+        # About str(path):
+        # Until here, path is not of type String. The following code...
+        #   f.split('_')[0]
+        # ... would result in the warning:
+        #   Expected type 'Optional[bytes]', got 'str' instead
+        # That works. But the str(path) avoids that warning.
+        file_paths = [f for f in listdir(str(path)) if TestAuditlogReader.is_version_less_than_8_10(f.split('_')[0])]
+        for file_path in sorted(file_paths):
+            file_path = path.joinpath(file_path)
+            # log.info(f"file_path: {file_path}")
+            with open(file_path) as f:
+                jsn = json.load(f)
+
+            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['records'])
+
+            user = JiraUser(name='User1Post84', key='JIRAUSER10401')
+            user.logs['rest_auditing'] = {'pages': {}}
+            self.reader.get_anonymized_userdata_from_audit_records_for_user(user=user,
+                                                                            auditlog_iterator=auditlog_iterator)
+            self.assertEqual('jirauser10401', user.anonymized_user_name, file_path)
+            self.assertEqual('JIRAUSER10401', user.anonymized_user_key, file_path)
+            self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
+
+    def test_with_deDE_xx_with_auditing_events_api_for_User1Post84(self):
+        path = pathlib.Path('resources',
+                            'test_auditlog_reader',
+                            'anon_done_with_deDE_for_User1Post84',
+                            'auditing_1.0_events')
+        # Exclude some test-files. The function under test is for Jira-versions starting at 8.10.
+        file_paths = [f for f in listdir(str(path)) if
+                      not TestAuditlogReader.is_version_less_than_8_10(f.split('_')[0])]
+        for file_path in sorted(file_paths):
+            file_path = path.joinpath(file_path)
+            # log.info(f"file_path: {file_path}")
+            with open(file_path) as f:
+                jsn = json.load(f)
+
+            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['entities'])
+
+            user = JiraUser(name='User1Post84', key='JIRAUSER10401')
+            user.logs['rest_auditing'] = {'pages': {}}
+            self.reader.get_anonymized_userdata_from_audit_events_for_user(user=user,
+                                                                           auditlog_iterator=auditlog_iterator)
+            self.assertEqual('jirauser10401', user.anonymized_user_name, file_path)
+            self.assertEqual('JIRAUSER10401', user.anonymized_user_key, file_path)
+            self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
+
+    def test_with_deDE_xx_with_auditing_record_api_for_User1Pre84(self):
+        path = pathlib.Path('resources',
+                            'test_auditlog_reader',
+                            'anon_done_with_deDE_for_User1Pre84',
+                            'api_2_auditing_record')
+        # Exclude some test-files. The function under test is for Jira-versions starting at 8.10.
+        file_paths = [f for f in listdir(str(path)) if TestAuditlogReader.is_version_less_than_8_10(f.split('_')[0])]
+        for file_path in sorted(file_paths):
+            file_path = path.joinpath(file_path)
+            # log.info(f"file_path: {file_path}")
+            with open(file_path) as f:
+                jsn = json.load(f)
+
+            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['records'])
+
+            user = JiraUser(name='User1Pre84', key='user1pre84', display_name='User 1 Pre 84')
+            user.logs['rest_auditing'] = {'pages': {}}
+            self.reader.get_anonymized_userdata_from_audit_records_for_user(user=user,
+                                                                            auditlog_iterator=auditlog_iterator)
+            self.assertEqual('jirauser10103', user.anonymized_user_name, file_path)
+            self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
+            self.assertEqual('user-57690', user.anonymized_user_display_name, file_path)
+
+    def test_with_deDE_xx_with_auditing_events_api_for_User1Pre84(self):
+        path = pathlib.Path('resources',
+                            'test_auditlog_reader',
+                            'anon_done_with_deDE_for_User1Pre84',
+                            'auditing_1.0_events')
+        # Exclude some test-files. The function under test is for Jira-versions starting at 8.10.
+        file_paths = [f for f in listdir(str(path)) if
+                      not TestAuditlogReader.is_version_less_than_8_10(f.split('_')[0])]
+        for file_path in sorted(file_paths):
+            file_path = path.joinpath(file_path)
+            # log.info(f"file_path: {file_path}")
+            with open(file_path) as f:
+                jsn = json.load(f)
+
+            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['entities'])
+
+            user = JiraUser(name='User1Pre84', key='user1pre84', display_name='User 1 Pre 84')
+            user.logs['rest_auditing'] = {'pages': {}}
+            self.reader.get_anonymized_userdata_from_audit_events_for_user(user=user,
+                                                                           auditlog_iterator=auditlog_iterator)
+            self.assertEqual('jirauser10103', user.anonymized_user_name, file_path)
+            self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
+            self.assertEqual('user-57690', user.anonymized_user_display_name, file_path)
+
+    def test_with_enUS_xx_with_auditing_record_api_for_User1Post84(self):
+        path = pathlib.Path('resources',
+                            'test_auditlog_reader',
+                            'anon_done_with_enUS_for_User1Post84',
+                            'api_2_auditing_record')
+        file_paths = [f for f in listdir(str(path)) if TestAuditlogReader.is_version_less_than_8_10(f.split('_')[0])]
+        for file_path in sorted(file_paths):
+            file_path = path.joinpath(file_path)
+            # log.info(f"file_path: {file_path}")
+            with open(file_path) as f:
+                jsn = json.load(f)
+
+            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['records'])
+
+            user = JiraUser(name='User1Post84', key='JIRAUSER10401')
+            user.logs['rest_auditing'] = {'pages': {}}
+            self.reader.get_anonymized_userdata_from_audit_records_for_user(user=user,
+                                                                            auditlog_iterator=auditlog_iterator)
+            self.assertEqual('jirauser10401', user.anonymized_user_name, file_path)
+            self.assertEqual('JIRAUSER10401', user.anonymized_user_key, file_path)
+            self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
+
+    def test_with_enUS_xx_with_auditing_events_api_for_User1Post84(self):
+        path = pathlib.Path('resources',
+                            'test_auditlog_reader',
+                            'anon_done_with_enUS_for_User1Post84',
+                            'auditing_1.0_events')
+        file_paths = [f for f in listdir(str(path)) if
+                      not TestAuditlogReader.is_version_less_than_8_10(f.split('_')[0])]
+        for file_path in sorted(file_paths):
+            file_path = path.joinpath(file_path)
+            # log.info(f"file_path: {file_path}")
+            with open(file_path) as f:
+                jsn = json.load(f)
+
+            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['entities'])
+
+            user = JiraUser(name='User1Post84', key='JIRAUSER10401')
+            user.logs['rest_auditing'] = {'pages': {}}
+            self.reader.get_anonymized_userdata_from_audit_events_for_user(user=user,
+                                                                           auditlog_iterator=auditlog_iterator)
+            self.assertEqual('jirauser10401', user.anonymized_user_name, file_path)
+            self.assertEqual('JIRAUSER10401', user.anonymized_user_key, file_path)
+            self.assertEqual('user-04cab', user.anonymized_user_display_name, file_path)
+
+    def test_with_enUS_xx_with_auditing_record_api_for_User1Pre84(self):
+        path = pathlib.Path('resources',
+                            'test_auditlog_reader',
+                            'anon_done_with_enUS_for_User1Pre84',
+                            'api_2_auditing_record')
+        file_paths = [f for f in listdir(str(path)) if TestAuditlogReader.is_version_less_than_8_10(f.split('_')[0])]
+        for file_path in sorted(file_paths):
+            file_path = path.joinpath(file_path)
+            # log.info(f"file_path: {file_path}")
+            with open(file_path) as f:
+                jsn = json.load(f)
+
+            auditlog_iterator = TestAuditlogReader.AuditLogIteratorMock(jsn['records'])
+
+            user = JiraUser(name='User1Pre84', key='JIRAUSER10103')
+            user.logs['rest_auditing'] = {'pages': {}}
+            self.reader.get_anonymized_userdata_from_audit_records_for_user(user=user,
+                                                                            auditlog_iterator=auditlog_iterator)
+            self.assertEqual('jirauser10103', user.anonymized_user_name, file_path)
+            self.assertEqual('JIRAUSER10103', user.anonymized_user_key, file_path)
+            self.assertEqual('user-57690', user.anonymized_user_display_name, file_path)
 
     #
     # Helpers
