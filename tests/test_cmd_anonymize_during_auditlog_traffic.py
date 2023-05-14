@@ -21,9 +21,9 @@ class TestCmdAnonymize(BaseTestClass):
 
     def test_01(self):
         """
-        Setting up this tests is quite speific to this tests, so all set-up stuff is placed here.
+        Setting up these tests is quite specific to these tests, so all set-up stuff is placed here.
         """
-        self.is_include_users_from_generated_test_resouces = False
+        self.is_include_users_from_generated_test_resources = False
 
         self.out_base_dir_path.mkdir(parents=True)
 

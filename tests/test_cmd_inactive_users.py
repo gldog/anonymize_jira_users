@@ -115,7 +115,7 @@ class TestCmdInactiveUsers(BaseTestClass):
         num_remaining_users = 0
         for user in users:
             # Test test-users are named according to their exclude-group-membership.
-            # E. g. user 'u03_in_eg_1' is in 'exclude_group_1. Users in exclude-groups must not
+            # E.g. user 'u03_in_eg_1' is in 'exclude_group_1'. Users in exclude-groups must not
             # be part of the inactive_users-file.
             if any(map(user.name.__contains__, excludes)):
                 continue

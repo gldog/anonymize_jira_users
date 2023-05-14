@@ -127,7 +127,7 @@ class JiraApplication:
     std_password: str = field(default='1')
 
     def __post_init__(self):
-        # advanced_mode=True: Return the raw response. Otherwise the API aborts in case of error-status-codes.
+        # advanced_mode=True: Return the raw response. Otherwise, the API aborts in case of error-status-codes.
         # But I like to control myself when to abort.
         self.admin_session = Jira(url=self.base_url, username='admin', password='admin', advanced_mode=True)
         r = self.get_jira_serverinfo()
@@ -211,49 +211,6 @@ class JiraApplication:
         for issue_json in r_json['issues']:
             print("key {}".format(issue_json['key']))
             self.admin_session.assign_issue(issue_json['key'])
-
-    # TODO Replace with issue_create() or issue_create_or_update()
-    def create_issue(self, json_body, is_raise_for_status=True):
-        print("create_issue()")
-        url = self.base_url + '/rest/api/2/issue'
-        r = self.admin_session.post(url=url, json=json_body)
-        if is_raise_for_status:
-            r.raise_for_status()
-        return r
-
-    # TODO Replace with issue_create_or_update() ?
-    def edit_issue(self, issue_key_or_id, json_body, is_raise_for_status=True):
-        url = self.base_url + '/rest/api/2/issue/{}'.format(issue_key_or_id)
-        r = self.admin_session.put(url=url, headers={'Content-Type': 'application/json'}, data=json_body)
-        if is_raise_for_status:
-            r.raise_for_status()
-        return r
-
-    def edit_issue_set_single_user_picker(self, issue_key_or_id, customfield_id, user_name, is_raise_for_status=True):
-        print("edit_issue_set_single_user_picker(), issue_key_or_id {}, customfield_id {}, user_name {}"
-              .format(issue_key_or_id, customfield_id, user_name))
-        json_body = json.dumps({
-            'fields': {
-                customfield_id: {'name': user_name}
-            }
-        })
-        r = self.edit_issue(issue_key_or_id, json_body)
-        if is_raise_for_status:
-            r.raise_for_status()
-        return r
-
-    def edit_issue_set_reporter(self, issue_key_or_id, reporter_name, is_raise_for_status=True):
-        print("edit_issue_set_reporter(), issue_key_or_id {}, reporter_name {}"
-              .format(issue_key_or_id, reporter_name))
-        json_body = json.dumps({
-            'fields': {
-                'reporter': {'name': reporter_name}
-            }
-        })
-        r = self.edit_issue(issue_key_or_id, json_body)
-        if is_raise_for_status:
-            r.raise_for_status()
-        return r
 
     def create_issue_and_update_userpicker_customfield_by_user(self, user_name):
         """
@@ -401,7 +358,7 @@ class ExpectedReportGenerator:
         for user in self.users:
             if self.jira_application.is_jiraversion_lt810():
                 if user.deleted:
-                    # In Jira-versions less than 8.10, deleted users could not retrieved by the REST-API. As a
+                    # In Jira-versions less than 8.10, deleted users could not retrieve by the REST-API. As a
                     # consequence, most of the attributes of the report are None.
                     user.key = None
                     user.display_name = None
@@ -415,7 +372,7 @@ class ExpectedReportGenerator:
                     user.anonymized_user_key = ''
                     user.anonymized_user_display_name = ''
                     user.action = 'skipped'
-                # The 'deleted'-attribute was introduce in Jira 8.10. In tests with Jira-version less than 8.10
+                # The 'deleted'-attribute was introduced in Jira 8.10. In tests with Jira-version less than 8.10
                 # this attribute is always None.
                 user.deleted = None
 

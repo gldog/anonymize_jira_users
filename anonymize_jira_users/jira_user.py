@@ -86,12 +86,12 @@ class JiraUser:
         return user
 
     def asdict_for_detailed_report(self):
-        """Return a dict comprising of almost all properties, but not 'from_json'."""
+        """Return a dict comprising almost all properties, but not 'from_json'."""
         return {k: v for k, v in self.__dict__.items()}
 
     def asdict_for_report(self):
         """
-        Return a dict comprising of almost all properties, but not 'from_json', 'logs',
+        Return a dict comprising almost all properties, but not 'from_json', 'logs',
         'email_address'.
         """
         return self.filter_dict_for_report(self.__dict__)

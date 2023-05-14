@@ -33,7 +33,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
 
     # Override
     def execute(self):
-        # The derrived AnonymizeCmdExecutor calls this execute(). In that case it is the post_execute()
+        # The derived AnonymizeCmdExecutor calls this execute(). In that case it is the post_execute()
         # from AnonymizeCmdExecutor.
         atexit.register(self.post_execute)
         self.read_users_from_user_list_file()
@@ -167,7 +167,7 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
             if query_validation['status_code'] != 200:
                 error_messages.append("HTTP status-code of the REST validation API is not 200")
                 # Regardless of the status code there could be validation-errors (seen e.g.
-                # in use case "admin tries to anonymize themself": Status code was 400 Bad Request
+                # in use case "admin tries to anonymize themselves": Status code was 400 Bad Request
                 # and the error was "You can't anonymize yourself.").
 
             if query_validation['json']['errors']:
@@ -199,11 +199,11 @@ class ValidateCmdExecutor(IVABaseCmdExecutor):
     def get_overview_data(num_users, num_skipped_users):
         """Create and return the overview-data.
 
-        This data comprises of information about the number of users in the user-list-file, the
+        This data comprises information about the number of users in the user-list-file, the
         number of skipped users, and the number of validated users.
 
         Each data comprises of:
-            - name: Pritty-print name; used for command line output after the Anonymizer has been ran.
+            - name: Pretty-print name; used for command line output after the Anonymizer has been run.
             - key: Used in the reports.
             - value: The value. """
         overview_data = [

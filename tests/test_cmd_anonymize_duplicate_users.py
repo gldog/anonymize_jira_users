@@ -23,7 +23,7 @@ class TestCmdAnonymize(BaseTestClass):
 
     def test_01(self):
         """
-        Setting up these tests is quite speific to these tests, so all set-up stuff is placed here.
+        Setting up these tests is quite specific to these tests, so all set-up stuff is placed here.
         """
 
         self.out_base_dir_path.mkdir(parents=True)
