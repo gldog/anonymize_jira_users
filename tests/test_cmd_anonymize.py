@@ -20,7 +20,7 @@ class TestCmdAnonymize(BaseTestClass):
 
     def test_01(self):
         """
-        Setting up this tests is quite speific to this tests, so all set-up stuff is placed here.
+        Setting up these tests is quite speific to these tests, so all set-up stuff is placed here.
         """
         self.is_include_users_from_generated_test_resouces = True
 
@@ -112,7 +112,7 @@ class TestCmdAnonymize(BaseTestClass):
             # Additional to the test an evaluation is done:
             # Normally, the anonymized user-name is in lower case, and the anonymized user-key is in
             # upper case. The current user has an upper case user-name, and a lower case user-key.
-            # Event the cases are invertet, Jira doesn't anonymize the user-name and -key.
+            # Event the cases are inverted, Jira doesn't anonymize the user-name and -key.
             user_name = 'JIRAUSER11111'
             display_name = 'JIRAUSER11111'
             self.usernames_for_user_list_file.append(user_name)
