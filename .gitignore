@@ -6,7 +6,7 @@ my_config.cfg
 config.cfg
 inactive_users.cfg
 users.cfg
-dev/
+dev-hidden/
 eval/
 test_runs/
 tmp/

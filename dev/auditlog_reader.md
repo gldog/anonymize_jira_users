@@ -1,9 +1,9 @@
-auditlog_reader
+Module auditlog_reader
 =
 
 # General
 
-This is to explain how the module auditlog_reader.py works.
+This is to give background information about the module auditlog_reader.py.
 
 Atlassian introduced anonymization in Jira 8.7.
 
