@@ -31,13 +31,12 @@ class Test01(BaseTestClass):
     The tests are grouped by their function-prefixes.
 
     test_1x: Command 'inactive-users'. Here only arguments specific to this command are tested.
-    test_2x: Command 'anoynmize'. Includes tests of arguments of command 'validate', as 'validate' is
+    test_2x: Command 'anonymize'. Includes tests of arguments of command 'validate', as 'validate' is
         a sub-set of 'anonymize'.
     """
 
     def setUp(self):
-        # super(Test01, self).setUp()
-        pass
+        super(Test01, self).setUp()
 
     def tearDown(self):
         # super(Test01, self).tearDown()

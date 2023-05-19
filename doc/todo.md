@@ -18,18 +18,13 @@ A "real" anonymized username has the app_user.id in its name.
 - Check activities
 
 
-#### In README.md: Audit-log is not anonymized
 
-TODO
 
 #### Some Jira-issues
 - [ JRASERVER-70748 Anonymize LDAP users](https://jira.atlassian.com/browse/JRASERVER-70748)
 
 
-#### Make vars for booleans similar, not as:
 
-- validation_has_errors: false
-- filter_is_anonymize_approval: true
 
 #### How to retrieve deleted users?
 
@@ -280,4 +275,3 @@ Deleted user have an entry in table `app_user`, but not in `cwd_user` anymore.
     from app_user
     where au.lower_user_name not in 
       (select lower_user_name from cwd_user)
-

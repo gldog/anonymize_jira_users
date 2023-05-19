@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import pathlib
 import tempfile
 
@@ -15,6 +16,7 @@ class TestCmdRecreateReport(BaseTestClass):
 
     def setUp(self):
         super(TestCmdRecreateReport, self).setUp()
+        self.current_path = pathlib.Path(os.path.dirname(os.path.realpath(__file__)))
 
     def tearDown(self):
         super(TestCmdRecreateReport, self).tearDown()

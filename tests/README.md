@@ -1,12 +1,20 @@
 Testing the Anonymizer
 =
 
-# Jira Application
+# General
 
-The tests need this running
-[Jira application](https://bitbucket.org/jheger/jira-anonymizinghelper/src/master/).
+Tests are divided into
 
-At starting, Jira performs an upgrade task. It is important to start the tests
+* integration-tests
+* "other"
+* unit-tests
+
+# Integration tests
+
+The tests need a running
+[Jira test application](https://bitbucket.org/jheger/jira-anonymizinghelper/src/master/).
+
+At start, Jira performs an upgrade task. It is important to start the integration tests
 **after the upgrade task** has been finished.
 
 This is how this looks like in the atlassian-jira.log:
@@ -28,3 +36,10 @@ This is how this looks like in the atlassian-jira.log:
     [INFO] [talledLocalContainer] 2021-03-11 20:37:34,663+0100 Caesium-1-3 INFO ServiceRunner     [c.a.jira.upgrade.UpgradeIndexManager] There are no reindex requests of type [IMMEDIATE, DELAYED] so none will be run
 
 Now you can start testing.
+
+# "Other"
+
+Those are no tests. They are just some helpers.
+
+* test_helper.py
+* user_manual_examples.py: Create the reports needed for the user-manual.

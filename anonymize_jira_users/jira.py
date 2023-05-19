@@ -201,7 +201,7 @@ class Jira:
 
         There are two reasons to do this:
             1. Before the first anonymization to check if there is any anonymization running. In
-                this case both parameters user_name and full_progress_url must be None / absent.
+                this case both parameter user_name and full_progress_url must be None / absent.
             2. During the anonymization to check if it is finished. The latest response is stored
                 for each user.
 

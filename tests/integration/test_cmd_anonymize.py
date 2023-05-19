@@ -11,6 +11,10 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class TestCmdAnonymize(BaseTestClass):
+    """
+    This test(s) needs a running Jira instance.
+    his test CAN NOT be repeated. Jira has to be restarted.
+    """
 
     def setUp(self):
         super(TestCmdAnonymize, self).setUp()
@@ -19,15 +23,11 @@ class TestCmdAnonymize(BaseTestClass):
         super(TestCmdAnonymize, self).tearDown()
 
     def test_01(self):
-        """
-        Setting up this tests is quite speific to this tests, so all set-up stuff is placed here.
-        """
-        self.is_include_users_from_generated_test_resouces = True
+        """Setting up these tests is quite specific to these tests, so all set-up stuff is placed here. """
 
+        self.is_include_users_from_generated_test_resources = True
         self.out_base_dir_path.mkdir(parents=True)
-
         self.usernames_for_user_list_file = []
-
         self.expected_report_generator = ExpectedReportGenerator(self.jira_application)
         self.expected_report_generator.jira_version = self.jira_application.version_numbers
 
@@ -43,7 +43,7 @@ class TestCmdAnonymize(BaseTestClass):
         #
         # Add users to the list of users to be processed (validated or anonymized).
         #
-        if self.is_include_users_from_generated_test_resouces:
+        if self.is_include_users_from_generated_test_resources:
             #
             # The following user has been created in Jira < 8.4.
             #
@@ -112,7 +112,7 @@ class TestCmdAnonymize(BaseTestClass):
             # Additional to the test an evaluation is done:
             # Normally, the anonymized user-name is in lower case, and the anonymized user-key is in
             # upper case. The current user has an upper case user-name, and a lower case user-key.
-            # Event the cases are invertet, Jira doesn't anonymize the user-name and -key.
+            # Event the cases are inverted, Jira doesn't anonymize the user-name and -key.
             user_name = 'JIRAUSER11111'
             display_name = 'JIRAUSER11111'
             self.usernames_for_user_list_file.append(user_name)
@@ -276,9 +276,9 @@ class TestCmdAnonymize(BaseTestClass):
             r = self.jira_application.admin_session.user_deactivate(user.name)
             r.raise_for_status()
 
-        number_of_users_in_user_list_file = 16 if self.is_include_users_from_generated_test_resouces else 8
+        number_of_users_in_user_list_file = 16 if self.is_include_users_from_generated_test_resources else 8
         is_jiraversion_lt810 = self.jira_application.is_jiraversion_lt810()
-        if self.is_include_users_from_generated_test_resouces:
+        if self.is_include_users_from_generated_test_resources:
             # In Jira-version less than 8.10, deleted users won't be anonymized. The REST-API can't find them.
             if is_jiraversion_lt810:
                 number_of_skipped_users = 4
@@ -308,7 +308,7 @@ class TestCmdAnonymize(BaseTestClass):
 
         # Delete the following users to tests validation or anonymization of deleted users.
         # Anonymization of deleted users works since Jira 8.10.
-        if self.is_include_users_from_generated_test_resouces:
+        if self.is_include_users_from_generated_test_resources:
             r = self.jira_application.admin_session.user_remove('user9pre84')
             r.raise_for_status()
         r = self.jira_application.admin_session.user_remove('user9post84')
