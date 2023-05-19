@@ -1,0 +1,4 @@
+urllib3==1.26.7
+requests==2.26.0
+atlassian-python-api==3.14.1
+deepdiff==5.5.0
